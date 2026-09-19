@@ -18,7 +18,10 @@ export class NeonPeerTransport implements PeerTransport {
     try {
       const response = await fetch(`/api/sessions/${this.sessionId}/events?after=${this.cursor}`, { signal: this.controller.signal, cache: "no-store" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Connexion perdue. Réessayez.");
+      if (!response.ok) {
+        if ([401, 403, 404].includes(response.status)) { this.onError(data.error || "La conversation est terminée."); this.disconnect(); return; }
+        throw new Error(data.error || "Connexion perdue. Réessayez.");
+      }
       for (const event of data.events as ReceivedEvent[]) {
         this.subscribers.forEach(cb => cb(event));
         this.cursor = event.seq;

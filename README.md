@@ -1,74 +1,95 @@
-# À deux — v0
+# À deux
 
-Premier jalon : un navigateur capture la voix et affiche progressivement la traduction anglaise. La cible actuelle est l’anglais pour faciliter la validation ; le thaï reste accepté par la route API. Interface mobile, sans compte. Next.js App Router, React, TypeScript strict.
+Traduction face à face, sans compte, dans le navigateur. Français → anglais pour les essais actuels ; le deuxième participant traduit en sens inverse. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
 
 ## Démarrer
 
 ```sh
 npm install
-cp .env.example .env.local
+cp .env.example .env.local  # seulement si vous n’avez pas déjà de .env configuré
+npm run db:migrate
 npm run dev
 ```
 
-Ouvrir http://localhost:3000. Le bouton **Essayer une démonstration** fonctionne sans clé, sans micro et sans appel fournisseur : il déroule un exemple préécrit clairement identifié.
+Variables serveur :
 
-Pour la traduction réelle, renseigner dans `.env.local` :
+- `OPENAI_API_KEY` et `OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate`.
+- `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5` pour le streaming WebSocket. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
+- `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
+- `DATABASE_URL` : connexion Neon. La migration additive crée seulement les tables `adu_sessions`, `adu_participants`, `adu_events`.
+- `CRON_SECRET` : secret aléatoire pour protéger la purge des voix. Obligatoire pour autoriser le clonage.
+- `NEXT_PUBLIC_APP_URL` : origine exacte du site, par exemple `http://localhost:3000` en local.
 
-```dotenv
-OPENAI_API_KEY=...
-OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+Ne jamais exposer les clés permanentes ni `DATABASE_URL` dans une variable `NEXT_PUBLIC_`. Next.js charge `.env` ; `.env.local`, s’il existe, est prioritaire. Redémarrer le serveur après changement de configuration.
+
+## Essayer seul
+
+Cliquer **Commencer à parler**, autoriser le micro et parler français. Le texte anglais apparaît progressivement. Après **Arrêter**, **Écouter en anglais** lit la traduction avec ElevenLabs. L’écoute de sa propre traduction est volontaire, après arrêt du micro.
+
+La démonstration est un exemple préécrit sans microphone ni appel OpenAI. Cliquer ensuite sur Écouter utilise bien ElevenLabs.
+
+## À deux
+
+1. Cliquer **Parler à deux · inviter quelqu’un**.
+2. Scanner le QR ou ouvrir le lien sur le second appareil.
+3. Chaque participant touche **Activer le micro et le son** / **Enable microphone & sound**.
+4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
+
+Chaque appareil affiche principalement ce qu’il reçoit. Les paroles émises sont accessibles sous « Mes mots traduits ». Pendant une traduction lue à voix haute, le micro local est suspendu pour limiter les boucles de traduction. Cette première version privilégie donc la prise de parole à tour de rôle.
+
+Pour tester sur un seul ordinateur, utiliser **deux profils de navigateur différents** ou une fenêtre privée : l’identité invitée est un cookie HttpOnly partagé entre les onglets d’un même profil. La session accepte exactement deux participants, y compris en cas de connexions simultanées.
+
+Sur deux téléphones, utiliser une URL **HTTPS accessible aux deux appareils**, avec `NEXT_PUBLIC_APP_URL` correspondant. Un QR contenant localhost pointe vers le téléphone qui le scanne et ne permet pas de joindre le PC.
+
+## Cloner sa voix
+
+Dans une conversation partagée, ouvrir **Utiliser ma voix**, puis accepter explicitement l’enregistrement de sa propre voix pour cette session. Parler seul, au calme, pendant 30 à 60 secondes. L’application met la conversation en pause pendant l’enregistrement ; elle n’enregistre pas silencieusement le dialogue.
+
+L’extrait est envoyé à ElevenLabs, jamais écrit dans Neon ou sur le disque de l’application. Dès que le clone est prêt, les nouvelles traductions reçues par l’autre participant utilisent ce clone. Si ElevenLabs exige une vérification, la voix standard reste utilisée. L’accès au clonage dépend des droits et de l’offre ElevenLabs du compte.
+
+**Supprimer ma voix** retire son clone. **Terminer la session et supprimer les voix** ferme la session pour les deux participants et supprime leurs clones. Une fermeture d’onglet n’équivaut pas à cette action : les sessions expirent au bout d’une heure et la purge prend le relais.
+
+### Purge obligatoire
+
+En production Vercel, configurer `CRON_SECRET` et déployer `vercel.json` : la tâche `/api/cleanup` passe tous les jours à 03:00 UTC. Après expiration, un clone peut donc attendre la prochaine purge (jusqu’à environ 24 heures, hors panne). Les échecs restent réessayables ; surveiller les exécutions cron.
+
+En **local**, Vercel Cron ne tourne pas. Utiliser le bouton de fin de session puis, si nécessaire :
+
+```sh
+npm run voices:cleanup
 ```
 
-La clé doit avoir accès au modèle configuré. Redémarrer le serveur après modification. Cliquer **Commencer à parler**, autoriser le microphone, puis parler français. La langue source est gérée par le modèle ; l’interface ne prétend pas afficher une détection qu’elle n’a pas reçue.
+La purge retire les textes expirés et les voix connues. Elle recherche aussi les clones étiquetés pour cette application dont la création aurait terminé après un timeout. Les marqueurs de session restent temporairement pour permettre cette récupération, puis sont supprimés. Ne pas activer le clonage sur un déploiement sans tâche de purge opérationnelle.
 
-## Sur un téléphone
+## Architecture et limites actuelles
 
-Déployer sur une URL HTTPS (par exemple une preview Vercel), définir `NEXT_PUBLIC_APP_URL` à cette origine exacte et configurer les deux variables OpenAI côté serveur. Une adresse réseau locale en HTTP ne permet pas l’accès au micro sur téléphone. Ne pas mettre la clé permanente dans une variable `NEXT_PUBLIC_`.
+- OpenAI : jeton éphémère via `/v1/realtime/translations/client_secrets`, puis microphone directement en WebRTC vers `/v1/realtime/translations/calls`. Aucun `response.create`, aucun assistant visible.
+- Neon : identité invitée hachée, deux places atomiques, expiration, transport de texte. Pas d’audio en base.
+- `PeerTransport` : première implémentation par requêtes courtes toutes les 500 ms, avec publications groupées et identifiants idempotents. Neon ne remplace pas Supabase Realtime ; ce compromis augmente les requêtes et la latence. Un transport push pourra remplacer cet adaptateur sans changer les fournisseurs.
+- ElevenLabs : jeton à usage unique puis WebSocket direct depuis le navigateur ; PCM 24 kHz joué progressivement avec Web Audio. Les phrases sont envoyées après ponctuation ou une pause d’environ une seconde. Les sous-titres arrivent avant l’audio.
+- La voix choisie pour le destinataire est celle de **l’autre participant**, déterminée côté serveur. Aucun ID de clone arbitraire fourni par le client n’est accepté par la route de jeton.
+- Les jetons ElevenLabs sont temporaires, mais ne constituent pas une restriction d’usage par phrase. Avant une ouverture publique, ajouter limitation de débit distribuée, quotas et suivi des coûts. Le contrôle d’origine ne remplace pas une protection contre les abus.
+- L’API de traduction ne fournit pas de confiance calibrée dans les événements utilisés : `quality: "unknown"` reste explicite.
+- Le texte reçu est conservé temporairement en base pour la livraison, puis effacé à la fin de session ou par la purge. Les fournisseurs appliquent aussi leurs propres règles de conservation.
+- Le clonage est implémenté et testé avec réponses simulées ; un essai réel nécessite l’enregistrement consenti de l’utilisateur. Safari/iPhone, Bluetooth, réseaux mobiles et qualité des clones restent à valider sur appareils physiques.
+- La saisie texte de secours et les langues configurables dans l’interface restent des étapes suivantes.
 
-## Pipeline
-
-- `POST /api/openai/realtime-token` crée un jeton éphémère via `/v1/realtime/translations/client_secrets`, avec modèle configurable et langue cible validée.
-- Le navigateur négocie WebRTC directement via `/v1/realtime/translations/calls` et y envoie la piste micro.
-- L’adaptateur traduit les événements `session.output_transcript.delta` et `session.input_transcript.delta` en événements applicatifs. Le texte original est accessible à la demande.
-- Arrêt, annulation, erreur, onglet masqué et démontage libèrent micro et connexion. Une permission accordée après annulation ne garde pas le micro ouvert.
-- Aucun audio ni texte n’est enregistré par l’application. L’audio est transmis à OpenAI pour traitement. Le texte reste en mémoire et son affichage est limité aux 12 000 derniers caractères.
-
-L’API dédiée est continue, sans `response.create`. Elle produit également de l’audio ; la v0 ne le joue pas encore. Le coût fournisseur peut donc comprendre cette génération. Source : [documentation officielle Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), consultée le 19 septembre 2026.
-
-## Validation
+## Vérification
 
 ```sh
 npm run lint
 npm run typecheck
-npm test
+node --test --test-isolation=none tests/*.test.mjs # Node.js 24 ; aucune API réelle
 npm run build
+npm run test:tts       # ElevenLabs réel, phrase synthétique ; petit coût TTS
+npm run test:sessions  # Neon réel, données synthétiques supprimées en fin de test
+TEST_BASE_URL=http://localhost:3000 npm run test:browser
 ```
 
-Tests Node.js 22.18+ : événements fournisseur, validation de la route, contrat de création de session, protection des secrets et erreurs réseau. Les appels fournisseur y sont simulés. Dans un environnement qui interdit les sous-processus, lancer `node --test --test-isolation=none tests/*.test.mjs` (Node.js 24) pour exécuter les huit tests dans le processus courant.
+Pour une instance isolée : `NEXT_TEST_BUILD=1 NEXT_PUBLIC_APP_URL=http://localhost:3100 npm run build`, puis `node scripts/browser-test-server.mjs`. Le serveur de test est arrêté automatiquement à la fin.
 
-Validation de développement : lint, TypeScript et huit tests réussis. Le build de production n’a pas pu être validé dans le sandbox : Turbopack ne peut pas ouvrir son port local ; le fallback Webpack est également bloqué au lancement du sous-processus TypeScript (`EPERM`). Relancer `npm run build` dans un environnement normal.
+Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `npx playwright install chromium`, deux profils isolés, Neon réel et des fournisseurs audio simulés. Aucun clonage réel n’y est déclenché.
 
-À valider avec clé réelle avant le jalon 2 :
+Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs WebSocket](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input), [jetons temporaires](https://elevenlabs.io/docs/api-reference/tokens/create), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-1. iPhone Safari et Android Chrome : autoriser le micro, dire plusieurs phrases françaises, vérifier que l’anglais traduit les paroles, y compris les questions, sans y répondre.
-2. Vérifier la progression du texte, la latence, le silence et le bruit ambiant.
-3. Refuser le micro, annuler pendant l’autorisation, couper le réseau, réessayer.
-4. Arrêter ou masquer l’onglet : vérifier que l’indicateur micro s’éteint.
-
-## État et limites
-
-Intégration du jalon 1 implémentée ; validation réelle fournisseur et téléphone encore nécessaire. Aucun secret n’était disponible lors du développement. Ne pas considérer la démonstration comme une validation de traduction.
-
-L’API documentée ne fournit pas de score de confiance calibré dans ces deltas : `quality: "unknown"` est explicite dans le contrat. Aucun score n’est inventé. Les sorties douteuses et la qualité français → anglais restent à évaluer en conditions réelles.
-
-Avant une ouverture publique, ajouter une limitation de débit distribuée et un budget fournisseur : le contrôle d’origine de la route évite les appels intersites ordinaires, mais ne remplace pas une protection contre l’abus d’un endpoint invité.
-
-Les étapes suivantes (audio, deux téléphones / Neon / QR, ElevenLabs, clonage consenti, saisie texte) attendent la validation du flux réel du premier jalon.
-
-## Base de données : Neon
-
-Le choix de base de données est désormais Neon PostgreSQL. Placer la chaîne de connexion dans `DATABASE_URL`, côté serveur uniquement. La v0 n’utilise pas encore de base de données : aucune migration ni connexion Neon n’est implémentée à ce stade. Les variables `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` ne sont pas utilisées et peuvent être retirées.
-
-Pour le jalon à deux téléphones, il faudra ajouter le schéma des sessions et choisir le transport des événements en direct ; `DATABASE_URL` seule ne remplace pas le transport Supabase Realtime prévu initialement.
-# trad0
+Validation effectuée : build de production, lint, TypeScript, 14 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

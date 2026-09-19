@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSharedConversation } from "@/hooks/useSharedConversation";
 import { languageNames } from "@/types/session";
@@ -8,7 +9,9 @@ import { VoiceConsent } from "./voice-consent";
 import { ShareSession } from "./share-session";
 
 export function SharedConversation({ id }: { id: string }) {
+  const router = useRouter();
   const session = useSharedConversation(id);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const [closingMessage, setClosingMessage] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const room = session.room;
@@ -29,15 +32,15 @@ export function SharedConversation({ id }: { id: string }) {
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? (english ? "Connected" : "L’autre personne est connectée") : (english ? "Waiting for the other person…" : "L’autre personne est déconnectée…")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
-          <button className={`primary-button ${session.enabled ? "stop-button" : ""}`} onClick={() => session.enabled ? session.stop() : void session.start()}>{session.enabled ? (english ? "Pause" : "Mettre en pause") : (english ? "Enable microphone & sound" : "Activer le micro et le son")}</button>
-          <VoiceConsent sessionId={id} voiceStatus={room.me.voiceStatus} english={english} onRecord={session.stop} />
+          <button disabled={voiceBusy} className={`primary-button ${session.enabled ? "stop-button" : ""}`} onClick={() => session.enabled ? session.stop() : void session.start()}>{session.enabled ? (english ? "Pause" : "Mettre en pause") : (english ? "Enable microphone & sound" : "Activer le micro et le son")}</button>
+          <VoiceConsent sessionId={id} voiceStatus={room.me.voiceStatus} english={english} onRecord={session.stop} onBusy={setVoiceBusy} />
           <button className="demo-button" onClick={() => { session.stop(); setShowInvite(true); }}>{english ? "Invitation link" : "Lien d’invitation"}</button>
         </div>
       </>}
     </section>
     {room && <div className="end-session"><button className="demo-button" onClick={async () => {
       session.stop();
-      try { const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" }); const data = await response.json(); if (!response.ok) throw new Error(data.error); window.location.assign("/"); }
+      try { const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" }); const data = await response.json(); if (!response.ok) throw new Error(data.error); router.push("/"); }
       catch (error) { setClosingMessage(error instanceof Error ? error.message : "Réessayez."); }
     }}>{english ? "End session & delete voices" : "Terminer la session et supprimer les voix"}</button>{closingMessage && <p role="alert">{closingMessage}</p>}</div>}
     <footer><span className="footer-mark">↔</span><p>{english ? "Just you two." : "Juste vous deux."}<br /><span>{english ? "No account. No installation." : "Sans compte. Sans installation."}</span></p><span className="privacy-note">{english ? "Session expires after 1 hour" : "Session limitée à 1 heure"}</span></footer>

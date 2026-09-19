@@ -4,7 +4,7 @@ import { VOICE_CONSENT } from "@/lib/voice/consent";
 import type { Participant } from "@/types/session";
 
 type State = "idle" | "permission" | "recording" | "uploading" | "ready" | "error";
-export function VoiceConsent({ sessionId, voiceStatus, english, onRecord }: { sessionId: string; voiceStatus: Participant["voiceStatus"]; english: boolean; onRecord: () => void }) {
+export function VoiceConsent({ sessionId, voiceStatus, english, onRecord, onBusy }: { sessionId: string; voiceStatus: Participant["voiceStatus"]; english: boolean; onRecord: () => void; onBusy: (busy: boolean) => void }) {
   const [state, setState] = useState<State>("idle"); const [message, setMessage] = useState(""); const [seconds, setSeconds] = useState(0);
   const capture = useRef<{ recorder: MediaRecorder; stream: MediaStream } | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -16,6 +16,7 @@ export function VoiceConsent({ sessionId, voiceStatus, english, onRecord }: { se
     if (current?.recorder.state === "recording") current.recorder.stop();
     current?.stream.getTracks().forEach(track => track.stop()); busy.current = false;
   }
+  useEffect(() => { onBusy(["permission", "recording", "uploading"].includes(state)); }, [state, onBusy]);
   useEffect(() => {
     const hide = () => { if (document.hidden) { cancel(); setState("idle"); } };
     document.addEventListener("visibilitychange", hide);
@@ -60,7 +61,7 @@ export function VoiceConsent({ sessionId, voiceStatus, english, onRecord }: { se
   const active = ["permission", "recording", "uploading"].includes(state);
   return <details className="voice-consent"><summary>{voiceStatus === "ready" ? (english ? "✓ Your voice is active" : "✓ Votre voix est active") : (english ? "Use my voice" : "Utiliser ma voix")}</summary>
     <p>{english ? "Record your own voice, alone in a quiet place, for 30–60 seconds. With your permission, the sample is sent to ElevenLabs to clone your voice for this conversation." : "Enregistrez votre propre voix, seul au calme, pendant 30 à 60 secondes. Avec votre accord, cet extrait est envoyé à ElevenLabs pour cloner votre voix dans cette conversation."}</p>
-    <p>{english ? "The clone is deleted when the session is ended, or by the daily cleanup after expiry. No permanent profile is saved." : "Le clone est supprimé à la fin de la session, ou par la purge quotidienne après expiration. Aucun profil permanent n’est créé."}</p>
+    <p>{english ? "End the session to delete the voice clone. Expired sessions are handled by the server cleanup task. No permanent profile is saved." : "Terminez la session pour supprimer le clone. Les sessions expirées sont traitées par la tâche de purge du serveur. Aucun profil permanent n’est créé."}</p>
     {voiceStatus === "ready" || voiceStatus === "verification_required" ? <button className="demo-button" disabled={active} onClick={async () => {
       setState("uploading");
       try { const response = await fetch("/api/voice", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); setState("idle"); setMessage(english ? "Voice deleted." : "Voix supprimée."); }

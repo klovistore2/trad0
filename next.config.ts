@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Keep browser-test builds separate from the developer's running server.
+  distDir: process.env.NEXT_TEST_BUILD === "1" ? ".next-test" : ".next",
 };
 
 export default nextConfig;

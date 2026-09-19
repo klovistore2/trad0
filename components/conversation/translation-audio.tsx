@@ -16,7 +16,7 @@ export function TranslationAudio({ text }: { text: string }) {
   return <div>
     <button className="demo-button" onClick={() => {
       if (active) { voice.current?.stop(); return; }
-      void voice.current?.speakStream({ language: "en", textStream: (async function* () { yield text.slice(-4000) + " "; })() }).catch(() => {});
+      void voice.current?.speakStream({ language: "en", textStream: (async function* () { yield text + " "; })() }).catch(() => {});
     }}>{active ? "■ Arrêter la lecture" : "♫ Écouter en anglais"}</button>
     {message && <p className="error-message" role="alert">{message}</p>}
   </div>;

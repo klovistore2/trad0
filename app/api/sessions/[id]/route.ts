@@ -11,7 +11,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/sessi
     const { member } = await import("@/lib/session/auth");
     const { db } = await import("@/lib/neon/db");
     const { deleteVoice } = await import("@/lib/elevenlabs/server");
-    checkOrigin(request); const { id } = await context.params; await member(id); const sql = db();
+    checkOrigin(request); const { id } = await context.params; await member(id, true); const sql = db();
     await sql`UPDATE adu_sessions SET closed=true WHERE id=${id}`;
     await sql`DELETE FROM adu_events WHERE session_id=${id}`;
     const voices = await sql`SELECT voice_id FROM adu_participants WHERE session_id=${id} AND voice_id IS NOT NULL`;
