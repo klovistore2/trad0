@@ -155,3 +155,9 @@ button:disabled { opacity: .5; cursor: wait; }
 .sound-toggle { display: block; width: 100%; }
 .sound-toggle[aria-pressed="false"] { color: var(--ink); }
 @keyframes pulse { 50% { box-shadow: 0 0 0 7px transparent; } }
+.audio-diagnostics { width: 100%; margin: 4px 0 0; text-align: left; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.audio-diagnostics summary { cursor: pointer; min-height: 44px; padding: 12px 0; text-align: center; }
+.audio-diagnostics button { color: var(--ink); width: 100%; }
+.audio-diagnostics dl { margin: 10px 0; display: grid; gap: 4px; }
+.audio-diagnostics dl div { display: flex; justify-content: space-between; gap: 12px; }
+.audio-diagnostics dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }

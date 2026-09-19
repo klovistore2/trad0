@@ -7,6 +7,7 @@ import { languageNames } from "@/types/session";
 import { ThemeToggle } from "./theme-toggle";
 import { VoiceConsent } from "./voice-consent";
 import { ShareSession } from "./share-session";
+import { AudioDiagnostics } from "./audio-diagnostics";
 
 export function SharedConversation({ id }: { id: string }) {
   const router = useRouter();
@@ -48,6 +49,7 @@ export function SharedConversation({ id }: { id: string }) {
             {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}
           </button>}
           <VoiceConsent sessionId={id} voiceStatus={room.me.voiceStatus} english={english} onRecord={session.stop} onBusy={setVoiceBusy} />
+          <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()} voiceStatus={session.voiceStatus} received={session.received} english={english} />
           <button className="demo-button" onClick={() => { session.stop(); setShowInvite(true); }}>{english ? "Invitation link" : "Lien d’invitation"}</button>
         </div>
       </>}

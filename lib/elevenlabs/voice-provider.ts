@@ -13,6 +13,21 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     await this.context.resume();
     if (this.context.state !== "running") throw new Error("Touchez Activer le son pour écouter la traduction.");
   }
+  get contextState() { return this.context?.state ?? "absent"; }
+  // A local beep separates an OS-level mute from a broken pipeline: no network, same output path.
+  async testTone() {
+    await this.unlock();
+    const context = this.context!;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 440;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.45);
+    oscillator.connect(gain); gain.connect(context.destination);
+    oscillator.start(context.currentTime);
+    oscillator.stop(context.currentTime + 0.5);
+  }
   stop() {
     this.active?.abort();
     this.active = undefined;

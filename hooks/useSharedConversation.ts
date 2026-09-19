@@ -16,6 +16,7 @@ export function useSharedConversation(id: string) {
   const [soundOn, setSoundOn] = useState(true);
   const [floor, setFloor] = useState<number | null>(null);
   const [claiming, setClaiming] = useState(false);
+  const [received, setReceived] = useState(0);
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
   const voice = useRef<ElevenLabsVoiceProvider | null>(null);
@@ -87,6 +88,7 @@ export function useSharedConversation(id: string) {
       if (event.committed && !committed.has(event.turnId)) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
+        setReceived(count => count + 1);
         if (running.current && sound.current) {
           if (queue.current.length >= 20) { setMessage("La lecture a pris du retard. Le texte reste disponible."); queue.current = []; }
           queue.current.push(event);
@@ -165,6 +167,18 @@ export function useSharedConversation(id: string) {
     if (!next) { queue.current = []; voice.current?.stop(); speaking.current = false; }
     syncMicrophone();
   }
+  async function playTestTone() {
+    setMessage("");
+    try { await voice.current?.testTone(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
+  }
+  const readAudioState = useCallback(() => ({
+    context: voice.current?.contextState ?? "absent",
+    queued: queue.current.length,
+    speaking: speaking.current,
+    running: running.current,
+    sound: sound.current,
+  }), []);
   const hasFloor = room ? floor === room.me.slot : false;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, translation, start, stop, takeFloor, toggleSound };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, received, translation, start, stop, takeFloor, toggleSound, playTestTone, readAudioState };
 }
