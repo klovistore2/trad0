@@ -34,7 +34,7 @@ La démonstration est un exemple préécrit sans microphone ni appel OpenAI. Cli
 2. Scanner le QR ou ouvrir le lien sur le second appareil.
 3. Chaque participant touche **Démarrer la conversation** / **Start the conversation**. Le micro et le son s’activent dans le même geste ; le navigateur n’a pas de permission séparée pour la lecture audio.
 
-La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter reçoit le texte sans rien toucher, et **Entendre la traduction** suffit à débloquer le son — un seul geste est nécessaire, imposé par la règle d’autoplay des navigateurs.
+La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. **Son activé · toucher pour le texte seul** coupe la lecture si besoin.
 4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
 
 Chaque appareil affiche principalement ce qu’il reçoit. Les paroles émises sont accessibles sous « Mes mots traduits ».

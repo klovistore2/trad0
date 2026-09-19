@@ -20,6 +20,7 @@ export function useSharedConversation(id: string) {
   const [connectionLost, setConnectionLost] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
   const soundReadyRef = useRef(false);
+  const rearm = useRef<() => void>(() => {});
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
@@ -58,7 +59,10 @@ export function useSharedConversation(id: string) {
       }
     } catch (error) {
       queue.current = [];
-      setMessage(error instanceof Error ? error.message : "Le son est indisponible. Le texte reste accessible.");
+      // A system-suspended context is not an error the listener should read: re-arm quietly.
+      if (voice.current && voice.current.contextState !== "running") {
+        soundReadyRef.current = false; setSoundReady(false); rearm.current();
+      } else setMessage(error instanceof Error ? error.message : "Le son est indisponible. Le texte reste accessible.");
     } finally {
       speaking.current = false;
       syncMicrophone();
@@ -141,6 +145,28 @@ export function useSharedConversation(id: string) {
       } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Impossible de rejoindre."); }
     }
     void join();
+    // Autoplay rules need one gesture in the page, but never a specific one: the first
+    // touch anywhere arms playback, so a listener has nothing to press to simply hear.
+    // Arming is not one-shot: if the system suspends audio later, the next touch re-arms it.
+    let armed = false;
+    const armSound = () => {
+      document.removeEventListener("pointerdown", armSound);
+      document.removeEventListener("keydown", armSound);
+      armed = false;
+      player.unlock().then(() => {
+        if (controller.signal.aborted) return;
+        soundReadyRef.current = true; setSoundReady(true);
+        void playQueue();
+      }).catch(() => armForSound());
+    };
+    function armForSound() {
+      if (armed || controller.signal.aborted) return;
+      armed = true;
+      document.addEventListener("pointerdown", armSound);
+      document.addEventListener("keydown", armSound);
+    }
+    rearm.current = armForSound;
+    armForSound();
     // Leaving the page tears the microphone down for privacy, but the session stays active:
     // a receiving phone whose screen went dark must still speak when it comes back.
     const visibility = () => {
@@ -159,6 +185,7 @@ export function useSharedConversation(id: string) {
     document.addEventListener("visibilitychange", visibility);
     return () => {
       controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", visibility);
+      document.removeEventListener("pointerdown", armSound); document.removeEventListener("keydown", armSound);
       unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose();
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;

@@ -51,10 +51,17 @@ try {
  await a.getByRole('button',{name:'Démarrer la conversation'}).click();
  await a.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
  await a.getByText('À vous — parlez').waitFor();
- // A listener who never started a microphone session still receives text and hears it after one tap.
+ // A listener who never started a microphone session hears anyway: any touch arms playback,
+ // and nothing specific has to be pressed.
+ await b.locator('.translation-area').click();
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'This is a synthetic translation test.'})}));
  await b.getByText('This is a synthetic translation test.',{exact:true}).waitFor();
- await b.getByRole('button',{name:'Hear the translation'}).click();
+ await b.getByText(/Playing translation/).waitFor();
+ await expect(b.getByRole('button',{name:'Hear the translation'})).toHaveCount(0);
+ // Arming happens once, not per sentence: the flow keeps coming with no further interaction.
+ await expect(b.getByText(/Playing translation/)).toBeHidden();
+ await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'A second sentence plays by itself.'})}));
+ await b.getByText('A second sentence plays by itself.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
  // Joining in with a microphone keeps exactly one open, because the creator holds the floor.
  await b.getByRole('button',{name:'Start the conversation'}).click();
