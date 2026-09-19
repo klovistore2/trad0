@@ -122,14 +122,24 @@ export function useSharedConversation(id: string) {
       } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Impossible de rejoindre."); }
     }
     void join();
-    const hide = () => {
-      if (document.hidden) {
-        running.current = false; setEnabled(false); queue.current = []; player.stop(); turns.commit();
-      }
+    // Leaving the page tears the microphone down for privacy, but the session stays active:
+    // a receiving phone whose screen went dark must still speak when it comes back.
+    const visibility = () => {
+      if (document.hidden) { queue.current = []; player.stop(); turns.commit(); return; }
+      if (!running.current || controller.signal.aborted) return;
+      void (async () => {
+        try {
+          await player.unlock();
+          await translationRef.current.start();
+          syncMicrophone();
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Touchez Activer le micro pour reprendre.");
+        }
+      })();
     };
-    document.addEventListener("visibilitychange", hide);
+    document.addEventListener("visibilitychange", visibility);
     return () => {
-      controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", hide);
+      controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", visibility);
       unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose();
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;

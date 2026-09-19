@@ -28,6 +28,7 @@ export function SharedConversation({ id }: { id: string }) {
           {session.incoming ? <><span className="eyebrow">{english ? "THEIR WORDS, IN YOUR LANGUAGE" : "SES MOTS, DANS VOTRE LANGUE"}</span><div className="transcript" lang={room.me.language} tabIndex={0}><p>{session.incoming}</p></div></>
           : <><h1>{english ? "You’re connected." : "Vous êtes ensemble."}</h1><p className="intro">{english ? "Speak naturally. Their translated words will appear here." : "Parlez naturellement. Les mots de l’autre personne apparaîtront ici."}</p></>}
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {english ? "Playing translation · microphone paused" : "Traduction en cours · micro en pause"}</p>}
+          {!session.enabled && session.received > 0 && <p className="quiet-note" role="status">{english ? "Sound is paused — tap Enable microphone to hear translations." : "Le son est en pause — touchez Activer le micro pour entendre les traductions."}</p>}
           {session.translation.translation && <details className="original"><summary>{english ? "My translated words" : "Mes mots traduits"}</summary><p>{session.translation.translation}</p></details>}
         </div>
         <div className="controls">

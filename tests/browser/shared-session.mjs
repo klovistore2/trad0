@@ -59,6 +59,14 @@ try {
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'This is a synthetic translation test.'})}));
  await b.getByText('This is a synthetic translation test.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
+ // Regression: a receiving screen that went dark must not silently stop playing.
+ await b.evaluate(()=>{Object.defineProperty(document,'hidden',{value:true,configurable:true});document.dispatchEvent(new Event('visibilitychange'));});
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='ended');
+ await b.evaluate(()=>{Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));});
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
+ await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Playback survives a dark screen.'})}));
+ await b.getByText('Playback survives a dark screen.',{exact:true}).waitFor();
+ await b.getByText(/Playing translation/).waitFor();
  // Muting playback keeps the subtitles and stops the audio.
  await b.getByRole('button',{name:/Sound on/}).click();
  await b.getByRole('button',{name:/Text only/}).click();
@@ -82,7 +90,7 @@ try {
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, streamed audio, floor handover, sound toggle, voice consent/cancel, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, streamed audio, floor handover, playback across a hidden screen, sound toggle, voice consent/cancel, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;
