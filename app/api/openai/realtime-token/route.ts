@@ -22,11 +22,19 @@ export async function POST(request: Request) {
   const key = process.env.OPENAI_API_KEY?.trim();
   const model = process.env.OPENAI_REALTIME_TRANSLATION_MODEL?.trim();
   if (!key || !model) return json({ error: "La traduction n’est pas encore configurée. Vous pouvez essayer la démonstration." }, 503);
+  let targetLanguage = body.targetLanguage;
+  if ("sessionId" in body) {
+    if (typeof body.sessionId !== "string") return json({ error: "Session invalide." }, 400);
+    try {
+      const { targetLanguageForSession } = await import("@/lib/session/store");
+      targetLanguage = await targetLanguageForSession(body.sessionId);
+    } catch { return json({ error: "Rejoignez une conversation active pour continuer." }, 403); }
+  }
   try {
     const response = await fetch("https://api.openai.com/v1/realtime/translations/client_secrets", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ session: { model, audio: { output: { language: body.targetLanguage } } } }),
+      body: JSON.stringify({ session: { model, audio: { output: { language: targetLanguage } } } }),
       signal: AbortSignal.timeout(10_000), cache: "no-store",
     });
     if (!response.ok) {

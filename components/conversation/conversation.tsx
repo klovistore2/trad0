@@ -3,6 +3,8 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTranslationSession } from "@/hooks/useTranslationSession";
+import { StartSharedSession } from "./start-shared-session";
+import { TranslationAudio } from "./translation-audio";
 import { ThemeToggle } from "./theme-toggle";
 
 function Microphone({ stopped = false }: { stopped?: boolean }) {
@@ -38,6 +40,7 @@ export function Conversation() {
           <div ref={transcript} className="transcript" lang="en" tabIndex={0} aria-label="Traduction anglaise">
             <p>{session.translation}<span className={session.status === "translating" ? "cursor" : ""} /></p>
           </div>
+          {!session.active && <TranslationAudio text={session.translation} />}
           {session.original && <details className="original"><summary>Voir l’original</summary><p>{session.original}</p></details>}
         </> : <>
           <div className={`voice-symbol ${session.active ? "is-active" : ""}`} aria-hidden="true"><span /><span /><span /><span /><span /></div>
@@ -52,6 +55,7 @@ export function Conversation() {
           <Microphone stopped={session.active} />
           {session.status === "connecting" ? "Annuler" : session.active ? "Arrêter" : session.message ? "Réessayer" : session.translation ? "Recommencer" : "Commencer à parler"}
         </button>
+        {!session.active && <StartSharedSession />}
         {!session.active && <button className="demo-button" onClick={() => void session.start(true)}>Essayer une démonstration <span aria-hidden="true">↗</span></button>}
         {session.active && <p className="quiet-note">{session.demo ? "Exemple préécrit, sans envoi audio." : "Le micro reste ouvert jusqu’à l’arrêt."}</p>}
       </div>

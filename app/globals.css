@@ -137,3 +137,15 @@ footer p span, .privacy-note { color: var(--muted); font-size: 11px; }
 .theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--surface-border); border-radius: 50%; color: var(--ink); background: var(--surface); flex-shrink: 0; }
 .theme-toggle:hover { background: var(--stop-hover); }
 @media (max-width: 380px) { .topbar-actions { gap: 8px; } .edition { letter-spacing: .6px; } }
+
+.share-session { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 16px; padding: 24px 0; }
+.share-session canvas { border-radius: 16px; max-width: 100%; }
+.share-session .intro { margin: 0; }
+.share-actions { display: flex; gap: 20px; }
+.join-link { width: min(100%, 330px); border: 1px solid var(--surface-border); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 12px; padding: 12px; }
+button:disabled { opacity: .5; cursor: wait; }
+.voice-consent { width: 100%; margin: 16px 0 0; text-align: left; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.voice-consent summary { cursor: pointer; min-height: 44px; padding: 12px 0; text-align: center; }
+.voice-consent p { margin: 10px 0; }
+.voice-consent button { color: var(--ink); }
+.end-session { text-align: center; }

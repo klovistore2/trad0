@@ -20,7 +20,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
     this.status(status, message);
   }
 
-  async connect({ targetLanguage }: TranslationSessionConfig) {
+  async connect({ targetLanguage, sessionId }: TranslationSessionConfig) {
     const signal = this.controller.signal;
     this.status("connecting");
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
@@ -36,7 +36,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
       stream.getAudioTracks().forEach(track => track.addEventListener("ended", () => this.fail("microphone_denied", "Le micro a été déconnecté. Réessayez.")));
       const tokenResponse = await fetch("/api/openai/realtime-token", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetLanguage }), signal,
+        body: JSON.stringify({ targetLanguage, sessionId }), signal,
       });
       const token: unknown = await tokenResponse.json();
       if (!tokenResponse.ok || !token || typeof token !== "object" || !("value" in token) || typeof token.value !== "string") {
@@ -84,6 +84,10 @@ export class OpenAITranslationProvider implements TranslationProvider {
         ? "Autorisez le micro dans votre navigateur, puis réessayez."
         : "Impossible de se connecter. Vérifiez votre connexion et réessayez.");
     }
+  }
+
+  setMicrophoneEnabled(enabled: boolean) {
+    this.stream?.getAudioTracks().forEach(track => { track.enabled = enabled; });
   }
 
   async disconnect() {

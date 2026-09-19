@@ -8,7 +8,9 @@ import type { SessionStatus, TranslationProvider } from "@/types/translation";
 type State = { status: SessionStatus; translation: string; original: string; message: string; demo: boolean };
 const initialState: State = { status: "idle", translation: "", original: "", message: "", demo: false };
 
-export function useTranslationSession() {
+export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void } = {}) {
+  const callbacks = useRef(options);
+  useEffect(() => { callbacks.current = options; }, [options]);
   const [state, setState] = useState(initialState);
   const provider = useRef<TranslationProvider | null>(null);
   const settling = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -59,14 +61,15 @@ export function useTranslationSession() {
         setState(previous => ({ ...previous, message: "Je n’ai pas bien compris. Réessayez." }));
         return;
       }
+      callbacks.current.onDelta?.(event.delta);
       setState(previous => ({ ...previous, status: "translating", message: "", translation: (previous.translation + event.delta).slice(-12_000) }));
       clearTimeout(settling.current);
       settling.current = setTimeout(() => {
         if (provider.current === current) setState(previous => ({ ...previous, status: "listening" }));
       }, 1100);
     });
-    await current.connect({ targetLanguage: "en" });
+    await current.connect({ targetLanguage: callbacks.current.targetLanguage || "en", sessionId: callbacks.current.sessionId });
   }, []);
 
-  return { ...state, start, stop, active: ["connecting", "listening", "translating"].includes(state.status) };
+  return { ...state, start, stop, setMicrophoneEnabled: (enabled: boolean) => provider.current?.setMicrophoneEnabled?.(enabled), active: ["connecting", "listening", "translating"].includes(state.status) };
 }
