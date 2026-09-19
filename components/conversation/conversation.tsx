@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useTranslationSession } from "@/hooks/useTranslationSession";
+import { ThemeToggle } from "./theme-toggle";
 
 function Microphone({ stopped = false }: { stopped?: boolean }) {
   return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
@@ -26,7 +27,7 @@ export function Conversation() {
   return <main className="conversation">
     <header className="topbar">
       <Link className="wordmark" href="/" aria-label="À deux, accueil">à deux<span className="brand-dot">.</span></Link>
-      <span className="edition">PREMIERS MOTS · V0</span>
+      <div className="topbar-actions"><span className="edition">PREMIERS MOTS · V0</span><ThemeToggle /></div>
     </header>
 
     <section className="conversation-body" aria-label="Traduction en direct">
