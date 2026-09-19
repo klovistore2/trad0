@@ -6,6 +6,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private active?: AbortController;
   private sources = new Set<AudioBufferSourceNode>();
   private nextTime = 0;
+  private failure = "";
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   async unlock() {
@@ -14,6 +15,8 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     if (this.context.state !== "running") throw new Error("Touchez Activer le son pour écouter la traduction.");
   }
   get contextState() { return this.context?.state ?? "absent"; }
+  // Browsers hide websocket failure reasons behind a generic event; keep what they do expose.
+  get lastFailure() { return this.failure; }
   // A local beep separates an OS-level mute from a broken pipeline: no network, same output path.
   async testTone() {
     await this.unlock();
@@ -61,6 +64,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         const socket = new WebSocket(`wss://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(credentials.voiceId)}/stream-input?${params}`);
         let finished = false;
         let finalReceived = false;
+        let opened = false;
         let pendingByte: number | undefined;
         let receivedAudio = false;
         let timer: ReturnType<typeof setTimeout>;
@@ -81,6 +85,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         };
         timeout();
         socket.onopen = async () => {
+          opened = true;
           try {
             socket.send(JSON.stringify({ text: " " }));
             for await (const text of textStream) {
@@ -128,8 +133,15 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
             }
           } catch (error) { finish(error instanceof Error ? error : new Error("La lecture a été interrompue.")); }
         };
-        socket.onerror = () => finish(new Error("Connexion audio perdue. Réessayez."));
-        socket.onclose = () => { if (!finalReceived) finish(new Error("La lecture a été interrompue.")); };
+        socket.onerror = () => {
+          this.failure = opened ? "socket error after open" : "handshake refused (token, origin or network)";
+          finish(new Error("Connexion audio perdue. Réessayez."));
+        };
+        socket.onclose = event => {
+          if (finalReceived) return;
+          this.failure = `${opened ? "closed" : "handshake"} code ${event.code}${event.reason ? ` · ${event.reason}` : ""}`;
+          finish(new Error("La lecture a été interrompue."));
+        };
       });
       if (!controller.signal.aborted) this.onStatus("idle");
     } catch (error) {

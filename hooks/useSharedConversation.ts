@@ -240,6 +240,7 @@ export function useSharedConversation(id: string) {
   const readAudioState = useCallback(() => ({
     context: voice.current?.contextState ?? "absent",
     stopped: stopped.current,
+    failure: voice.current?.lastFailure || "none",
     queued: queue.current.length,
     speaking: speaking.current,
     running: running.current,
