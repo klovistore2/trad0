@@ -34,6 +34,7 @@ export function SharedConversation({ id }: { id: string }) {
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? (english ? "Connected" : "L’autre personne est connectée") : (english ? "Waiting for the other person…" : "L’autre personne est déconnectée…")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
+          {session.connectionLost && <p className="quiet-note" role="status">{english ? "Reconnecting…" : "Reconnexion…"}</p>}
           {!session.enabled
             ? <button disabled={voiceBusy} className="primary-button" onClick={() => void session.start()}>{english ? "Enable microphone" : "Activer le micro"}</button>
             : session.hasFloor

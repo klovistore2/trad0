@@ -67,6 +67,13 @@ try {
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Playback survives a dark screen.'})}));
  await b.getByText('Playback survives a dark screen.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
+ // A dropped status poll must not end the conversation: only a closed session does.
+ const statusPoll=url=>/\/api\/sessions\/[0-9a-f-]{36}$/.test(url.pathname);
+ await b.route(statusPoll,route=>route.abort());
+ await b.getByText('Reconnecting…').waitFor();
+ await b.getByRole('button',{name:'Let me speak'}).waitFor();
+ await b.unroute(statusPoll);
+ await expect(b.getByText('Reconnecting…')).toBeHidden();
  // Muting playback keeps the subtitles and stops the audio.
  await b.getByRole('button',{name:/Sound on/}).click();
  await b.getByRole('button',{name:/Text only/}).click();
@@ -90,7 +97,7 @@ try {
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, streamed audio, floor handover, playback across a hidden screen, sound toggle, voice consent/cancel, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, streamed audio, floor handover, playback across a hidden screen, poll failure recovery, sound toggle, voice consent/cancel, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;

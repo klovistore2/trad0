@@ -17,6 +17,8 @@ export function useSharedConversation(id: string) {
   const [floor, setFloor] = useState<number | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [received, setReceived] = useState(0);
+  const [connectionLost, setConnectionLost] = useState(false);
+  const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
   const voice = useRef<ElevenLabsVoiceProvider | null>(null);
@@ -96,17 +98,27 @@ export function useSharedConversation(id: string) {
         }
       }
     });
+    let failures = 0;
     async function refresh() {
       try {
         const response = await fetch(`/api/sessions/${id}`, { signal: controller.signal, cache: "no-store" });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error);
-        if (!controller.signal.aborted) { roomRef.current = data; setRoom(data); }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setMessage(error instanceof Error ? error.message : "Connexion perdue.");
-          running.current = false; setEnabled(false); player.stop(); translationRef.current.stop();
+        if (!response.ok) {
+          // Only a closed, expired or foreign session is final. Everything else deserves a retry.
+          if ([401, 403, 404].includes(response.status)) {
+            setMessage(data.error || "La conversation est terminée.");
+            stopped.current = "session ended";
+            running.current = false; setEnabled(false); player.stop(); translationRef.current.stop();
+            return;
+          }
+          throw new Error(data.error);
         }
+        if (controller.signal.aborted) return;
+        failures = 0; setConnectionLost(false);
+        roomRef.current = data; setRoom(data);
+      } catch {
+        // A dropped poll must never end the conversation: a waking phone drops several in a row.
+        if (!controller.signal.aborted && ++failures >= 3) setConnectionLost(true);
       } finally { if (!controller.signal.aborted) refreshTimer = setTimeout(() => void refresh(), 3000); }
     }
     async function join() {
@@ -152,13 +164,13 @@ export function useSharedConversation(id: string) {
     try {
       // Same gesture unlocks playback: the browser has no separate sound permission to ask for.
       await voice.current?.unlock();
-      running.current = true; setEnabled(true);
+      running.current = true; setEnabled(true); stopped.current = "running";
       await translation.start();
       syncMicrophone();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
   }
   function stop() {
-    running.current = false; setEnabled(false); queue.current = [];
+    running.current = false; setEnabled(false); stopped.current = "paused by you"; queue.current = [];
     publisher.current?.commit(); translation.stop(); voice.current?.stop();
   }
   async function takeFloor() {
@@ -184,11 +196,12 @@ export function useSharedConversation(id: string) {
   }
   const readAudioState = useCallback(() => ({
     context: voice.current?.contextState ?? "absent",
+    stopped: stopped.current,
     queued: queue.current.length,
     speaking: speaking.current,
     running: running.current,
     sound: sound.current,
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, received, translation, start, stop, takeFloor, toggleSound, playTestTone, readAudioState };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, received, connectionLost, translation, start, stop, takeFloor, toggleSound, playTestTone, readAudioState };
 }

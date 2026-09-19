@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import type { VoiceStatus } from "@/types/voice";
 
-type AudioState = { context: string; queued: number; speaking: boolean; running: boolean; sound: boolean };
+type AudioState = { context: string; stopped: string; queued: number; speaking: boolean; running: boolean; sound: boolean };
 
 // Development aid: tells apart an OS-level mute, a suspended context and a pipeline that never fired.
 export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, english }: {
@@ -32,6 +32,7 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
       <div><dt>{english ? "Sentences received" : "Phrases reçues"}</dt><dd>{received}</dd></div>
       <div><dt>{english ? "Waiting to play" : "En attente de lecture"}</dt><dd>{state?.queued ?? "—"}</dd></div>
       <div><dt>{english ? "Session active" : "Session active"}</dt><dd>{state ? (state.running ? yes : no) : "—"}</dd></div>
+      <div><dt>{english ? "Last state change" : "Dernier changement"}</dt><dd>{state?.stopped ?? "—"}</dd></div>
       <div><dt>{english ? "Sound on" : "Son activé"}</dt><dd>{state ? (state.sound ? yes : no) : "—"}</dd></div>
     </dl>
     <p>{english
