@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { parseTranslationMessage } from "../lib/openai/events.ts";
 import { POST } from "../app/api/openai/realtime-token/route.ts";
 
-const request = (body = { targetLanguage: "th" }, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/openai/realtime-token", {
+const request = (body = { targetLanguage: "en" }, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/openai/realtime-token", {
   method: "POST", headers: { origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 
@@ -48,7 +48,7 @@ test("uses translation session schema, returns only ephemeral credential and san
     globalThis.fetch = async (url, options) => {
       assert.equal(url, "https://api.openai.com/v1/realtime/translations/client_secrets");
       assert.equal(options.headers.Authorization, "Bearer test-permanent-secret");
-      assert.deepEqual(JSON.parse(options.body), { session: { model: "test-configurable-model", audio: { output: { language: "th" } } } });
+      assert.deepEqual(JSON.parse(options.body), { session: { model: "test-configurable-model", audio: { output: { language: "en" } } } });
       return Response.json({ value: "ephemeral", session: { private: "not forwarded" } });
     };
     assert.deepEqual(await (await POST(request())).json(), { value: "ephemeral" });

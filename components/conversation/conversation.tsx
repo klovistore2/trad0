@@ -20,9 +20,9 @@ export function Conversation() {
   }, [session.translation]);
   const status = session.status === "connecting" ? "Connexion en cours…"
     : session.demo && session.active ? "Démonstration · micro désactivé"
-    : session.status === "translating" ? "Vos mots prennent vie en thaï"
+    : session.status === "translating" ? "Vos mots prennent vie en anglais"
     : session.status === "listening" ? "À votre écoute"
-    : session.message ? "Un instant…" : "Français → ไทย";
+    : session.message ? "Un instant…" : "Français → English";
 
   return <main className="conversation">
     <header className="topbar">
@@ -31,18 +31,18 @@ export function Conversation() {
     </header>
 
     <section className="conversation-body" aria-label="Traduction en direct">
-      <div className="language-tag"><span className="language-dot" /> L’autre personne parle <span lang="th">ไทย</span></div>
+      <div className="language-tag"><span className="language-dot" /> L’autre personne parle <span lang="en">English</span></div>
       <div className={`translation-area ${session.translation ? "has-translation" : ""}`}>
         {session.translation ? <>
-          <span className="eyebrow">{session.demo ? "EXEMPLE DE TRADUCTION" : "VOS MOTS, EN THAÏ"}</span>
-          <div ref={transcript} className="transcript" lang="th" tabIndex={0} aria-label="Traduction thaïe">
+          <span className="eyebrow">{session.demo ? "EXEMPLE DE TRADUCTION" : "VOS MOTS, EN ANGLAIS"}</span>
+          <div ref={transcript} className="transcript" lang="en" tabIndex={0} aria-label="Traduction anglaise">
             <p>{session.translation}<span className={session.status === "translating" ? "cursor" : ""} /></p>
           </div>
           {session.original && <details className="original"><summary>Voir l’original</summary><p>{session.original}</p></details>}
         </> : <>
           <div className={`voice-symbol ${session.active ? "is-active" : ""}`} aria-hidden="true"><span /><span /><span /><span /><span /></div>
           <h1>{session.active ? "Je vous écoute." : <>Un échange.<br /><em>Sans barrière.</em></>}</h1>
-          <p className="intro">{session.active ? "Parlez naturellement. La traduction apparaît ici." : "Parlez français. Vos mots s’affichent en thaï, au fil de votre voix."}</p>
+          <p className="intro">{session.active ? "Parlez naturellement. La traduction apparaît ici." : "Parlez français. Vos mots s’affichent en anglais, au fil de votre voix."}</p>
         </>}
       </div>
       <div className="controls">

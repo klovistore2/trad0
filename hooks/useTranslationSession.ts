@@ -65,7 +65,7 @@ export function useTranslationSession() {
         if (provider.current === current) setState(previous => ({ ...previous, status: "listening" }));
       }, 1100);
     });
-    await current.connect({ targetLanguage: "th" });
+    await current.connect({ targetLanguage: "en" });
   }, []);
 
   return { ...state, start, stop, active: ["connecting", "listening", "translating"].includes(state.status) };

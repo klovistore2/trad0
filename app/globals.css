@@ -80,7 +80,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible, .transcript:focus-
 .edition { font-size: 10px; letter-spacing: 2px; color: var(--muted); }
 .conversation-body { display: flex; flex: 1; flex-direction: column; align-items: center; padding: 34px 0 36px; }
 .language-tag { display: flex; gap: 9px; align-items: center; background: var(--surface); border: 1px solid var(--surface-border); border-radius: 30px; padding: 10px 16px; font-size: 13px; }
-.language-tag [lang="th"] { font-size: 17px; margin-left: 5px; }
+.language-tag [lang] { font-size: 17px; margin-left: 5px; }
 .language-dot { width: 6px; height: 6px; background: var(--symbol-ink); border-radius: 50%; }
 .translation-area { flex: 1; min-height: 370px; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 38px 0; text-align: center; }
 .voice-symbol { display: flex; align-items: center; justify-content: center; gap: 5px; width: 82px; height: 82px; border-radius: 50%; background: var(--symbol-bg); margin-bottom: 29px; }

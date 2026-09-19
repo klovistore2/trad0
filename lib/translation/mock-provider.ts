@@ -12,7 +12,7 @@ export class MockTranslationProvider implements TranslationProvider {
   async connect() {
     this.status("listening");
     this.original({ delta: "Bonjour ! Je suis content de vous rencontrer. On prend un café ensemble ?", quality: "unknown" });
-    const words = ["สวัสดี", "! ", "ยินดี", "ที่ได้", "รู้จัก", "นะ ", "ไป", "ดื่ม", "กาแฟ", "ด้วยกัน", "ไหม", "?"];
+    const words = ["Hello! ", "It’s nice ", "to meet you. ", "Shall we ", "have a coffee ", "together?"];
     let index = 0;
     this.timer = setInterval(() => {
       this.translated({ delta: words[index++], quality: "unknown" });

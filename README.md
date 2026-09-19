@@ -1,6 +1,6 @@
 # À deux — v0
 
-Premier jalon : un navigateur capture la voix et affiche progressivement la traduction thaïe. Interface mobile, sans compte. Next.js App Router, React, TypeScript strict.
+Premier jalon : un navigateur capture la voix et affiche progressivement la traduction anglaise. La cible actuelle est l’anglais pour faciliter la validation ; le thaï reste accepté par la route API. Interface mobile, sans compte. Next.js App Router, React, TypeScript strict.
 
 ## Démarrer
 
@@ -51,7 +51,7 @@ Validation de développement : lint, TypeScript et huit tests réussis. Le build
 
 À valider avec clé réelle avant le jalon 2 :
 
-1. iPhone Safari et Android Chrome : autoriser le micro, dire plusieurs phrases françaises, vérifier le thaï avec une personne compétente.
+1. iPhone Safari et Android Chrome : autoriser le micro, dire plusieurs phrases françaises, vérifier que l’anglais traduit les paroles, y compris les questions, sans y répondre.
 2. Vérifier la progression du texte, la latence, le silence et le bruit ambiant.
 3. Refuser le micro, annuler pendant l’autorisation, couper le réseau, réessayer.
 4. Arrêter ou masquer l’onglet : vérifier que l’indicateur micro s’éteint.
@@ -60,7 +60,7 @@ Validation de développement : lint, TypeScript et huit tests réussis. Le build
 
 Intégration du jalon 1 implémentée ; validation réelle fournisseur et téléphone encore nécessaire. Aucun secret n’était disponible lors du développement. Ne pas considérer la démonstration comme une validation de traduction.
 
-L’API documentée ne fournit pas de score de confiance calibré dans ces deltas : `quality: "unknown"` est explicite dans le contrat. Aucun score n’est inventé. Les sorties douteuses et la qualité français → thaï restent à évaluer en conditions réelles.
+L’API documentée ne fournit pas de score de confiance calibré dans ces deltas : `quality: "unknown"` est explicite dans le contrat. Aucun score n’est inventé. Les sorties douteuses et la qualité français → anglais restent à évaluer en conditions réelles.
 
 Avant une ouverture publique, ajouter une limitation de débit distribuée et un budget fournisseur : le contrôle d’origine de la route évite les appels intersites ordinaires, mais ne remplace pas une protection contre l’abus d’un endpoint invité.
 

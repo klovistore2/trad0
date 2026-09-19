@@ -89,5 +89,5 @@ test("demo finishes in idle and does not leave an active interval", async () => 
   for (let i = 0; i < 100 && !cleared; i++) tick();
   assert.equal(cleared, true);
   assert.deepEqual(states, ["listening", "idle"]);
-  assert.match(translation, /สวัสดี/);
+  assert.equal(translation, "Hello! It’s nice to meet you. Shall we have a coffee together?");
 });
