@@ -18,6 +18,8 @@ export function useSharedConversation(id: string) {
   const [claiming, setClaiming] = useState(false);
   const [received, setReceived] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
+  const [soundReady, setSoundReady] = useState(false);
+  const soundReadyRef = useRef(false);
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
@@ -44,14 +46,15 @@ export function useSharedConversation(id: string) {
   useEffect(() => { translationRef.current = translation; }, [translation]);
   const syncMicrophone = useCallback(() => translationRef.current.setMicrophoneEnabled(micShouldBeOn()), [micShouldBeOn]);
 
+  const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
   const playQueue = useCallback(async () => {
-    if (speaking.current || !running.current || !sound.current || !voice.current) return;
+    if (speaking.current || !canPlay()) return;
     speaking.current = true;
     syncMicrophone();
     try {
-      while (running.current && sound.current && queue.current.length) {
+      while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
-        await voice.current.speakStream({ sessionId: id, language: roomRef.current?.me.language || "fr", textStream: (async function* () { yield event.text + " "; })() });
+        await voice.current?.speakStream({ sessionId: id, language: roomRef.current?.me.language || "fr", textStream: (async function* () { yield event.text + " "; })() });
       }
     } catch (error) {
       queue.current = [];
@@ -60,7 +63,7 @@ export function useSharedConversation(id: string) {
       speaking.current = false;
       syncMicrophone();
     }
-  }, [id, syncMicrophone]);
+  }, [id, syncMicrophone, canPlay]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -91,9 +94,13 @@ export function useSharedConversation(id: string) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
         setReceived(count => count + 1);
-        if (running.current && sound.current) {
-          if (queue.current.length >= 20) { setMessage("La lecture a pris du retard. Le texte reste disponible."); queue.current = []; }
-          queue.current.push(event);
+        if (sound.current) {
+          // Before the first tap, hold only the latest sentence so it plays instead of a backlog.
+          if (!soundReadyRef.current) queue.current = [event];
+          else {
+            if (queue.current.length >= 20) { setMessage("La lecture a pris du retard. Le texte reste disponible."); queue.current = []; }
+            queue.current.push(event);
+          }
           void playQueue();
         }
       }
@@ -141,7 +148,7 @@ export function useSharedConversation(id: string) {
       if (!running.current || controller.signal.aborted) return;
       void (async () => {
         try {
-          await player.unlock();
+          await unlockSound();
           await translationRef.current.start();
           syncMicrophone();
         } catch (error) {
@@ -156,14 +163,23 @@ export function useSharedConversation(id: string) {
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
-  }, [id, playQueue, syncMicrophone]);
+  }, [id, playQueue, syncMicrophone, canPlay]);
 
+  async function unlockSound() {
+    await voice.current?.unlock();
+    soundReadyRef.current = true; setSoundReady(true);
+  }
+  async function enableSound() {
+    setMessage("");
+    try { await unlockSound(); void playQueue(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
+  }
   async function start() {
     if (running.current) return;
     setMessage("");
     try {
       // Same gesture unlocks playback: the browser has no separate sound permission to ask for.
-      await voice.current?.unlock();
+      await unlockSound();
       running.current = true; setEnabled(true); stopped.current = "running";
       await translation.start();
       syncMicrophone();
@@ -191,7 +207,7 @@ export function useSharedConversation(id: string) {
   }
   async function playTestTone() {
     setMessage("");
-    try { await voice.current?.testTone(); }
+    try { await voice.current?.testTone(); soundReadyRef.current = true; setSoundReady(true); }
     catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
   }
   const readAudioState = useCallback(() => ({
@@ -203,5 +219,5 @@ export function useSharedConversation(id: string) {
     sound: sound.current,
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, received, connectionLost, translation, start, stop, takeFloor, toggleSound, playTestTone, readAudioState };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, received, connectionLost, soundReady, translation, start, stop, takeFloor, toggleSound, enableSound, playTestTone, readAudioState };
 }

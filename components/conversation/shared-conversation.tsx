@@ -28,15 +28,16 @@ export function SharedConversation({ id }: { id: string }) {
           {session.incoming ? <><span className="eyebrow">{english ? "THEIR WORDS, IN YOUR LANGUAGE" : "SES MOTS, DANS VOTRE LANGUE"}</span><div className="transcript" lang={room.me.language} tabIndex={0}><p>{session.incoming}</p></div></>
           : <><h1>{english ? "You’re connected." : "Vous êtes ensemble."}</h1><p className="intro">{english ? "Speak naturally. Their translated words will appear here." : "Parlez naturellement. Les mots de l’autre personne apparaîtront ici."}</p></>}
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {english ? "Playing translation · microphone paused" : "Traduction en cours · micro en pause"}</p>}
-          {!session.enabled && session.received > 0 && <p className="quiet-note" role="status">{english ? "Sound is paused — tap Enable microphone to hear translations." : "Le son est en pause — touchez Activer le micro pour entendre les traductions."}</p>}
+          {!session.soundReady && session.received > 0 && <p className="quiet-note" role="status">{english ? "Tap below to hear the translations." : "Touchez ci-dessous pour entendre les traductions."}</p>}
           {session.translation.translation && <details className="original"><summary>{english ? "My translated words" : "Mes mots traduits"}</summary><p>{session.translation.translation}</p></details>}
         </div>
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? (english ? "Connected" : "L’autre personne est connectée") : (english ? "Waiting for the other person…" : "L’autre personne est déconnectée…")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
           {session.connectionLost && <p className="quiet-note" role="status">{english ? "Reconnecting…" : "Reconnexion…"}</p>}
+          {!session.soundReady && session.received > 0 && <button className="primary-button" onClick={() => void session.enableSound()}>{english ? "Hear the translation" : "Entendre la traduction"}</button>}
           {!session.enabled
-            ? <button disabled={voiceBusy} className="primary-button" onClick={() => void session.start()}>{english ? "Enable microphone" : "Activer le micro"}</button>
+            ? <button disabled={voiceBusy} className="primary-button" onClick={() => void session.start()}>{english ? "Start the conversation" : "Démarrer la conversation"}</button>
             : session.hasFloor
               ? <>
                   <p className="floor-state" role="status"><span className="status-dot active" />{english ? "Your turn — just speak" : "À vous — parlez"}</p>
