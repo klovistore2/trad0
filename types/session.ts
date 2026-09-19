@@ -1,12 +1,15 @@
 export type Language = "fr" | "en" | "th";
 export type Participant = { slot: number; language: Language; online: boolean; voiceStatus: "none" | "learning" | "ready" | "verification_required" };
-export type SharedSession = { id: string; expiresAt: string; me: Participant; peer: Participant | null };
+export type SharedSession = { id: string; expiresAt: string; floor: number; me: Participant; peer: Participant | null };
 export type PeerEvent = { id: string; turnId: string; text: string; committed: boolean };
 export type ReceivedEvent = PeerEvent & { seq: string };
 export interface PeerTransport {
   connect(sessionId: string): Promise<void>;
   send(event: PeerEvent): Promise<void>;
   subscribe(cb: (event: ReceivedEvent) => void): () => void;
+  // Turn taking travels with the events stream, so a push transport keeps both in one channel.
+  onFloor(cb: (slot: number) => void): void;
+  takeFloor(): Promise<number>;
   disconnect(): void;
 }
 export const languageNames: Record<Language, string> = { fr: "Français", en: "English", th: "ไทย" };

@@ -13,23 +13,40 @@ export function useSharedConversation(id: string) {
   const [incoming, setIncoming] = useState("");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [enabled, setEnabled] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const [floor, setFloor] = useState<number | null>(null);
+  const [claiming, setClaiming] = useState(false);
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
   const voice = useRef<ElevenLabsVoiceProvider | null>(null);
-  const audioEnabled = useRef(false);
+  const running = useRef(false);
+  const sound = useRef(true);
+  const floorRef = useRef<number | null>(null);
   const queue = useRef<ReceivedEvent[]>([]);
   const speaking = useRef(false);
   const roomRef = useRef<SharedSession | null>(null);
-  const translation = useTranslationSession({ sessionId: id, targetLanguage: room?.peer?.language || (room?.me.language === "fr" ? "en" : "fr"), onDelta: delta => publisher.current?.append(delta) });
+
+  // The microphone is open only while this device holds the floor and nothing is playing.
+  const micShouldBeOn = useCallback(
+    () => running.current && floorRef.current === roomRef.current?.me.slot && !speaking.current,
+    [],
+  );
+  const translation = useTranslationSession({
+    sessionId: id,
+    targetLanguage: room?.peer?.language || (room?.me.language === "fr" ? "en" : "fr"),
+    onDelta: delta => publisher.current?.append(delta),
+    shouldEnableMicrophone: micShouldBeOn,
+  });
   const translationRef = useRef(translation);
   useEffect(() => { translationRef.current = translation; }, [translation]);
+  const syncMicrophone = useCallback(() => translationRef.current.setMicrophoneEnabled(micShouldBeOn()), [micShouldBeOn]);
 
   const playQueue = useCallback(async () => {
-    if (speaking.current || !audioEnabled.current || !voice.current) return;
+    if (speaking.current || !running.current || !sound.current || !voice.current) return;
     speaking.current = true;
-    translationRef.current.setMicrophoneEnabled(false);
+    syncMicrophone();
     try {
-      while (audioEnabled.current && queue.current.length) {
+      while (running.current && sound.current && queue.current.length) {
         const event = queue.current.shift()!;
         await voice.current.speakStream({ sessionId: id, language: roomRef.current?.me.language || "fr", textStream: (async function* () { yield event.text + " "; })() });
       }
@@ -38,9 +55,9 @@ export function useSharedConversation(id: string) {
       setMessage(error instanceof Error ? error.message : "Le son est indisponible. Le texte reste accessible.");
     } finally {
       speaking.current = false;
-      if (audioEnabled.current) translationRef.current.setMicrophoneEnabled(true);
+      syncMicrophone();
     }
-  }, [id]);
+  }, [id, syncMicrophone]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,13 +73,21 @@ export function useSharedConversation(id: string) {
     });
     voice.current = player;
     const committed = new Set<string>();
+    peer.onFloor(slot => {
+      if (controller.signal.aborted || floorRef.current === slot) return;
+      floorRef.current = slot;
+      setFloor(slot);
+      // Losing the floor mid-sentence: publish what was said rather than dropping it.
+      if (slot !== roomRef.current?.me.slot) turns.commit();
+      syncMicrophone();
+    });
     const unsubscribe = peer.subscribe(event => {
       if (controller.signal.aborted) return;
       setIncoming(event.text);
       if (event.committed && !committed.has(event.turnId)) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
-        if (audioEnabled.current) {
+        if (running.current && sound.current) {
           if (queue.current.length >= 20) { setMessage("La lecture a pris du retard. Le texte reste disponible."); queue.current = []; }
           queue.current.push(event);
           void playQueue();
@@ -78,7 +103,7 @@ export function useSharedConversation(id: string) {
       } catch (error) {
         if (!controller.signal.aborted) {
           setMessage(error instanceof Error ? error.message : "Connexion perdue.");
-          audioEnabled.current = false; setEnabled(false); player.stop(); translationRef.current.stop();
+          running.current = false; setEnabled(false); player.stop(); translationRef.current.stop();
         }
       } finally { if (!controller.signal.aborted) refreshTimer = setTimeout(() => void refresh(), 3000); }
     }
@@ -89,37 +114,57 @@ export function useSharedConversation(id: string) {
         if (!response.ok) throw new Error(data.error);
         if (controller.signal.aborted) return;
         roomRef.current = data; setRoom(data);
+        // Seed the floor once; the 500 ms poll owns it from here.
+        if (floorRef.current === null) { floorRef.current = data.floor; setFloor(data.floor); }
         void peer.connect(id); void refresh();
       } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Impossible de rejoindre."); }
     }
     void join();
     const hide = () => {
       if (document.hidden) {
-        audioEnabled.current = false; setEnabled(false); queue.current = []; player.stop(); turns.commit();
+        running.current = false; setEnabled(false); queue.current = []; player.stop(); turns.commit();
       }
     };
     document.addEventListener("visibilitychange", hide);
     return () => {
       controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", hide);
       unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose();
-      audioEnabled.current = false; queue.current = []; speaking.current = false;
+      running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
-  }, [id, playQueue]);
+  }, [id, playQueue, syncMicrophone]);
 
   async function start() {
-    if (audioEnabled.current) return;
+    if (running.current) return;
     setMessage("");
     try {
+      // Same gesture unlocks playback: the browser has no separate sound permission to ask for.
       await voice.current?.unlock();
-      audioEnabled.current = true; setEnabled(true);
+      running.current = true; setEnabled(true);
       await translation.start();
-      if (speaking.current) translationRef.current.setMicrophoneEnabled(false);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le son puis réessayez."); }
+      syncMicrophone();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
   }
   function stop() {
-    audioEnabled.current = false; setEnabled(false); queue.current = [];
+    running.current = false; setEnabled(false); queue.current = [];
     publisher.current?.commit(); translation.stop(); voice.current?.stop();
   }
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, translation, start, stop };
+  async function takeFloor() {
+    if (claiming || floorRef.current === roomRef.current?.me.slot) return;
+    setClaiming(true);
+    setMessage("");
+    try {
+      const slot = await transport.current?.takeFloor();
+      if (typeof slot === "number") { floorRef.current = slot; setFloor(slot); syncMicrophone(); }
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Impossible de prendre la parole."); }
+    finally { setClaiming(false); }
+  }
+  function toggleSound() {
+    const next = !sound.current;
+    sound.current = next; setSoundOn(next);
+    if (!next) { queue.current = []; voice.current?.stop(); speaking.current = false; }
+    syncMicrophone();
+  }
+  const hasFloor = room ? floor === room.me.slot : false;
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, translation, start, stop, takeFloor, toggleSound };
 }

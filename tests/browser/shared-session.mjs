@@ -44,19 +44,30 @@ try {
  await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
  const link=await a.getByRole('textbox',{name:'Lien d’invitation'}).inputValue();assert.match(link,/\/join\//);
  const b=await client();await b.goto(link);
- await b.getByRole('button',{name:'Enable microphone & sound'}).waitFor();
- await a.getByRole('button',{name:'Activer le micro et le son'}).waitFor();
+ await b.getByRole('button',{name:'Enable microphone'}).waitFor();
+ await a.getByRole('button',{name:'Activer le micro'}).waitFor();
  const c=await client();await c.goto(link);
  await expect(c.locator('.error-message')).toContainText(/terminée|inaccessible/);
- await a.getByRole('button',{name:'Activer le micro et le son'}).click();
- await b.getByRole('button',{name:'Enable microphone & sound'}).click();
+ await a.getByRole('button',{name:'Activer le micro'}).click();
+ await b.getByRole('button',{name:'Enable microphone'}).click();
  await a.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
  await b.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
+ // The creator holds the floor, so exactly one microphone is open in the room.
+ await a.waitForFunction(()=>window.testMicrophone.enabled===true);
+ await b.waitForFunction(()=>window.testMicrophone.enabled===false);
+ await a.getByText('À vous — parlez').waitFor();
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'This is a synthetic translation test.'})}));
  await b.getByText('This is a synthetic translation test.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
- await b.waitForFunction(()=>window.testMicrophone.enabled===false);
+ // Muting playback keeps the subtitles and stops the audio.
+ await b.getByRole('button',{name:/Sound on/}).click();
+ await b.getByRole('button',{name:/Text only/}).click();
+ await b.getByRole('button',{name:/Sound on/}).waitFor();
+ // Taking the floor swaps the microphones both ways.
+ await b.getByRole('button',{name:'Let me speak'}).click();
  await b.waitForFunction(()=>window.testMicrophone.enabled===true);
+ await a.waitForFunction(()=>window.testMicrophone.enabled===false);
+ await a.getByRole('button',{name:'À moi de parler'}).waitFor();
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Ceci est un test de traduction.'})}));
  await a.getByText('Ceci est un test de traduction.',{exact:true}).waitFor();
  await a.getByRole('button',{name:'Mettre en pause'}).click();
@@ -71,7 +82,7 @@ try {
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, streamed audio, microphone pause, voice consent/cancel, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, streamed audio, floor handover, sound toggle, voice consent/cancel, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;

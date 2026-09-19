@@ -28,7 +28,14 @@ export async function sessionState(id: string): Promise<SharedSession> {
   const me = await member(id); const sql = db();
   await sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`;
   const rows = await sql`SELECT slot, language, voice_status as "voiceStatus", last_seen>now()-interval '15 seconds' as online FROM adu_participants WHERE session_id=${id} ORDER BY slot`;
-  return { id, expiresAt: String(me.expires_at), me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
+  return { id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
+}
+
+// Taking the floor is unilateral; the database serializes simultaneous requests.
+export async function takeFloor(id: string) {
+  const me = await member(id);
+  await db()`UPDATE adu_sessions SET floor_slot=${me.slot} WHERE id=${id} AND closed=false AND expires_at>now()`;
+  return me.slot;
 }
 
 export async function targetLanguageForSession(id: string) {

@@ -20,7 +20,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
     this.status(status, message);
   }
 
-  async connect({ targetLanguage, sessionId }: TranslationSessionConfig) {
+  async connect({ targetLanguage, sessionId, microphoneEnabled = true }: TranslationSessionConfig) {
     const signal = this.controller.signal;
     this.status("connecting");
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
@@ -33,6 +33,8 @@ export class OpenAITranslationProvider implements TranslationProvider {
       // Permission may resolve after cancellation or navigation.
       if (signal.aborted) { stream.getTracks().forEach(track => track.stop()); return; }
       this.stream = stream;
+      // Apply the turn state before negotiation, so waiting for the floor never leaks audio.
+      this.setMicrophoneEnabled(microphoneEnabled);
       stream.getAudioTracks().forEach(track => track.addEventListener("ended", () => this.fail("microphone_denied", "Le micro a été déconnecté. Réessayez.")));
       const tokenResponse = await fetch("/api/openai/realtime-token", {
         method: "POST", headers: { "Content-Type": "application/json" },

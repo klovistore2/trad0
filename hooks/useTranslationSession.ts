@@ -8,7 +8,7 @@ import type { SessionStatus, TranslationProvider } from "@/types/translation";
 type State = { status: SessionStatus; translation: string; original: string; message: string; demo: boolean };
 const initialState: State = { status: "idle", translation: "", original: "", message: "", demo: false };
 
-export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void } = {}) {
+export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void; shouldEnableMicrophone?: () => boolean } = {}) {
   const callbacks = useRef(options);
   useEffect(() => { callbacks.current = options; }, [options]);
   const [state, setState] = useState(initialState);
@@ -68,7 +68,12 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
         if (provider.current === current) setState(previous => ({ ...previous, status: "listening" }));
       }, 1100);
     });
-    await current.connect({ targetLanguage: callbacks.current.targetLanguage || "en", sessionId: callbacks.current.sessionId });
+    await current.connect({
+      targetLanguage: callbacks.current.targetLanguage || "en",
+      sessionId: callbacks.current.sessionId,
+      // Read at connect time: the floor may already belong to the other person.
+      microphoneEnabled: callbacks.current.shouldEnableMicrophone?.() ?? true,
+    });
   }, []);
 
   return { ...state, start, stop, setMicrophoneEnabled: (enabled: boolean) => provider.current?.setMicrophoneEnabled?.(enabled), active: ["connecting", "listening", "translating"].includes(state.status) };

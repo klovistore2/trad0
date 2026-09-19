@@ -5,7 +5,7 @@ export type TranscriptEvent = {
   quality: "unknown" | "unreliable";
 };
 export type TranslationEvent = TranscriptEvent;
-export type TranslationSessionConfig = { targetLanguage: string; sessionId?: string };
+export type TranslationSessionConfig = { targetLanguage: string; sessionId?: string; microphoneEnabled?: boolean };
 export interface TranslationProvider {
   connect(config: TranslationSessionConfig): Promise<void>;
   disconnect(): Promise<void>;

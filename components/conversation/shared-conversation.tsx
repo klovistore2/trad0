@@ -32,7 +32,21 @@ export function SharedConversation({ id }: { id: string }) {
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? (english ? "Connected" : "L’autre personne est connectée") : (english ? "Waiting for the other person…" : "L’autre personne est déconnectée…")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
-          <button disabled={voiceBusy} className={`primary-button ${session.enabled ? "stop-button" : ""}`} onClick={() => session.enabled ? session.stop() : void session.start()}>{session.enabled ? (english ? "Pause" : "Mettre en pause") : (english ? "Enable microphone & sound" : "Activer le micro et le son")}</button>
+          {!session.enabled
+            ? <button disabled={voiceBusy} className="primary-button" onClick={() => void session.start()}>{english ? "Enable microphone" : "Activer le micro"}</button>
+            : session.hasFloor
+              ? <>
+                  <p className="floor-state" role="status"><span className="status-dot active" />{english ? "Your turn — just speak" : "À vous — parlez"}</p>
+                  <button className="primary-button stop-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
+                </>
+              : <>
+                  <p className="floor-state" role="status"><span className="status-dot" />{english ? "They have the floor" : "L’autre personne a la parole"}</p>
+                  <button disabled={session.claiming} className="primary-button" onClick={() => void session.takeFloor()}>{english ? "Let me speak" : "À moi de parler"}</button>
+                  <button className="demo-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
+                </>}
+          {session.enabled && <button className="demo-button sound-toggle" aria-pressed={session.soundOn} onClick={() => session.toggleSound()}>
+            {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}
+          </button>}
           <VoiceConsent sessionId={id} voiceStatus={room.me.voiceStatus} english={english} onRecord={session.stop} onBusy={setVoiceBusy} />
           <button className="demo-button" onClick={() => { session.stop(); setShowInvite(true); }}>{english ? "Invitation link" : "Lien d’invitation"}</button>
         </div>
