@@ -45,9 +45,9 @@ npm test
 npm run build
 ```
 
-Tests Node.js 22.18+ : événements fournisseur, validation de la route, contrat de création de session, protection des secrets et erreurs réseau. Les appels fournisseur y sont simulés. Dans un environnement qui interdit les sous-processus, lancer `node --test --test-isolation=none tests/*.test.mjs` (Node.js 24) pour exécuter les six tests dans le processus courant.
+Tests Node.js 22.18+ : événements fournisseur, validation de la route, contrat de création de session, protection des secrets et erreurs réseau. Les appels fournisseur y sont simulés. Dans un environnement qui interdit les sous-processus, lancer `node --test --test-isolation=none tests/*.test.mjs` (Node.js 24) pour exécuter les huit tests dans le processus courant.
 
-Validation de développement : lint, TypeScript et six tests réussis. Le build de production n’a pas pu être validé dans le sandbox : Turbopack ne peut pas ouvrir son port local ; le fallback Webpack est également bloqué au lancement du sous-processus TypeScript (`EPERM`). Relancer `npm run build` dans un environnement normal.
+Validation de développement : lint, TypeScript et huit tests réussis. Le build de production n’a pas pu être validé dans le sandbox : Turbopack ne peut pas ouvrir son port local ; le fallback Webpack est également bloqué au lancement du sous-processus TypeScript (`EPERM`). Relancer `npm run build` dans un environnement normal.
 
 À valider avec clé réelle avant le jalon 2 :
 
@@ -64,5 +64,11 @@ L’API documentée ne fournit pas de score de confiance calibré dans ces delta
 
 Avant une ouverture publique, ajouter une limitation de débit distribuée et un budget fournisseur : le contrôle d’origine de la route évite les appels intersites ordinaires, mais ne remplace pas une protection contre l’abus d’un endpoint invité.
 
-Les étapes suivantes (audio, deux téléphones / Supabase / QR, ElevenLabs, clonage consenti, saisie texte) attendent la validation du flux réel du premier jalon.
+Les étapes suivantes (audio, deux téléphones / Neon / QR, ElevenLabs, clonage consenti, saisie texte) attendent la validation du flux réel du premier jalon.
+
+## Base de données : Neon
+
+Le choix de base de données est désormais Neon PostgreSQL. Placer la chaîne de connexion dans `DATABASE_URL`, côté serveur uniquement. La v0 n’utilise pas encore de base de données : aucune migration ni connexion Neon n’est implémentée à ce stade. Les variables `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` et `SUPABASE_SERVICE_ROLE_KEY` ne sont pas utilisées et peuvent être retirées.
+
+Pour le jalon à deux téléphones, il faudra ajouter le schéma des sessions et choisir le transport des événements en direct ; `DATABASE_URL` seule ne remplace pas le transport Supabase Realtime prévu initialement.
 # trad0

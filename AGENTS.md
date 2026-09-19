@@ -7,3 +7,1072 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+Architecture cible
+                       SESSION WEB
+                  Olivier ↔ personne thaïe
+                           │
+               QR code / lien / Supabase
+                           │
+
+        ┌──────────────────┴──────────────────┐
+        │                                     │
+   téléphone A                           téléphone B
+     Français                                ไทย
+        │                                     │
+       MIC                                   MIC
+        │                                     │
+        ▼                                     ▼
+ OpenAI Realtime                       OpenAI Realtime
+ Live Translation                     Live Translation
+     FR → TH                               TH → FR
+        │                                     │
+        ├─ texte traduit                     ├─ texte traduit
+        │                                     │
+        ▼                                     ▼
+ envoyé à B                              envoyé à A
+        │                                     │
+        ▼                                     ▼
+ ElevenLabs                            ElevenLabs
+ voice_id Olivier                     voice_id B
+        │                                     │
+        ▼                                     ▼
+ texte TH + 🔊                       texte FR + 🔊
+ voix Olivier                         voix de B
+
+
+
+Project mission
+
+Build an extremely simple, mobile-first, face-to-face AI translation web app.
+
+The core use case is two people physically in front of each other who do not speak the same language.
+
+Example:
+
+Person A speaks French.
+Person B speaks Thai.
+A speaks naturally into their phone.
+B immediately sees the translated Thai text and hears the translation spoken using A's cloned voice.
+B replies naturally in Thai.
+A sees the French translation and hears it using B's cloned voice.
+
+The goal is NOT to build another Google Translate UI.
+
+The goal is to make the translation layer almost disappear.
+
+The user should feel:
+
+I am speaking directly with this person, not operating a translator.
+
+Product principles
+1. Web first
+
+This is a web application.
+
+Do NOT require an App Store / Play Store installation.
+
+The user opens a URL in Safari or Chrome.
+
+The app should eventually be installable as a PWA / Add to Home Screen, but installation must NEVER be required.
+
+Primary flow:
+
+Open site
+→ Start
+→ choose the other person's language if necessary
+→ show QR code / share link
+→ second person joins
+→ allow microphone
+→ talk
+
+Target:
+
+The first translated conversation should be possible in less than approximately 10 seconds after opening the site.
+
+2. Face-to-face only for MVP
+
+Do NOT build:
+
+video
+video calls
+remote audio calls
+group calls
+social feed
+stories
+file sharing
+complex messaging
+avatars
+gamification
+
+The MVP is specifically optimized for two people physically in the same place.
+
+Each participant uses their own phone.
+
+Optional headphones / one earbud may be used, but headphones must never be required.
+
+3. No mandatory account
+
+A first conversation must work as:
+
+guest ↔ guest
+
+No email.
+
+No password.
+
+No onboarding wizard.
+
+No account creation before trying the product.
+
+Use anonymous/guest identities.
+
+After a successful conversation, we may later offer:
+
+Add this person
+Create profile
+Save voice
+Add to Home Screen
+
+These features come AFTER the user has experienced the product.
+
+4. Languages
+
+The app should minimize language configuration.
+
+Preferred UX:
+
+They speak: ไทย 🇹🇭
+
+The speaker's own language should be automatically detected when possible.
+
+Do NOT initially force users to configure:
+
+I speak: French
+They speak: Thai
+
+unless automatic detection proves unreliable.
+
+Always provide a small way to correct the detected language.
+
+Example:
+
+Detected: Français ▾
+
+For the first MVP, prioritize:
+
+French ↔ Thai
+English ↔ Thai
+
+The architecture must support adding more languages later.
+
+Do not hard-code translation logic specifically to Thai.
+
+5. Conversation UX
+
+The main conversation screen must be extremely minimal.
+
+Conceptually:
+
+┌──────────────────────────────┐
+│            Ploy              │
+│         ไทย ↔ FR             │
+│                              │
+│                              │
+│   Je reviens demain matin.   │
+│                              │
+│       🔊 playing...          │
+│                              │
+│                              │
+│ Write something...        🎙 │
+└──────────────────────────────┘
+
+Do not create a dashboard-like translator UI.
+
+Avoid unnecessary controls.
+
+Do not require pressing a Translate button.
+
+The normal state should simply be:
+
+listen
+→ translate
+→ play
+→ listen
+6. Audio and text are not separate modes
+
+Input can be:
+
+voice
+OR
+text
+
+Output should normally be BOTH:
+
+translated text
++
+translated audio
+
+This is important.
+
+Users should never have to choose between a "voice mode" and a "text mode".
+
+The text field is always available as a fallback.
+
+Examples:
+
+voice → translated text + translated cloned voice
+text  → translated text + translated cloned voice
+
+This allows the app to continue working in noisy environments or when speech recognition fails.
+
+7. Original text
+
+The translated text is the primary text shown.
+
+The original transcription may be accessible with a tap, for example:
+
+Je rentre vers minuit.
+
+Show original
+กลับประมาณเที่ยงคืน
+
+Do not clutter the normal UI with both large blocks of text.
+
+8. Speech recognition failure
+
+Never confidently translate garbage.
+
+If speech recognition is unreliable, prefer showing something similar to:
+
+Didn't catch that.
+
+Try again
+Type instead
+
+The exact threshold and UX can evolve.
+
+The architecture should allow confidence / transcription quality metadata to influence whether a translation is automatically played.
+
+Do not implement Jev yet.
+
+Technical architecture
+Frontend
+
+Use:
+
+Next.js
+React
+TypeScript
+strict TypeScript
+mobile-first CSS
+Web Audio APIs
+MediaDevices.getUserMedia()
+MediaRecorder where useful
+
+Use the current stable Next.js App Router.
+
+Keep components small.
+
+Prefer server components where appropriate, but the conversation UI will necessarily contain client components because of microphone, WebRTC, audio playback and realtime state.
+
+Hosting
+
+The Next.js application should be deployable to Vercel.
+
+Do NOT design the core audio pipeline around a long-running Vercel serverless request.
+
+Realtime audio should connect from the browser directly to realtime providers whenever safe and supported.
+
+The Next.js backend should primarily handle:
+
+session creation
+join codes
+temporary provider credentials
+database operations
+voice profile metadata
+authentication
+security
+OpenAI realtime translation
+
+Use the CURRENT official OpenAI realtime/live translation API intended for browser realtime audio.
+
+Prefer WebRTC when the current official OpenAI API recommends WebRTC for browser applications.
+
+Do NOT invent API names, event names, endpoints or model IDs.
+
+Before implementing the OpenAI integration, consult the installed SDK types and/or current official OpenAI documentation.
+
+Keep the model identifier configurable:
+
+OPENAI_REALTIME_TRANSLATION_MODEL=
+
+Never hard-code a model ID throughout the application.
+
+Create a provider abstraction such as:
+
+interface TranslationProvider {
+  connect(config: TranslationSessionConfig): Promise<void>
+  disconnect(): Promise<void>
+  onOriginalTranscript(cb: (event: TranscriptEvent) => void): void
+  onTranslatedText(cb: (event: TranslationEvent) => void): void
+}
+
+The implementation may change as the OpenAI realtime API evolves.
+
+The rest of the app should not depend directly on OpenAI event names.
+
+Translation philosophy
+
+Translate meaning, intent and conversational style.
+
+Do NOT optimize for literal word-by-word translation.
+
+For example, Thai translations should sound natural to a Thai speaker.
+
+Conversation context should be used where available.
+
+Initially maintain:
+
+recent turns
++
+small rolling conversation summary if necessary
+
+Do NOT implement a vector database for MVP.
+
+Translation pipeline
+
+Conceptually:
+
+microphone
+    ↓
+OpenAI Realtime / Live Translation
+    ↓
+translated text stream
+    ↓
+send translated text to other participant
+    ↓
+ElevenLabs streaming TTS
+    ↓
+play translated cloned voice
+
+The receiving browser should also display the translated text.
+
+Avoid unnecessary serialization and server hops.
+
+Optimize aggressively for latency.
+
+Two participants
+
+Each conversation contains exactly two participants for MVP.
+
+Example state:
+
+type Participant = {
+  id: string
+  displayName?: string
+  language?: string
+  detectedLanguage?: string
+  voiceId?: string
+  voiceStatus?: "none" | "learning" | "ready"
+}
+
+type ConversationSession = {
+  id: string
+  joinCode: string
+  participantA?: Participant
+  participantB?: Participant
+  createdAt: string
+}
+
+Do not over-engineer the domain model.
+
+Realtime synchronization between browsers
+
+Use Supabase for the initial implementation unless there is a strong technical reason not to.
+
+Supabase responsibilities may include:
+
+anonymous auth
+session state
+participants
+Realtime broadcast/presence
+database
+
+The realtime channel can initially transport lightweight events such as:
+
+participant_joined
+participant_left
+language_detected
+translation_delta
+translation_committed
+voice_ready
+typing
+
+Do NOT stream raw microphone audio through Supabase.
+
+Only exchange lightweight state and translated text/events.
+
+If latency later becomes a problem, the transport may be replaced with a direct WebRTC DataChannel without redesigning the rest of the application.
+
+Therefore create a small transport abstraction.
+
+Example:
+
+interface PeerTransport {
+  connect(sessionId: string): Promise<void>
+  send(event: PeerEvent): Promise<void>
+  subscribe(cb: (event: PeerEvent) => void): () => void
+  disconnect(): Promise<void>
+}
+ElevenLabs
+
+Use ElevenLabs for translated voice output.
+
+The goal is for the receiver to hear the translation using the original speaker's voice.
+
+Use the current official ElevenLabs streaming TTS API.
+
+For latency-sensitive TTS, choose the current low-latency model recommended by ElevenLabs documentation.
+
+Do not hard-code the model globally.
+
+Use:
+
+ELEVENLABS_TTS_MODEL=
+
+Implement an abstraction such as:
+
+interface VoiceProvider {
+  speakStream(options: {
+    textStream: AsyncIterable<string>
+    voiceId: string
+    language?: string
+  }): Promise<AudioStream>
+
+  createVoiceProfile?(
+    samples: Blob[],
+  ): Promise<{ voiceId: string }>
+}
+
+Never expose the permanent ElevenLabs API key in browser JavaScript.
+
+If the current ElevenLabs API supports temporary/single-use client tokens, obtain them from a secure server route.
+
+Voice cloning
+
+Voice cloning is a key differentiator but must not block the initial conversation.
+
+The intended progression is approximately:
+
+start conversation
+↓
+collect clean voice samples
+↓
+voice profile learning
+↓
+create usable voice clone
+↓
+translated speech switches to cloned voice
+
+While no clone exists, use an acceptable temporary/fallback voice or the realtime provider's normal audio output.
+
+Once the clone is ready, use the cloned voice.
+
+The UI may discreetly show:
+
+Learning your voice…
+
+but do not turn this into a complicated setup process.
+
+Voice consent
+
+Never clone a person's voice without explicit consent.
+
+Before creating a voice clone, show a clear, short consent action.
+
+Example concept:
+
+Use my voice for translated speech
+
+Allow for this session
+
+Persistent storage of a voice profile should require a persistent user/profile and explicit consent.
+
+Guest voice profiles should preferably be session-scoped unless the user chooses to save them later.
+
+Do not expose voice provider API keys.
+
+Do not make voice cloning silently automatic without consent.
+
+Audio output
+
+Normal output:
+
+translated text
++
+translated voice
+
+Support normal phone speaker output.
+
+Also support standard browser/Bluetooth audio routing when the OS/browser provides it.
+
+Do not require AirPods or proprietary headphones.
+
+A major target use case is:
+
+one earbud
++
+one free ear
+
+The user hears:
+
+real person's voice acoustically
++
+translation in the earbud
+
+Do not implement advanced audio routing until the basic conversation works.
+
+Optional self-monitoring
+
+Later, users may optionally hear their own translated sentence.
+
+This must be OFF by default.
+
+Never play a delayed version of a person's own voice while they are actively speaking because delayed auditory feedback can be disruptive.
+
+If implemented, use an option such as:
+
+Hear my translation:
+Off
+After sentence
+
+This is not MVP-critical.
+
+Session creation flow
+
+Preferred creator flow:
+
+/
+↓
+Start
+↓
+choose "They speak Thai" if needed
+↓
+create session
+↓
+QR code + share link
+
+Join URL:
+
+/join/[code]
+
+The other user opens the URL.
+
+No installation required.
+
+No account required.
+
+Join directly.
+
+QR code
+
+Generate a QR code for:
+
+https://<domain>/join/<code>
+
+The QR should be visually prominent.
+
+Also provide:
+
+Copy link
+Share
+
+Use the Web Share API when available.
+
+Gracefully fall back to copy-to-clipboard.
+
+PWA
+
+The application should ultimately be installable to the home screen.
+
+However:
+
+PWA installation != onboarding requirement
+
+Never show an install wall.
+
+Only suggest installation after the user has already experienced the product.
+
+Provide:
+
+manifest
+icons
+standalone display support
+mobile metadata
+
+Do not spend excessive MVP time on offline functionality because realtime translation inherently requires network connectivity.
+
+Database
+
+Use Supabase/PostgreSQL.
+
+Keep the schema small.
+
+Likely initial entities:
+
+sessions
+session_participants
+voice_profiles
+conversation_turns
+contacts (later)
+profiles (later)
+
+Avoid premature normalization.
+
+Suggested initial database shape
+
+Example concept only.
+
+Adapt when implementation requires it.
+
+sessions
+- id
+- join_code
+- status
+- created_at
+- expires_at
+
+session_participants
+- id
+- session_id
+- user_id
+- language
+- detected_language
+- voice_profile_id
+- joined_at
+
+voice_profiles
+- id
+- user_id nullable
+- provider
+- provider_voice_id
+- status
+- created_at
+
+conversation_turns
+- id
+- session_id
+- participant_id
+- original_text
+- translated_text
+- source_language
+- target_language
+- created_at
+
+Conversation turns may initially be ephemeral if storing them is not necessary.
+
+Privacy should be preferred over unnecessary persistence.
+
+Privacy
+
+Do not persist raw microphone audio unless required for voice cloning and explicitly consented to.
+
+Voice-cloning samples should be handled separately from conversation transcripts.
+
+Keep secrets server-side.
+
+Never expose:
+
+OPENAI_API_KEY
+ELEVENLABS_API_KEY
+SUPABASE_SERVICE_ROLE_KEY
+
+to the client.
+
+Use temporary/ephemeral credentials when provider APIs support them.
+
+Environment variables
+
+Prepare .env.example.
+
+Expected shape:
+
+OPENAI_API_KEY=
+OPENAI_REALTIME_TRANSLATION_MODEL=
+
+ELEVENLABS_API_KEY=
+ELEVENLABS_TTS_MODEL=
+
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+Do not commit real secrets.
+
+API routes
+
+Use server routes only where necessary.
+
+Possible endpoints:
+
+POST /api/sessions
+POST /api/sessions/[id]/join
+
+POST /api/openai/realtime-token
+
+POST /api/elevenlabs/token
+
+POST /api/voice/clone
+
+Exact provider token endpoint implementation must follow CURRENT official provider documentation.
+
+Do not guess undocumented payloads.
+
+Project structure
+
+Prefer something close to:
+
+src/
+  app/
+    page.tsx
+
+    session/
+      [id]/
+        page.tsx
+
+    join/
+      [code]/
+        page.tsx
+
+    api/
+      sessions/
+      openai/
+      elevenlabs/
+      voice/
+
+  components/
+    conversation/
+    audio/
+    session/
+    ui/
+
+  lib/
+    openai/
+    elevenlabs/
+    supabase/
+    audio/
+    translation/
+    realtime/
+
+  hooks/
+    useMicrophone.ts
+    useConversation.ts
+    useTranslationSession.ts
+    usePeerTransport.ts
+
+  types/
+    conversation.ts
+    realtime.ts
+
+Do not create unnecessary abstraction layers before they are needed.
+
+State machine
+
+Treat conversation state explicitly.
+
+Example:
+
+idle
+↓
+creating_session
+↓
+waiting_for_peer
+↓
+connecting
+↓
+ready
+↓
+listening
+↓
+translating
+↓
+playing
+
+Also handle:
+
+microphone_denied
+provider_error
+peer_disconnected
+network_error
+
+Do not allow UI state to become an uncontrolled collection of booleans.
+
+UX error philosophy
+
+Translate technical errors into simple user-facing actions.
+
+Bad:
+
+WebRTC ICE negotiation failure.
+
+Good:
+
+Connection lost.
+
+Reconnect
+
+Bad:
+
+STT confidence below threshold.
+
+Good:
+
+I didn't catch that.
+
+Try again
+Type instead
+
+Keep detailed errors in development logs.
+
+Visual design
+
+Mobile first.
+
+Large touch targets.
+
+Very little chrome.
+
+No dashboard aesthetic.
+
+No complex navigation during a conversation.
+
+The conversation screen should feel closer to a call screen than to Google Translate.
+
+The UI should not look like:
+
+SOURCE LANGUAGE
+TARGET LANGUAGE
+SWAP
+INPUT
+TRANSLATION
+TRANSLATE BUTTON
+SETTINGS
+
+Instead it should feel like:
+
+Ploy
+
+Je rentre demain matin.
+
+🔊
+
+Write something…      🎙
+Important product metric
+
+Design the app to minimize:
+
+screen interactions per conversation
+
+The ideal long-term conversation requires almost no touching of the phone.
+
+Other useful metrics:
+
+time to first translation
+translation latency
+join completion rate
+conversation duration
+speech recognition retry rate
+
+Do not implement a heavy analytics platform during initial development.
+
+MVP implementation order
+Milestone 1
+
+Single browser.
+
+Implement:
+
+microphone
+→ OpenAI realtime translation
+→ translated text
+
+French → Thai.
+
+Prove realtime translation works reliably.
+
+Milestone 2
+
+Add translated audio.
+
+Initially allow provider/default voice output.
+
+Validate:
+
+speech
+→ translated text
+→ translated speech
+
+Measure latency.
+
+Milestone 3
+
+Two browsers.
+
+Implement:
+
+create session
+QR code
+join link
+Supabase realtime
+translated text sent to other participant
+
+A speaks French.
+
+B receives Thai text.
+
+B speaks Thai.
+
+A receives French text.
+
+Milestone 4
+
+ElevenLabs streaming output.
+
+The receiving browser converts incoming translated text to streaming speech.
+
+Optimize end-to-end latency.
+
+Milestone 5
+
+Voice cloning.
+
+Collect explicitly consented clean audio samples.
+
+Create speaker voice profiles.
+
+Use:
+
+A translated speech → A's voice
+B translated speech → B's voice
+Milestone 6
+
+Text input fallback.
+
+Allow either participant to type.
+
+Typed text goes through the same translation pipeline.
+
+The receiver gets:
+
+translated text
++
+translated cloned audio
+Milestone 7
+
+Polish mobile UX.
+
+Test:
+
+Android Chrome
+iPhone Safari
+Bluetooth earbud
+phone speaker
+noisy environment
+Wi-Fi
+4G/5G
+
+Fix microphone permission and audio playback edge cases.
+
+Milestone 8
+
+Optional profiles / contacts.
+
+Only after the anonymous conversation experience is excellent.
+
+Allow users to save:
+
+name
+voice profile
+preferred language
+contacts
+Explicit non-goals for current version
+
+Do NOT implement Jev.
+
+Do NOT implement vector search.
+
+Do NOT implement RAG.
+
+Do NOT implement video.
+
+Do NOT implement remote calls.
+
+Do NOT implement group conversations.
+
+Do NOT implement native iOS/Android apps.
+
+Do NOT implement complex social features.
+
+Do NOT implement an AI chatbot.
+
+Do NOT allow the AI to become a visible participant in the conversation.
+
+The AI is infrastructure.
+
+Quality bar
+
+The core product promise is:
+
+Speak normally.
+Hear the other person naturally.
+Forget the translator exists.
+
+When deciding between adding a feature and reducing friction, reduce friction.
+
+When deciding between a clever abstraction and lower latency, prefer lower latency.
+
+When deciding between exposing AI functionality and hiding it, hide it.
+
+The technology should feel invisible.
+
+Development rules
+
+Use TypeScript strict mode.
+
+Prefer simple, readable code.
+
+Run linting and type checking after meaningful changes.
+
+Do not suppress TypeScript errors with any unless unavoidable and documented.
+
+Do not expose secrets to client bundles.
+
+Do not invent provider APIs.
+
+Check current provider SDKs/documentation before implementing integrations.
+
+Separate provider-specific code from application logic.
+
+Keep the app runnable after each milestone.
+
+Do not start future milestones until the current end-to-end flow works.
+
+When something provider-specific cannot yet be implemented because credentials are unavailable, provide a clean mock adapter so the rest of the app can still run.
+
+First task
+
+Start by creating the minimal working project and Milestone 1.
+
+The first end-to-end goal is:
+
+Open the site on a phone
+→ allow microphone
+→ speak French
+→ see a continuously updated Thai translation
+
+Do not build accounts, contacts, voice cloning or advanced UI before this works.
+
+After Milestone 1 works, proceed incrementally through the milestones above.
