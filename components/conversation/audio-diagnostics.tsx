@@ -4,7 +4,7 @@ import { FINAL_TIER, VOICE_TIERS } from "@/lib/voice/consent";
 import type { Participant } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
-type AudioState = {
+export type AudioState = {
   context: string; stopped: string; failure: string; voice: string;
   range: { frames: number; median: number; range: string | null };
   speech: number;

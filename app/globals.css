@@ -162,3 +162,13 @@ button:disabled { opacity: .5; cursor: wait; }
 .audio-diagnostics dl div { display: flex; justify-content: space-between; gap: 12px; }
 .audio-diagnostics dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
 .floor-state.live { color: var(--symbol-ink); font-weight: 600; }
+
+.settings { width: 100%; max-width: 480px; margin: auto; text-align: center; }
+.settings h1 { font-size: 34px; margin: 0 0 24px; }
+.settings > .primary-button { margin-bottom: 8px; }
+.settings-group { border-top: 1px solid var(--border); padding: 20px 0 4px; text-align: left; }
+.settings-group h2 { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+.settings-group > p { font-size: 12px; line-height: 1.65; color: var(--muted); margin: 6px 0; }
+.settings-group .share-session { padding: 8px 0; }
+.settings-danger button { color: var(--error); }
+@media (max-width: 600px) { .settings h1 { font-size: 30px; } }

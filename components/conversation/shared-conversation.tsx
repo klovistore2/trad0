@@ -1,26 +1,39 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useSharedConversation } from "@/hooks/useSharedConversation";
 import { languageNames } from "@/types/session";
 import { ThemeToggle } from "./theme-toggle";
-import { VoiceConsent } from "./voice-consent";
 import { ShareSession } from "./share-session";
-import { AudioDiagnostics } from "./audio-diagnostics";
+import { SettingsPanel } from "./settings-panel";
 
 export function SharedConversation({ id }: { id: string }) {
-  const router = useRouter();
   const session = useSharedConversation(id);
-  const [closingMessage, setClosingMessage] = useState("");
-  const [showInvite, setShowInvite] = useState(false);
+  const [settings, setSettings] = useState(false);
   const room = session.room;
   const english = room?.me.language === "en";
   return <main className="conversation">
-    <header className="topbar"><Link className="wordmark" href="/">à deux<span className="brand-dot">.</span></Link><div className="topbar-actions"><span className="edition">À DEUX · LIVE</span><ThemeToggle /></div></header>
+    <header className="topbar">
+      <Link className="wordmark" href="/">à deux<span className="brand-dot">.</span></Link>
+      <div className="topbar-actions">
+        <span className="edition">À DEUX · LIVE</span>
+        {room?.peer && <button type="button" className="theme-toggle" onClick={() => setSettings(open => !open)}
+          aria-label={english ? "Settings" : "Paramètres"} title={english ? "Settings" : "Paramètres"} aria-pressed={settings}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.2" />
+            <path d="M19.9 14.2a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-1 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-1H3.9a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 1-1.46V3.9a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 1 1.46 1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.46 1h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46 1Z" />
+          </svg>
+        </button>}
+        <ThemeToggle />
+      </div>
+    </header>
     <section className="conversation-body">
       {!room ? <><h1>Connexion…</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Retour / Back</Link></>
-      : !room.peer || showInvite ? <><ShareSession id={id} />{room.peer && <button className="demo-button" onClick={() => setShowInvite(false)}>Retour à la conversation</button>}</>
+      : !room.peer ? <ShareSession id={id} />
+      : settings ? <SettingsPanel id={id} english={english} me={room.me} peer={room.peer} speechSeconds={session.speechSeconds}
+          onConsent={() => void session.giveConsent()} onRefresh={session.refresh} readAudioState={session.readAudioState}
+          onTestTone={() => void session.playTestTone()} voiceStatus={session.voiceStatus} received={session.received}
+          onClose={() => setSettings(false)} />
       : <>
         <div className="language-tag"><span className="language-dot" />{languageNames[room.me.language]} ↔ {languageNames[room.peer.language]}</div>
         <div className="translation-area">
@@ -53,17 +66,9 @@ export function SharedConversation({ id }: { id: string }) {
           {session.enabled && <button className="demo-button sound-toggle" aria-pressed={session.soundOn} onClick={() => session.toggleSound()}>
             {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}
           </button>}
-          <VoiceConsent sessionId={id} me={room.me} seconds={session.speechSeconds} english={english} onConsent={() => void session.giveConsent()} onRefresh={session.refresh} />
-          <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()} voiceStatus={session.voiceStatus} received={session.received} english={english} me={room.me} peer={room.peer} />
-          <button className="demo-button" onClick={() => { session.stop(); setShowInvite(true); }}>{english ? "Invitation link" : "Lien d’invitation"}</button>
         </div>
       </>}
     </section>
-    {room && <div className="end-session"><button className="demo-button" onClick={async () => {
-      session.stop();
-      try { const response = await fetch(`/api/sessions/${id}`, { method: "DELETE" }); const data = await response.json(); if (!response.ok) throw new Error(data.error); router.push("/"); }
-      catch (error) { setClosingMessage(error instanceof Error ? error.message : "Réessayez."); }
-    }}>{english ? "End session & delete voices" : "Terminer la session et supprimer les voix"}</button>{closingMessage && <p role="alert">{closingMessage}</p>}</div>}
     <footer><span className="footer-mark">↔</span><p>{english ? "Just you two." : "Juste vous deux."}<br /><span>{english ? "No account. No installation." : "Sans compte. Sans installation."}</span></p><span className="privacy-note">{english ? "Session expires after 1 hour" : "Session limitée à 1 heure"}</span></footer>
   </main>;
 }

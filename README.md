@@ -39,6 +39,8 @@ La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter ente
 
 Chaque appareil affiche principalement ce qu’il reçoit. Les paroles émises sont accessibles sous « Mes mots traduits ».
 
+L’écran de conversation ne porte que la conversation : l’état du tour de parole, un seul bouton, et la bascule du son. Tout le reste — voix, lien d’invitation, diagnostic, fin de session — est dans les **paramètres**, derrière la roue dentée en haut de l’écran.
+
 ### Tour de parole
 
 Deux téléphones dans la même pièce entendent tous les deux la personne qui parle. Un seul micro est donc ouvert à la fois : celui du participant qui **a la parole**.
@@ -61,11 +63,11 @@ Avant qu'un clone existe, le destinataire entend une voix standard **choisie sel
 
 C'est une mesure de **hauteur de voix**, pas une affirmation sur la personne : des femmes ont une voix grave, des hommes une voix aiguë. Tant que rien n'est détecté, la voix reste neutre — le système ne devine pas. Côté ElevenLabs, la correspondance se fait sur le `labels.gender` de la voix elle-même, qui décrit la voix et non l'auditeur. `ELEVENLABS_VOICE_LOW` et `ELEVENLABS_VOICE_HIGH` permettent d'imposer un choix.
 
-**Diagnostic voix et son**, dans l'écran de conversation, est un panneau de développement qui montre : la voix réellement utilisée pour la dernière phrase entendue (clone ou voix standard et son registre), l'état de clonage des deux participants, le registre détecté avec sa médiane en hertz, l'état du contexte audio, le nombre de phrases reçues et la dernière panne audio. Le bouton **Jouer un bip de test** produit un son local, sans réseau : il sépare une coupure système d'une panne de la chaîne de lecture.
+**Diagnostic voix et son**, dans les paramètres, est un panneau de développement qui montre : la voix réellement utilisée pour la dernière phrase entendue (clone ou voix standard et son registre), l'état de clonage des deux participants, le registre détecté avec sa médiane en hertz, l'état du contexte audio, le nombre de phrases reçues et la dernière panne audio. Le bouton **Jouer un bip de test** produit un son local, sans réseau : il sépare une coupure système d'une panne de la chaîne de lecture.
 
 ## Cloner sa voix
 
-Le clonage est **progressif** et démarre après un seul accord. Dans une conversation partagée, ouvrir **Utiliser ma voix** et accepter. Rien n'est enregistré avant cet appui.
+Le clonage est **progressif** et démarre après un seul accord. Ouvrir les **paramètres** (roue dentée, en haut), puis **Utiliser ma voix**, et accepter. Rien n'est enregistré avant cet appui.
 
 Ensuite l'application capte vos tours de parole pendant que vous parlez, et seulement eux : l'enregistreur est mis en pause par le même signal que le micro, donc ni les silences ni la voix de l'autre personne n'entrent dans l'échantillon. La durée retenue est la parole effective, pas le temps écoulé.
 
@@ -73,7 +75,7 @@ Deux paliers : un premier clone vers **30 secondes** de parole, une version affi
 
 L'échantillon vit uniquement dans la mémoire du navigateur, n'est jamais écrit dans Neon ni sur le disque de l'application, et part directement chez ElevenLabs au moment du clonage. Si le flux micro est recréé — retour d'arrière-plan, reprise — le conteneur en cours ne peut pas être prolongé : il est conservé entier comme segment et le clonage envoie plusieurs fichiers de la même voix.
 
-**Ne plus utiliser ma voix** retire le consentement et supprime le clone. **Terminer la session et supprimer les voix** ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
+**Ne plus utiliser ma voix** retire le consentement et supprime le clone. **Terminer la session et supprimer les voix**, au bas des paramètres, ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
 
 Si ElevenLabs exige une vérification, la voix standard reste utilisée. L'accès au clonage dépend des droits et de l'offre ElevenLabs du compte.
 

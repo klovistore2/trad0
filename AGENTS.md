@@ -26,7 +26,9 @@ real failures on real devices.
 - **Turn taking**, not in the specification below. Exactly one microphone open at a time.
 - **Vocal range detection**, not in the specification below. Picks a fitting standard voice
   before any clone exists.
-- **Development diagnostics panel** in the conversation screen.
+- **Settings panel** behind a gear in the top bar. The conversation screen carries only the floor
+  state, one button and the sound toggle; voice, invite, diagnostics and session closing live in
+  settings. The browser flow asserts that none of them leak back onto the conversation screen.
 
 ### Deliberate divergences from the specification below
 
