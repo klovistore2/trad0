@@ -2,12 +2,14 @@
 // Start a test server with NEXT_PUBLIC_APP_URL=http://localhost:3100 first.
 import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+import { encode } from 'next-auth/jwt';
 import { createRequire } from 'node:module';
 import { neon } from '@neondatabase/serverless';
 createRequire(import.meta.url)('@next/env').loadEnvConfig(process.cwd());
 const baseURL = process.env.TEST_BASE_URL || 'http://localhost:3100';
 const browser = await chromium.launch({ headless:true, args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
-const contexts=[];let sessionId;
+const contexts=[];let sessionId;let accountEmail;
 const errors=[];
 // A real, short WAV so the audio element can actually decode, play and fire 'ended'.
 function wavClip(seconds=1.5, frequency=440, rate=8000) {
@@ -20,8 +22,15 @@ function wavClip(seconds=1.5, frequency=440, rate=8000) {
  return buffer;
 }
 const clip=wavClip();
-async function client() {
+// Google sign-in cannot be automated, so a signed-in visitor is seeded with the very session
+// cookie Auth.js would have issued. Nothing in the application exists just for this test.
+async function signedInContext(user) {
+ const token=await encode({token:{sub:user.id,email:user.email},secret:process.env.AUTH_SECRET,salt:'authjs.session-token'});
+ return [{name:'authjs.session-token',value:token,url:baseURL}];
+}
+async function client(account) {
  const context=await browser.newContext({baseURL,viewport:{width:390,height:844},permissions:['microphone']});contexts.push(context);
+ if(account) await context.addCookies(await signedInContext(account));
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(() => {
   class TestPeer {
@@ -41,9 +50,19 @@ async function client() {
  return page;
 }
 try {
- const a=await client();await a.goto('/');
- // The home page opens no microphone: a conversation needs two devices, so inviting is the action.
- await expect(a.getByRole('button',{name:'Commencer à parler'})).toHaveCount(0);
+ // Creating a conversation needs an account, so a saved voice can outlive the session.
+ accountEmail=`browser-test-${Date.now()}@example.test`;
+ const accountId=randomUUID();
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${accountId},${accountEmail},'google')`;
+ const anonymous=await client();await anonymous.goto('/');
+ // The home page opens no microphone, and without an account it offers signing in, not creating.
+ await expect(anonymous.getByRole('button',{name:'Commencer à parler'})).toHaveCount(0);
+ await anonymous.getByRole('link',{name:/Se connecter/}).click();
+ await anonymous.getByRole('button',{name:'Continuer avec Google'}).waitFor();
+ await expect(anonymous.getByRole('button',{name:/mot de passe|adresse e-mail/i})).toHaveCount(0);
+
+ const a=await client({id:accountId,email:accountEmail});await a.goto('/');
+ await a.getByText(accountEmail).waitFor();
  await a.getByRole('button',{name:/Parler à deux/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
  // The voice choice is asked once, on arrival. Declining keeps a standard voice.
@@ -137,8 +156,12 @@ try {
  }
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, settings panel, voice consent and withdrawal, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
- if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;
+ if(process.env.DATABASE_URL) {
+  const sql=neon(process.env.DATABASE_URL);
+  if(sessionId) await sql`DELETE FROM adu_sessions WHERE id=${sessionId}`;
+  if(accountEmail) await sql`DELETE FROM adu_users WHERE email=${accountEmail}`;
+ }
 }

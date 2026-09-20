@@ -17,6 +17,8 @@ Variables serveur :
 - `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
 - `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus les colonnes `adu_sessions.floor_slot` (tour de parole), `adu_participants.voice_range` (registre détecté) et `adu_participants.voice_tier` (palier de clonage). `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
+- `AUTH_SECRET` : clé de signature des sessions Auth.js, `openssl rand -base64 32`.
+- `AUTH_GOOGLE_ID` et `AUTH_GOOGLE_SECRET` : identifiants OAuth Google, seule méthode de connexion.
 - `CRON_SECRET` : secret aléatoire pour protéger la purge des voix. Obligatoire pour autoriser le clonage.
 - `NEXT_PUBLIC_APP_URL` : origine exacte du site, par exemple `http://localhost:3000` en local.
 
@@ -28,9 +30,32 @@ L'accueil n'ouvre aucun micro : une conversation demande deux appareils, et parl
 
 **Essayer une démonstration** joue un exemple préécrit, sans microphone ni appel OpenAI. **Écouter en anglais** lit ensuite ce texte avec ElevenLabs : c'est le seul moyen de vérifier la synthèse vocale sans monter une session à deux.
 
+## Compte
+
+Créer une conversation demande un compte ; **rejoindre n'en demande jamais**. La personne que vous invitez scanne le QR et parle, sans rien créer.
+
+Le compte sert à une seule chose : **conserver votre clone de voix d'une conversation à l'autre**. Sans lui, chaque session recréait un clone et consommait des crédits ElevenLabs pour rien. Le clone enregistré vit dans `adu_voice_profiles`, hors des tables de session, et n'est donc jamais emporté par la purge — seul **Ne plus utiliser ma voix** le supprime.
+
+L'authentification est **Auth.js avec Google, et uniquement Google** : un seul appui, rien à retenir, rien à réinitialiser — ce qui compte sur un téléphone. Il n'existe aucun mot de passe dans l'application, donc aucune adresse à vérifier et aucune procédure de récupération à écrire.
+
+Une identité Google est rattachée à une ligne de `adu_users` **par son adresse**, dès la première connexion. C'est cet identifiant qui porte la voix enregistrée, il doit donc rester stable.
+
+`AUTH_SECRET`, `AUTH_GOOGLE_ID` et `AUTH_GOOGLE_SECRET` sont obligatoires. Sans les deux derniers, la page de connexion le dit au lieu d'afficher un écran vide.
+
+### Configurer Google
+
+Dans Google Cloud Console, **API et services → Identifiants → Créer un ID client OAuth → Application Web**. Ajouter une URI de redirection autorisée **par origine** :
+
+```
+http://localhost:3000/api/auth/callback/google
+https://votre-domaine/api/auth/callback/google
+```
+
+Google n'accepte pas de joker : une URL de preview Vercel, qui change à chaque déploiement, ne peut pas être autorisée. Utiliser un domaine stable. Si l'écran de consentement est en mode test, s'ajouter comme utilisateur autorisé.
+
 ## À deux
 
-1. Cliquer **Parler à deux · inviter quelqu’un**.
+1. Se connecter, puis cliquer **Parler à deux · inviter quelqu’un**.
 2. Scanner le QR ou ouvrir le lien sur le second appareil.
 3. Chaque participant touche **Démarrer la conversation** / **Start the conversation**. Le micro et le son s’activent dans le même geste ; le navigateur n’a pas de permission séparée pour la lecture audio.
 
@@ -130,4 +155,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 29 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 31 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

@@ -26,6 +26,9 @@ real failures on real devices.
 - **Turn taking**, not in the specification below. Exactly one microphone open at a time.
 - **Vocal range detection**, not in the specification below. Picks a fitting standard voice
   before any clone exists.
+- **Accounts (Auth.js, Google only, users in Neon)** for the person creating a conversation, so
+  their voice clone is reused instead of rebuilt every session. `adu_voice_profiles` holds one
+  saved voice per account, outside the session tables the purge wipes.
 - **Settings panel** behind a gear in the top bar. The conversation screen carries only the floor
   state, one button and the sound toggle; voice, invite, diagnostics and session closing live in
   settings. The browser flow asserts that none of them leak back onto the conversation screen.
@@ -39,6 +42,7 @@ real failures on real devices.
 | ElevenLabs single-use client token, browser connects directly | Server relay: `POST /api/elevenlabs/speak` streams `audio/mpeg` through, played in an `<audio>` element | **The browser WebSocket to `api.elevenlabs.io` was refused on a real user's machine while the identical request succeeded from Node on that same machine** — the proxy / VPN / extension class of failure, invisible server-side. The relay also escapes an iPhone's silent switch, which mutes Web Audio but not media playback. Costs roughly 700 ms of added latency. |
 | "Do NOT design the core audio pipeline around a long-running Vercel serverless request" | The relay above is a serverless request | A sentence-length relay lasts about 1.5 s, `maxDuration` 30. Accepted knowingly: playback that never starts is worse than playback that is slower. |
 | Both participants speak freely | Explicit floor; nobody holds it by default | Two phones in one room both hear whoever speaks. Worse, a microphone open on the wrong side captures the person speaking at the *other* device and returns their own words to them as if the other person had said them. A microphone is now only ever opened by a deliberate tap. |
+| "No mandatory account. A first conversation must work as guest ↔ guest" | The **creator** signs in; the invited person never does | A guest clone is thrown away with its session, so every conversation rebuilt one and burned provider credits and voice slots. The scan-and-talk promise is preserved for the person being invited, which is the half that matters for a stranger. The cost is real and deliberate: the creator no longer reaches a first conversation without an account. |
 | Detect the speaker's language automatically | Creator is hardcoded `fr`, joiner `en` | Deferred by the product owner until the ergonomics are settled. `th` exists in `Language` but is unreachable from the UI. |
 
 ### Not built
@@ -59,8 +63,11 @@ real failures on real devices.
   memory to ElevenLabs. Vocal range detection transmits only the word `low` or `high`.
 - `adu_events` holds text only, erased at session end or by the purge.
 - `CRON_SECRET` must be set before cloning is allowed, because expired clones need the purge.
+- A voice saved to an account is **never** deleted by a session ending or by the purge. Session
+  clones are labelled `a-deux-session` and swept by session id; account clones are labelled
+  `a-deux-user` and only the account can remove them. Any new deletion path must keep that split.
 - Cloning consent is asked **once**, in a dialog on arrival, and the answer is remembered in
-  `localStorage` for every later conversation. The behaviour is identical in development and
+  `localStorage` for a guest and on the account profile for a signed-in creator. The behaviour is identical in development and
   production: an environment-dependent consent rule was tried and removed, because a feature that
   behaves differently in dev than in prod is the kind of thing that hides bugs until release.
   Settings and the dialog write the same memory, and withdrawing records a refusal rather than
@@ -82,7 +89,15 @@ real failures on real devices.
    sent as several files; and never delete the clone in service before the replacement has been
    stored. Transcript length as a plausibility filter is designed but not wired: empty or noisy
    segments are still counted.
-3. **Latency.** Roughly 2.5 s after a sentence ends, plus the 700 ms the relay added. Levers, by
+3. **Accounts — done.** Creator only, **Google and nothing else**. There is no password anywhere,
+   so there is no address to verify and no reset flow to write. A Google identity is mapped onto a
+   row of `adu_users` by e-mail on first sign in, because the saved voice hangs off that id — keep
+   that mapping stable or saved voices are orphaned. A password fallback was added and removed on
+   request: do not reintroduce one to make testing easier. The browser flow seeds the exact session
+   cookie Auth.js issues (`authjs.session-token`, encoded with `AUTH_SECRET`), so nothing exists in
+   the application purely for tests.
+
+4. **Latency.** Roughly 2.5 s after a sentence ends, plus the 700 ms the relay added. Levers, by
    value: stream text to the speech route instead of waiting for a committed sentence; pre-open the
    connection; replace 500 ms polling with push; lower the commit fallback from 1000 ms.
 
@@ -842,6 +857,7 @@ POST   /api/sessions/[id]/events          publish a subtitle or a committed sent
 POST   /api/sessions/[id]/floor           take the floor
 DELETE /api/sessions/[id]/floor           release it, leaving both microphones closed
 POST   /api/sessions/[id]/voice-range     record the detected vocal range, "low" or "high"
+GET    /api/auth/[...nextauth]            Auth.js handlers (sign in, sign out, session)
 POST   /api/openai/realtime-token         ephemeral OpenAI credential
 POST   /api/elevenlabs/speak              relay speech as audio/mpeg (replaces the token route)
 POST   /api/voice/consent                 record consent once per session, gates every tier
@@ -1124,7 +1140,7 @@ Fix microphone permission and audio playback edge cases.
 
 Milestone 8
 
-**Status: not started.**
+**Status: partial** — accounts and saved voices exist for the creator. Contacts and profiles do not.
 
 Optional profiles / contacts.
 

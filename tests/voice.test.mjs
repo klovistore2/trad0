@@ -196,3 +196,64 @@ test('a later tier replaces the clone in service and only then deletes the previ
     if(oldSecret===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=oldSecret;
   }
 });
+
+test('a signed in creator keeps one clone: it is labelled by account and saved outside the session', async () => {
+  const oldUrl=process.env.NEXT_PUBLIC_APP_URL, oldSecret=process.env.CRON_SECRET, oldFetch=globalThis.fetch;
+  process.env.NEXT_PUBLIC_APP_URL=origin; process.env.CRON_SECRET='test-cleanup-secret';
+  let labels, name, saved, deleted;
+  const load=createLoader({
+    '@/lib/session/auth':{member:async()=>({slot:0,user_id:'user-1'})},
+    '@/lib/neon/db':{db:()=>async(strings)=>{
+      const sql=strings.join('?');
+      if(sql.includes("SET voice_status='learning'"))return [{previousVoiceId:'older-clone'}];
+      if(sql.includes('SET voice_id='))return [{slot:0}];
+      return [];
+    }},
+    '@/lib/elevenlabs/server':{elevenHeaders:()=>({'xi-api-key':'k'}),deleteVoice:async id=>{deleted=id;}},
+    '@/lib/voice/profile':{saveProfile:async(...args)=>{saved=args;}},
+  });
+  globalThis.fetch=async(url,options)=>{
+    labels=JSON.parse(options.body.get('labels')); name=options.body.get('name');
+    return Response.json({voice_id:'account-clone',requires_verification:false});
+  };
+  const form=new FormData();
+  form.set('sessionId','synthetic-session');form.set('consent','session-voice-v1');
+  form.set('seconds','45');form.set('tier','1');
+  form.set('sample',new File([new Uint8Array(10001)],'voice.webm',{type:'audio/webm'}));
+  try {
+    const response=await load('app/api/voice/clone/route.ts').POST(new Request(`${origin}/api/voice/clone`,{method:'POST',headers:{origin},body:form}));
+    assert.equal(response.status,200);
+    assert.equal(labels.app,'a-deux-user','a session label would let the purge sweep it away');
+    assert.equal(labels.user,'user-1');
+    assert.equal(labels.session,undefined);
+    assert.match(name,/^adu-user-/);
+    assert.deepEqual(saved,['user-1','account-clone','ready',1],'the voice must be stored on the account');
+    assert.equal(deleted,'older-clone','the replaced clone is still cleaned up');
+  } finally {
+    globalThis.fetch=oldFetch;
+    if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;
+    if(oldSecret===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=oldSecret;
+  }
+});
+
+test('the purge leaves account voices alone and only sweeps session scoped ones', async () => {
+  const queries=[];let deleted=[];
+  const load=createLoader({
+    '@/lib/neon/db':{db:()=>{
+      const run=async(strings)=>{const sql=strings.join('?');queries.push(sql);return sql.includes('SELECT id FROM adu_sessions')?[{id:'dead-session'}]:[];};
+      return run;
+    }},
+    '@/lib/elevenlabs/server':{elevenHeaders:()=>({'xi-api-key':'k'}),deleteVoice:async id=>{deleted.push(id);}},
+  });
+  const oldFetch=globalThis.fetch;
+  globalThis.fetch=async()=>Response.json({voices:[
+    {voice_id:'orphan',labels:{app:'a-deux-session',session:'dead-session'}},
+    {voice_id:'account-voice',labels:{app:'a-deux-user',user:'user-1'}},
+  ]});
+  try {
+    await load('lib/session/cleanup.ts').cleanupSessions();
+    const participantQuery=queries.find(sql=>sql.includes('SELECT voice_id FROM adu_participants'));
+    assert.match(participantQuery,/user_id IS NULL/,'saved voices must be excluded from the purge');
+    assert.deepEqual(deleted,['orphan'],'only the session scoped orphan is removed');
+  } finally { globalThis.fetch=oldFetch; }
+});

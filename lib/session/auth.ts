@@ -16,11 +16,11 @@ export async function guestHash(create = false) {
   }
   return createHash("sha256").update(token).digest("hex");
 }
-export type Membership = { slot: number; language: Language; voice_id: string | null; voice_status: string; expires_at: string; floor_slot: number | null };
+export type Membership = { slot: number; language: Language; voice_id: string | null; voice_status: string; expires_at: string; floor_slot: number | null; user_id: string | null };
 export async function member(id: string, allowClosed = false): Promise<Membership> {
   if (!validId(id)) throw new HttpError(404, "Cette conversation n’existe pas.");
   const hash = await guestHash();
-  const rows = await db()`SELECT p.slot, p.language, p.voice_id, p.voice_status, s.expires_at, s.floor_slot
+  const rows = await db()`SELECT p.slot, p.language, p.voice_id, p.voice_status, p.user_id, s.expires_at, s.floor_slot
     FROM adu_participants p JOIN adu_sessions s ON s.id=p.session_id
     WHERE s.id=${id} AND p.guest_hash=${hash} AND (${allowClosed} OR (s.closed=false AND s.expires_at>now()))`;
   if (!rows[0]) throw new HttpError(403, "Cette conversation est terminée ou inaccessible.");

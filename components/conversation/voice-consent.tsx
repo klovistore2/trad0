@@ -16,6 +16,22 @@ export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRef
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // reset keeps the agreement and starts the tiers over; otherwise the agreement is withdrawn.
+  async function act(reset: boolean) {
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/voice", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, reset }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      // Remember the refusal: forgetting it would re-apply consent, or reopen the dialog.
+      if (!reset) rememberVoiceDecision("declined");
+      onRefresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
+    finally { setBusy(false); }
+  }
   const next = VOICE_TIERS.find(step => step.tier > me.voiceTier);
   const active = me.voiceStatus === "ready" || me.voiceStatus === "verification_required";
   const summary = active
@@ -43,18 +59,12 @@ export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRef
               ? (english ? `Speech captured: ${seconds}s of ${next.seconds}s before the next version of your voice.` : `Parole captée : ${seconds} s sur ${next.seconds} s avant la prochaine version de votre voix.`)
               : (english ? "Your voice is final; no more audio is kept." : "Votre voix est définitive ; plus aucun audio n’est conservé.")}</p>
           <p>{english ? "Only your own turns are captured, never the other person." : "Seuls vos propres tours de parole sont captés, jamais ceux de l’autre personne."}</p>
-          <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={async () => {
-            setBusy(true); setMessage("");
-            try {
-              const response = await fetch("/api/voice", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) });
-              const data = await response.json();
-              if (!response.ok) throw new Error(data.error);
-              // Remember the refusal: forgetting it would re-apply consent, or reopen the dialog.
-              rememberVoiceDecision("declined");
-              onRefresh();
-            } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
-            finally { setBusy(false); }
-          }}>{english ? "Stop using my voice" : "Ne plus utiliser ma voix"}</button>
+          <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(false)}>
+            {english ? "Stop using my voice" : "Ne plus utiliser ma voix"}
+          </button>
+          {me.voiceTier > 0 && <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(true)}>
+            {english ? "Rebuild my voice from scratch" : "Recréer ma voix depuis zéro"}
+          </button>}
         </>}
     {message && <p role="alert">{message}</p>}
   </details>;

@@ -6,10 +6,11 @@ import { useTranslationSession } from "@/hooks/useTranslationSession";
 import { StartSharedSession } from "./start-shared-session";
 import { TranslationAudio } from "./translation-audio";
 import { ThemeToggle } from "./theme-toggle";
+import { AccountStatus } from "@/components/account/account-status";
 
 // The home page never opens a microphone: a conversation needs two devices, and the only
 // thing to try alone is the scripted demonstration.
-export function Conversation() {
+export function Conversation({ email }: { email: string | null }) {
   const session = useTranslationSession();
   const transcript = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -47,12 +48,13 @@ export function Conversation() {
         {session.active
           ? <button className="primary-button stop-button" onClick={() => session.stop()}>Arrêter la démonstration</button>
           : <>
-              <StartSharedSession />
+              <StartSharedSession signedIn={!!email} />
               <button className="demo-button" onClick={() => void session.start(true)}>
                 {session.translation ? "Rejouer la démonstration" : "Essayer une démonstration"} <span aria-hidden="true">↗</span>
               </button>
             </>}
         {session.active && <p className="quiet-note">Exemple préécrit, sans micro ni envoi audio.</p>}
+        {!session.active && email && <AccountStatus email={email} />}
       </div>
     </section>
 

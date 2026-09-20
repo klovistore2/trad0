@@ -178,3 +178,14 @@ button:disabled { opacity: .5; cursor: wait; }
 .modal h2 { font-size: 24px; margin: 0 0 16px; }
 .modal p { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 0 0 14px; text-align: left; }
 .modal .primary-button { margin-top: 6px; }
+
+.account { width: min(100%, 420px); margin: auto; text-align: center; }
+.account-form { display: flex; flex-direction: column; gap: 4px; text-align: left; margin-top: 26px; }
+.account-form label { font-size: 10px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--muted); margin-top: 12px; }
+.account-form input { width: 100%; min-height: 48px; }
+.account-hint { font-size: 11px; color: var(--muted); margin: 6px 0 2px; min-height: 14px; }
+.account-form .primary-button { margin-top: 10px; }
+.account-status { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); margin: 16px 0 0; }
+.account-status button { margin: 0; min-height: 36px; }
+.account-methods { display: flex; flex-direction: column; margin-top: 26px; }
+.account-methods .primary-button { gap: 10px; }

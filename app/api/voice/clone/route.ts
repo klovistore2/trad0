@@ -3,6 +3,7 @@ import { member } from "@/lib/session/auth";
 import { checkOrigin, failure, HttpError, json } from "@/lib/server/http";
 import { deleteVoice, elevenHeaders } from "@/lib/elevenlabs/server";
 import { FINAL_TIER, VOICE_CONSENT, validSamples } from "@/lib/voice/consent";
+import { saveProfile } from "@/lib/voice/profile";
 
 export const maxDuration = 60;
 export async function POST(request: Request) {
@@ -43,9 +44,12 @@ export async function POST(request: Request) {
     const previousVoiceId = rows[0].previousVoiceId as string | null;
     locked = true;
     const payload = new FormData();
-    payload.set("name", `adu-${id}-${me.slot}`);
-    payload.set("description", "Temporary guest voice. Delete after session expiry.");
-    payload.set("labels", JSON.stringify({ app: "a-deux-session", session: id, slot: String(me.slot) }));
+    // A saved voice is labelled by account, so the session purge's orphan sweep never matches it.
+    payload.set("name", me.user_id ? `adu-user-${me.user_id}` : `adu-${id}-${me.slot}`);
+    payload.set("description", me.user_id ? "Saved account voice. Deleted when the account asks." : "Temporary guest voice. Delete after session expiry.");
+    payload.set("labels", JSON.stringify(me.user_id
+      ? { app: "a-deux-user", user: me.user_id }
+      : { app: "a-deux-session", session: id, slot: String(me.slot) }));
     for (const sample of samples) payload.append("files", sample, sample.name);
     const response = await fetch("https://api.elevenlabs.io/v1/voices/add", { method: "POST", headers: elevenHeaders(), body: payload, signal: AbortSignal.timeout(45_000) });
     const data = await response.json();
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
       WHERE session_id=${id} AND slot=${me.slot} AND EXISTS(SELECT 1 FROM adu_sessions WHERE id=${id} AND closed=false AND expires_at>now()) RETURNING slot`;
     if (!saved[0]) { await deleteVoice(data.voice_id); throw new HttpError(409, "La conversation s’est terminée pendant la création."); }
     // Only now is the previous clone unreferenced: never delete before the swap has committed.
+    if (me.user_id) await saveProfile(me.user_id, data.voice_id, status, tier);
     if (previousVoiceId && previousVoiceId !== data.voice_id) await deleteVoice(previousVoiceId).catch(() => {});
     return json({ status, tier });
   } catch (error) {

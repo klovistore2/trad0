@@ -3,13 +3,19 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/neon/db";
 import { guestHash, member, validId } from "./auth";
 import { HttpError } from "@/lib/server/http";
+import { saveProfileRange } from "@/lib/voice/profile";
 import type { Participant, SharedSession } from "@/types/session";
 
-export async function createSession() {
+// Only the creator has an account: their slot carries it so a saved voice can be reused.
+export async function createSession(userId: string) {
   const sql = db(); const hash = await guestHash(true); const id = randomUUID();
   await sql.transaction([
     sql`INSERT INTO adu_sessions(id) VALUES(${id})`,
-    sql`INSERT INTO adu_participants(session_id,slot,guest_hash,language) VALUES(${id},0,${hash},'fr')`,
+    // A saved voice is carried into the session, so no clone and no credit is spent again.
+    sql`INSERT INTO adu_participants(session_id,slot,guest_hash,language,user_id,voice_id,voice_status,voice_tier,voice_range,consent_at)
+      SELECT ${id},0,${hash},'fr',${userId}, v.provider_voice_id, COALESCE(v.voice_status,'none'),
+        COALESCE(v.voice_tier,0), v.voice_range, v.consent_at
+      FROM (SELECT 1) AS seed LEFT JOIN adu_voice_profiles v ON v.user_id=${userId}`,
   ]);
   return id;
 }
@@ -47,6 +53,7 @@ export async function releaseFloor(id: string) {
 export async function setVoiceRange(id: string, range: "low" | "high") {
   const me = await member(id);
   await db()`UPDATE adu_participants SET voice_range=${range} WHERE session_id=${id} AND slot=${me.slot}`;
+  if (me.user_id) await saveProfileRange(me.user_id, range);
 }
 
 export async function targetLanguageForSession(id: string) {

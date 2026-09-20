@@ -18,7 +18,8 @@ export async function cleanupSessions() {
     for (const voice of data.voices ?? []) {
       if (voice.labels?.app === "a-deux-session" && voice.labels?.session === id && typeof voice.voice_id === "string") await deleteVoice(voice.voice_id);
     }
-    const participants = await sql`SELECT voice_id FROM adu_participants WHERE session_id=${id} AND voice_id IS NOT NULL`;
+    // A voice saved to an account outlives its sessions: only session scoped clones are purged.
+    const participants = await sql`SELECT voice_id FROM adu_participants WHERE session_id=${id} AND voice_id IS NOT NULL AND user_id IS NULL`;
     for (const participant of participants) await deleteVoice(participant.voice_id);
     // Keep a tombstone for 24h so late provider responses can still be swept.
     await sql`UPDATE adu_participants SET voice_id=NULL,voice_status='none',consent_at=NULL WHERE session_id=${id}`;
