@@ -88,6 +88,8 @@ export class OpenAITranslationProvider implements TranslationProvider {
     }
   }
 
+  getStream() { return this.stream; }
+
   setMicrophoneEnabled(enabled: boolean) {
     this.stream?.getAudioTracks().forEach(track => { track.enabled = enabled; });
   }

@@ -27,7 +27,7 @@ export async function joinSession(id: string) {
 export async function sessionState(id: string): Promise<SharedSession> {
   const me = await member(id); const sql = db();
   await sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`;
-  const rows = await sql`SELECT slot, language, voice_status as "voiceStatus", last_seen>now()-interval '15 seconds' as online FROM adu_participants WHERE session_id=${id} ORDER BY slot`;
+  const rows = await sql`SELECT slot, language, voice_status as "voiceStatus", voice_range as "voiceRange", last_seen>now()-interval '15 seconds' as online FROM adu_participants WHERE session_id=${id} ORDER BY slot`;
   return { id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
 }
 
@@ -42,6 +42,11 @@ export async function releaseFloor(id: string) {
   const me = await member(id);
   await db()`UPDATE adu_sessions SET floor_slot=NULL WHERE id=${id} AND floor_slot=${me.slot}`;
   return null;
+}
+
+export async function setVoiceRange(id: string, range: "low" | "high") {
+  const me = await member(id);
+  await db()`UPDATE adu_participants SET voice_range=${range} WHERE session_id=${id} AND slot=${me.slot}`;
 }
 
 export async function targetLanguageForSession(id: string) {

@@ -8,6 +8,92 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 <!-- END:nextjs-agent-rules -->
 
+## Implementation status — read this before the specification below
+
+The specification that follows is the product target and still holds. This section records what
+is actually built and which decisions deliberately diverge from it. **Do not "restore" a spec
+detail listed as a divergence without reading why it was changed** — several were paid for with
+real failures on real devices.
+
+### Built and verified
+
+- **Milestones 1–4.** Microphone → OpenAI Realtime Translation over WebRTC (ephemeral token from
+  `/api/openai/realtime-token`) → translated text → sent to the peer → spoken to the receiver.
+- **Milestone 5, partially.** Manual, explicitly consented, one-shot voice clone. Progressive
+  cloning is designed but not built (see *Remaining*).
+- **Turn taking**, not in the specification below. Exactly one microphone open at a time.
+- **Vocal range detection**, not in the specification below. Picks a fitting standard voice
+  before any clone exists.
+- **Development diagnostics panel** in the conversation screen.
+
+### Deliberate divergences from the specification below
+
+| Specification | Actual | Why |
+| --- | --- | --- |
+| Supabase for database, auth and Realtime | Neon PostgreSQL, anonymous guest identity in an HttpOnly cookie, transport by short polling every 500 ms | Chosen at the first implementation. The `PeerTransport` abstraction is intact, so a push transport can replace the adapter without touching providers. |
+| `src/` directory | Flat `app/`, `components/`, `lib/`, `hooks/`, `types/` | Cosmetic; not worth a migration. |
+| ElevenLabs single-use client token, browser connects directly | Server relay: `POST /api/elevenlabs/speak` streams `audio/mpeg` through, played in an `<audio>` element | **The browser WebSocket to `api.elevenlabs.io` was refused on a real user's machine while the identical request succeeded from Node on that same machine** — the proxy / VPN / extension class of failure, invisible server-side. The relay also escapes an iPhone's silent switch, which mutes Web Audio but not media playback. Costs roughly 700 ms of added latency. |
+| "Do NOT design the core audio pipeline around a long-running Vercel serverless request" | The relay above is a serverless request | A sentence-length relay lasts about 1.5 s, `maxDuration` 30. Accepted knowingly: playback that never starts is worse than playback that is slower. |
+| Both participants speak freely | Explicit floor; nobody holds it by default | Two phones in one room both hear whoever speaks. Worse, a microphone open on the wrong side captures the person speaking at the *other* device and returns their own words to them as if the other person had said them. A microphone is now only ever opened by a deliberate tap. |
+| Detect the speaker's language automatically | Creator is hardcoded `fr`, joiner `en` | Deferred by the product owner until the ergonomics are settled. `th` exists in `Language` but is unreachable from the UI. |
+
+### Not built
+
+- **Milestone 6**, text input fallback.
+- **Progressive cloning** (tiers, automatic re-clone).
+- **Language selection or detection.** French ↔ Thai, the primary target use case, is not reachable.
+- **Manual correction of the detected vocal range.** The specification requires every detected
+  value to be correctable; this one is not yet. Fix this before any non-developer uses the app.
+- **Push transport.** Still 500 ms polling.
+- **Real device testing.** Nothing has run on a physical iPhone or Android, nor on a mobile network.
+  Background audio on a locked iPhone is known not to work: iOS suspends the audio context.
+- `quality` is always `"unknown"`; the translation API exposes no calibrated confidence.
+
+### Invariants — do not break these
+
+- `OPENAI_API_KEY`, `ELEVENLABS_API_KEY` and `DATABASE_URL` never reach the client bundle.
+- **No audio is ever written to disk or to the database.** Clone samples stream through server
+  memory to ElevenLabs. Vocal range detection transmits only the word `low` or `high`.
+- `adu_events` holds text only, erased at session end or by the purge.
+- `CRON_SECRET` must be set before cloning is allowed, because expired clones need the purge.
+- `/api/elevenlabs/speak` resolves the voice **server-side** from the peer's row. A client-supplied
+  voice ID is never accepted.
+- **Playback must not depend on the microphone session.** Someone who only wants to listen hears
+  without starting a microphone. This was a real bug: text arrived, sound did not, silently.
+- **Any single touch anywhere in the page arms playback.** Autoplay rules require one gesture in the
+  document; never require a *specific* button, and never require one per sentence.
+- A dropped status poll must never end a conversation. Only 401 / 403 / 404 are final.
+
+### Remaining work, in agreed order
+
+1. **Ergonomics — done.** One button per state, sound on by default, explicit floor.
+2. **Progressive cloning.** Agreed design: a single `MediaRecorder` for the whole session driven by
+   `pause()` / `resume()` from the same signal as the floor — never concatenate separate recorder
+   outputs, each carries its own container header and the result is silently truncated. Count only
+   active speech; use transcript length purely as a plausibility filter to drop empty segments.
+   Tiers around 30 s, then 2–3 minutes, then never again. Keep the current clone until the next one
+   is created **and** verified, then swap `voice_id`, then delete the old one. Buffer in browser RAM
+   only, freed after the final clone. Blocker to lift: `app/api/voice/clone/route.ts` guards on
+   `voice_id IS NULL`, so a second clone is refused; replace it with a tier or generation column.
+3. **Latency.** Roughly 2.5 s after a sentence ends, plus the 700 ms the relay added. Levers, by
+   value: stream text to the speech route instead of waiting for a committed sentence; pre-open the
+   connection; replace 500 ms polling with push; lower the commit fallback from 1000 ms.
+
+### Verification
+
+```sh
+npm run lint && npm run typecheck
+node --test --test-isolation=none tests/*.test.mjs   # no real provider calls
+npm run build
+NEXT_TEST_BUILD=1 NEXT_PUBLIC_APP_URL=http://localhost:3100 npm run build
+node scripts/browser-test-server.mjs                 # two Chromium profiles, real Neon, faked providers
+```
+
+`npm run test:tts` and `npm run test:sessions` call the real providers and cost a little credit.
+The browser flow is the regression net for everything above: it asserts listener-only playback,
+floor claim and release, playback across a hidden screen, and survival of a dropped poll.
+
+
 Architecture cible
                        SESSION WEB
                   Olivier ↔ personne thaïe
@@ -459,6 +545,12 @@ Never expose the permanent ElevenLabs API key in browser JavaScript.
 
 If the current ElevenLabs API supports temporary/single-use client tokens, obtain them from a secure server route.
 
+**Superseded — read the divergence table at the top before acting on the line above.** Single-use
+tokens plus a browser WebSocket were implemented, then removed: the socket was refused in a real
+user's browser while the same request succeeded from Node on that machine. Speech is relayed by
+`POST /api/elevenlabs/speak` instead. Do not reintroduce a browser connection to `api.elevenlabs.io`
+without a way to prove it survives proxies, VPNs and content blockers.
+
 Voice cloning
 
 Voice cloning is a key differentiator but must not block the initial conversation.
@@ -731,6 +823,28 @@ Exact provider token endpoint implementation must follow CURRENT official provid
 
 Do not guess undocumented payloads.
 
+Routes that actually exist:
+
+```
+POST   /api/sessions                      create a session
+POST   /api/sessions/[id]/join            take the free slot, idempotent per guest
+GET    /api/sessions/[id]                 presence, languages, clone status, floor
+DELETE /api/sessions/[id]                 close the session and delete both clones
+GET    /api/sessions/[id]/events          peer events since a cursor, plus the current floor
+POST   /api/sessions/[id]/events          publish a subtitle or a committed sentence
+POST   /api/sessions/[id]/floor           take the floor
+DELETE /api/sessions/[id]/floor           release it, leaving both microphones closed
+POST   /api/sessions/[id]/voice-range     record the detected vocal range, "low" or "high"
+POST   /api/openai/realtime-token         ephemeral OpenAI credential
+POST   /api/elevenlabs/speak              relay speech as audio/mpeg (replaces the token route)
+POST   /api/voice/clone                   create a consented clone
+DELETE /api/voice                         delete one's own clone
+GET    /api/cleanup                       scheduled purge, guarded by CRON_SECRET
+```
+
+The floor rides on the events poll rather than a channel of its own: `member()` already joins
+`adu_sessions`, so reading it costs no extra query and no extra round trip.
+
 Project structure
 
 Prefer something close to:
@@ -891,6 +1005,8 @@ Do not implement a heavy analytics platform during initial development.
 MVP implementation order
 Milestone 1
 
+**Status: done** — French → English, not Thai; no language picker exists yet.
+
 Single browser.
 
 Implement:
@@ -905,6 +1021,8 @@ Prove realtime translation works reliably.
 
 Milestone 2
 
+**Status: done.**
+
 Add translated audio.
 
 Initially allow provider/default voice output.
@@ -918,6 +1036,8 @@ speech
 Measure latency.
 
 Milestone 3
+
+**Status: done** — Neon polling rather than Supabase Realtime.
 
 Two browsers.
 
@@ -939,6 +1059,8 @@ A receives French text.
 
 Milestone 4
 
+**Status: done** — through the server relay, not a browser WebSocket. See the divergence table.
+
 ElevenLabs streaming output.
 
 The receiving browser converts incoming translated text to streaming speech.
@@ -946,6 +1068,8 @@ The receiving browser converts incoming translated text to streaming speech.
 Optimize end-to-end latency.
 
 Milestone 5
+
+**Status: partial** — manual, consented, one-shot clone. Progressive cloning is next; its design is in the status section.
 
 Voice cloning.
 
@@ -959,6 +1083,8 @@ A translated speech → A's voice
 B translated speech → B's voice
 Milestone 6
 
+**Status: not started.**
+
 Text input fallback.
 
 Allow either participant to type.
@@ -971,6 +1097,8 @@ translated text
 +
 translated cloned audio
 Milestone 7
+
+**Status: partial** — no physical device has ever run this. Background audio on a locked iPhone is known broken.
 
 Polish mobile UX.
 
@@ -987,6 +1115,8 @@ Wi-Fi
 Fix microphone permission and audio playback edge cases.
 
 Milestone 8
+
+**Status: not started.**
 
 Optional profiles / contacts.
 

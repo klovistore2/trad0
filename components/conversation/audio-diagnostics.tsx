@@ -1,16 +1,30 @@
 "use client";
 import { useEffect, useState } from "react";
+import type { Participant } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
-type AudioState = { context: string; stopped: string; failure: string; queued: number; speaking: boolean; running: boolean; sound: boolean };
+type AudioState = {
+  context: string; stopped: string; failure: string; voice: string;
+  range: { frames: number; median: number; range: string | null };
+  queued: number; speaking: boolean; running: boolean; sound: boolean;
+};
 
-// Development aid: tells apart an OS-level mute, a suspended context and a pipeline that never fired.
-export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, english }: {
+const cloneLabels: Record<Participant["voiceStatus"], string> = {
+  none: "aucun clone · voix standard",
+  learning: "clonage en cours…",
+  ready: "clone actif",
+  verification_required: "vérification ElevenLabs requise",
+};
+
+// Development panel: shows where cloning stands and which voice is actually speaking.
+export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, english, me, peer }: {
   read: () => AudioState;
   onTestTone: () => void;
   voiceStatus: VoiceStatus;
   received: number;
   english: boolean;
+  me: Participant;
+  peer: Participant;
 }) {
   const [state, setState] = useState<AudioState | null>(null);
   const [open, setOpen] = useState(false);
@@ -23,21 +37,32 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
   }, [open, read]);
   const yes = english ? "yes" : "oui";
   const no = english ? "no" : "non";
+  const detected = state?.range;
+  const rangeLabel = detected?.range
+    ? `${detected.range === "low" ? "grave" : "aigu"} · ${detected.median} Hz`
+    : detected?.frames
+      ? `analyse… ${detected.frames} trames${detected.median ? ` · ${detected.median} Hz` : ""}`
+      : "en attente de parole";
+  const row = (label: string, value: string | number) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>;
   return <details className="audio-diagnostics" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{english ? "Sound diagnostics" : "Diagnostic du son"}</summary>
+    <summary>{english ? "Voice & sound diagnostics" : "Diagnostic voix et son"}</summary>
     <button className="demo-button" onClick={onTestTone}>{english ? "Play a test beep" : "Jouer un bip de test"}</button>
     <dl>
-      <div><dt>{english ? "Audio context" : "Contexte audio"}</dt><dd>{state?.context ?? "—"}</dd></div>
-      <div><dt>{english ? "Playback" : "Lecture"}</dt><dd>{voiceStatus}</dd></div>
-      <div><dt>{english ? "Sentences received" : "Phrases reçues"}</dt><dd>{received}</dd></div>
-      <div><dt>{english ? "Waiting to play" : "En attente de lecture"}</dt><dd>{state?.queued ?? "—"}</dd></div>
-      <div><dt>{english ? "Session active" : "Session active"}</dt><dd>{state ? (state.running ? yes : no) : "—"}</dd></div>
-      <div><dt>{english ? "Last state change" : "Dernier changement"}</dt><dd>{state?.stopped ?? "—"}</dd></div>
-      <div><dt>{english ? "Last audio failure" : "Dernier échec audio"}</dt><dd>{state?.failure ?? "—"}</dd></div>
-      <div><dt>{english ? "Sound on" : "Son activé"}</dt><dd>{state ? (state.sound ? yes : no) : "—"}</dd></div>
+      {row("Voix entendue ici", state?.voice ?? "—")}
+      {row("Mon clone", cloneLabels[me.voiceStatus])}
+      {row("Mon registre détecté", rangeLabel)}
+      {row("Clone de l’autre", cloneLabels[peer.voiceStatus])}
+      {row("Registre de l’autre", peer.voiceRange === "low" ? "grave" : peer.voiceRange === "high" ? "aigu" : "non détecté")}
+      {row("Contexte audio", state?.context ?? "—")}
+      {row("Lecture", voiceStatus)}
+      {row("Phrases reçues", received)}
+      {row("En attente de lecture", state?.queued ?? "—")}
+      {row("Session active", state ? (state.running ? yes : no) : "—")}
+      {row("Dernier changement", state?.stopped ?? "—")}
+      {row("Dernier échec audio", state?.failure ?? "—")}
     </dl>
     <p>{english
-      ? "If the beep is silent while the context is running, the phone itself is muting playback — check the ring/silent switch and the volume during playback."
-      : "Si le bip est inaudible alors que le contexte est « running », c’est le téléphone qui coupe la lecture : vérifier l’interrupteur silencieux et le volume pendant la lecture."}</p>
+      ? "« Voix entendue ici » reports what the other participant's words were spoken with: clone, or a standard voice matched to their detected range."
+      : "« Voix entendue ici » indique avec quoi les mots de l’autre personne ont été prononcés : son clone, ou une voix standard choisie selon le registre détecté chez elle."}</p>
   </details>;
 }

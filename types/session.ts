@@ -1,5 +1,6 @@
 export type Language = "fr" | "en" | "th";
-export type Participant = { slot: number; language: Language; online: boolean; voiceStatus: "none" | "learning" | "ready" | "verification_required" };
+export type VoiceRange = "low" | "high";
+export type Participant = { slot: number; language: Language; online: boolean; voiceRange: VoiceRange | null; voiceStatus: "none" | "learning" | "ready" | "verification_required" };
 export type SharedSession = { id: string; expiresAt: string; floor: number | null; me: Participant; peer: Participant | null };
 export type PeerEvent = { id: string; turnId: string; text: string; committed: boolean };
 export type ReceivedEvent = PeerEvent & { seq: string };

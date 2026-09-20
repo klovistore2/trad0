@@ -76,5 +76,5 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
     });
   }, []);
 
-  return { ...state, start, stop, setMicrophoneEnabled: (enabled: boolean) => provider.current?.setMicrophoneEnabled?.(enabled), active: ["connecting", "listening", "translating"].includes(state.status) };
+  return { ...state, start, stop, getStream: () => provider.current?.getStream?.(), setMicrophoneEnabled: (enabled: boolean) => provider.current?.setMicrophoneEnabled?.(enabled), active: ["connecting", "listening", "translating"].includes(state.status) };
 }

@@ -46,6 +46,48 @@ test('relayed speech uses the other participant’s ready clone, never a client 
   }
 });
 
+test('a standard voice is matched to the speaker’s detected range, never to a claim about them', async () => {
+  const env = {NEXT_PUBLIC_APP_URL:origin, ELEVENLABS_TTS_MODEL:'test-model', ELEVENLABS_API_KEY:'test-key'};
+  const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
+  const cleared = ['ELEVENLABS_FALLBACK_VOICE_ID','ELEVENLABS_VOICE_LOW','ELEVENLABS_VOICE_HIGH'];
+  const clearedBefore = Object.fromEntries(cleared.map(key => [key, process.env[key]]));
+  for (const key of cleared) delete process.env[key];
+  Object.assign(process.env, env);
+  const originalFetch = globalThis.fetch;
+  const catalogue = {voices:[
+    {voice_id:'neutral-voice',labels:{gender:'neutral'}},
+    {voice_id:'male-voice',labels:{gender:'male'}},
+    {voice_id:'female-voice',labels:{gender:'female'}},
+  ]};
+  let spoken;
+  globalThis.fetch = async url => {
+    if (String(url).includes('/v2/voices')) return new Response(JSON.stringify(catalogue),{status:200,headers:{'content-type':'application/json'}});
+    spoken = String(url);
+    return new Response(new Uint8Array([0,1]), {status:200});
+  };
+  const speak = async voiceRange => {
+    const load = createLoader({
+      '@/lib/session/auth': {member: async () => ({slot:0})},
+      '@/lib/neon/db': {db: () => async () => [{voice_id:null,voice_status:'none',voice_range:voiceRange}]},
+    });
+    return load('app/api/elevenlabs/speak/route.ts').POST(request({sessionId:'session',text:'Bonjour'}));
+  };
+  try {
+    let response = await speak('low');
+    assert.match(spoken,/\/male-voice\/stream/);
+    assert.equal(response.headers.get('x-voice-source'),'standard-low');
+    response = await speak('high');
+    assert.match(spoken,/\/female-voice\/stream/);
+    assert.equal(response.headers.get('x-voice-source'),'standard-high');
+    response = await speak(null);
+    assert.match(spoken,/\/neutral-voice\/stream/,'an undetected range must not guess');
+    assert.equal(response.headers.get('x-voice-source'),'standard-neutral');
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key,value] of Object.entries({...previous,...clearedBefore})) {if(value===undefined)delete process.env[key];else process.env[key]=value;}
+  }
+});
+
 test('relayed speech refuses empty or oversized text before reaching the provider', async () => {
   const previousUrl = process.env.NEXT_PUBLIC_APP_URL; process.env.NEXT_PUBLIC_APP_URL=origin;
   const originalFetch = globalThis.fetch;

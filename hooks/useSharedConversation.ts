@@ -4,6 +4,7 @@ import { useTranslationSession } from "./useTranslationSession";
 import { NeonPeerTransport } from "@/lib/realtime/neon-transport";
 import { TurnPublisher } from "@/lib/realtime/turn-publisher";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
+import { VoiceRangeDetector } from "@/lib/audio/voice-range";
 import type { ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
@@ -22,6 +23,7 @@ export function useSharedConversation(id: string) {
   const [soundReady, setSoundReady] = useState(false);
   const soundReadyRef = useRef(false);
   const rearm = useRef<() => void>(() => {});
+  const detector = useRef<VoiceRangeDetector | null>(null);
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
@@ -46,7 +48,14 @@ export function useSharedConversation(id: string) {
   });
   const translationRef = useRef(translation);
   useEffect(() => { translationRef.current = translation; }, [translation]);
-  const syncMicrophone = useCallback(() => translationRef.current.setMicrophoneEnabled(micShouldBeOn()), [micShouldBeOn]);
+  const syncMicrophone = useCallback(() => {
+    const open = micShouldBeOn();
+    translationRef.current.setMicrophoneEnabled(open);
+    // Range detection listens to the live stream only while this device is the one speaking.
+    if (!open) return;
+    const stream = translationRef.current.getStream?.();
+    if (stream) detector.current?.listen(stream);
+  }, [micShouldBeOn]);
 
   const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
   const playQueue = useCallback(async () => {
@@ -77,6 +86,13 @@ export function useSharedConversation(id: string) {
     transport.current = peer;
     const turns = new TurnPublisher(event => { void peer.send(event); });
     publisher.current = turns;
+    detector.current = new VoiceRangeDetector(range => {
+      if (controller.signal.aborted) return;
+      void fetch(`/api/sessions/${id}/voice-range`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ range }), signal: controller.signal,
+      }).catch(() => {});
+    });
     const player = new ElevenLabsVoiceProvider((status, error) => {
       if (controller.signal.aborted) return;
       setVoiceStatus(status);
@@ -188,7 +204,7 @@ export function useSharedConversation(id: string) {
     return () => {
       controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", visibility);
       document.removeEventListener("pointerdown", armSound); document.removeEventListener("keydown", armSound);
-      unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose();
+      unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose(); detector.current?.stop(); detector.current = null;
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
@@ -250,6 +266,8 @@ export function useSharedConversation(id: string) {
     context: voice.current?.contextState ?? "absent",
     stopped: stopped.current,
     failure: voice.current?.lastFailure || "none",
+    voice: voice.current?.lastVoice || "none",
+    range: detector.current?.state ?? { frames: 0, median: 0, range: null },
     queued: queue.current.length,
     speaking: speaking.current,
     running: running.current,

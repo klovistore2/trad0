@@ -16,7 +16,7 @@ Variables serveur :
 - `OPENAI_API_KEY` et `OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate`.
 - `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
-- `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus la colonne `adu_sessions.floor_slot` (nullable) pour le tour de parole. `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
+- `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus les colonnes `adu_sessions.floor_slot` (tour de parole) et `adu_participants.voice_range` (registre détecté). `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
 - `CRON_SECRET` : secret aléatoire pour protéger la purge des voix. Obligatoire pour autoriser le clonage.
 - `NEXT_PUBLIC_APP_URL` : origine exacte du site, par exemple `http://localhost:3000` en local.
 
@@ -54,6 +54,14 @@ Le son est actif par défaut. **Son activé · toucher pour le texte seul** coup
 Pour tester sur un seul ordinateur, utiliser **deux profils de navigateur différents** ou une fenêtre privée : l’identité invitée est un cookie HttpOnly partagé entre les onglets d’un même profil. La session accepte exactement deux participants, y compris en cas de connexions simultanées.
 
 Sur deux téléphones, utiliser une URL **HTTPS accessible aux deux appareils**, avec `NEXT_PUBLIC_APP_URL` correspondant. Un QR contenant localhost pointe vers le téléphone qui le scanne et ne permet pas de joindre le PC.
+
+## Registre de voix et diagnostic
+
+Avant qu'un clone existe, le destinataire entend une voix standard **choisie selon le registre du locuteur**. Le navigateur estime la fréquence fondamentale du micro pendant que son propriétaire a la parole, par autocorrélation normalisée, et en déduit `low` ou `high` après une trentaine de trames voisées. Seul ce mot quitte l'appareil : aucun audio n'est enregistré ni transmis pour cette mesure.
+
+C'est une mesure de **hauteur de voix**, pas une affirmation sur la personne : des femmes ont une voix grave, des hommes une voix aiguë. Tant que rien n'est détecté, la voix reste neutre — le système ne devine pas. Côté ElevenLabs, la correspondance se fait sur le `labels.gender` de la voix elle-même, qui décrit la voix et non l'auditeur. `ELEVENLABS_VOICE_LOW` et `ELEVENLABS_VOICE_HIGH` permettent d'imposer un choix.
+
+**Diagnostic voix et son**, dans l'écran de conversation, est un panneau de développement qui montre : la voix réellement utilisée pour la dernière phrase entendue (clone ou voix standard et son registre), l'état de clonage des deux participants, le registre détecté avec sa médiane en hertz, l'état du contexte audio, le nombre de phrases reçues et la dernière panne audio. Le bouton **Jouer un bip de test** produit un son local, sans réseau : il sépare une coupure système d'une panne de la chaîne de lecture.
 
 ## Cloner sa voix
 
@@ -108,4 +116,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 19 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 24 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

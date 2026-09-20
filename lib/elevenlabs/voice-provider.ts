@@ -23,6 +23,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private source?: string;
   private ready = false;
   private failure = "";
+  private voiceSource = "";
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -54,6 +55,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   }
   get contextState() { return this.ready ? "running" : "absent"; }
   get lastFailure() { return this.failure; }
+  get lastVoice() { return this.voiceSource; }
   async testTone() {
     await this.unlock();
     await this.play(wav(0.4, 440));
@@ -94,6 +96,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         this.failure = `speech HTTP ${response.status}`;
         throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
       }
+      this.voiceSource = response.headers.get("x-voice-source") || "unknown";
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       if (!blob.size) { this.failure = "empty audio"; throw new Error("Aucun son reçu. Réessayez."); }

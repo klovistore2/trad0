@@ -55,7 +55,7 @@ export function SharedConversation({ id }: { id: string }) {
             {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}
           </button>}
           <VoiceConsent sessionId={id} voiceStatus={room.me.voiceStatus} english={english} onRecord={session.stop} onBusy={setVoiceBusy} />
-          <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()} voiceStatus={session.voiceStatus} received={session.received} english={english} />
+          <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()} voiceStatus={session.voiceStatus} received={session.received} english={english} me={room.me} peer={room.peer} />
           <button className="demo-button" onClick={() => { session.stop(); setShowInvite(true); }}>{english ? "Invitation link" : "Lien d’invitation"}</button>
         </div>
       </>}
