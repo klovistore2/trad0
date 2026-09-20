@@ -42,6 +42,8 @@ async function client() {
 }
 try {
  const a=await client();await a.goto('/');
+ // The home page opens no microphone: a conversation needs two devices, so inviting is the action.
+ await expect(a.getByRole('button',{name:'Commencer à parler'})).toHaveCount(0);
  await a.getByRole('button',{name:/Parler à deux/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
  // The voice choice is asked once, on arrival. Declining keeps a standard voice.

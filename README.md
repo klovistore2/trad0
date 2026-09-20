@@ -24,9 +24,9 @@ Ne jamais exposer les clés permanentes ni `DATABASE_URL` dans une variable `NEX
 
 ## Essayer seul
 
-Cliquer **Commencer à parler**, autoriser le micro et parler français. Le texte anglais apparaît progressivement. Après **Arrêter**, **Écouter en anglais** lit la traduction avec ElevenLabs. L’écoute de sa propre traduction est volontaire, après arrêt du micro.
+L'accueil n'ouvre aucun micro : une conversation demande deux appareils, et parler seul ne prouvait rien d'utile. Le bouton principal est donc **Parler à deux · inviter quelqu'un**.
 
-La démonstration est un exemple préécrit sans microphone ni appel OpenAI. Cliquer ensuite sur Écouter utilise bien ElevenLabs.
+**Essayer une démonstration** joue un exemple préécrit, sans microphone ni appel OpenAI. **Écouter en anglais** lit ensuite ce texte avec ElevenLabs : c'est le seul moyen de vérifier la synthèse vocale sans monter une session à deux.
 
 ## À deux
 
