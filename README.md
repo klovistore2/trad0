@@ -100,7 +100,7 @@ Si vous acceptez, le clonage part tout seul : rien d'autre à toucher. Si vous r
 
 Rien n'est enregistré avant l'accord.
 
-Ensuite l'application capte vos tours de parole pendant que vous parlez, et seulement eux : l'enregistreur est mis en pause par le même signal que le micro, donc ni les silences ni la voix de l'autre personne n'entrent dans l'échantillon. La durée retenue est la parole effective, pas le temps écoulé.
+Ensuite l'application capte vos tours de parole pendant que vous parlez, et seulement eux : l'enregistreur est mis en pause par le même signal que le micro, donc ni les silences ni la voix de l'autre personne n'entrent dans l'échantillon. La durée retenue est la **parole effective** : elle ne court qu'entre le premier et le dernier fragment de transcription, avec une courte marge pour ne pas découper les pauses entre les mots. Garder la parole en lisant l'écran ou en attendant l'autre personne ne compte pas une seconde.
 
 Deux paliers : un premier clone vers **30 secondes** de parole, une version affinée vers **150 secondes**, puis plus jamais. Le clone en service reste utilisé jusqu'à ce que le suivant soit créé et enregistré ; l'ancien n'est supprimé qu'après la bascule, jamais avant. Après le palier final, l'audio en mémoire est effacé.
 

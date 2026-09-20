@@ -51,7 +51,7 @@ export function useSharedConversation(id: string) {
   const translation = useTranslationSession({
     sessionId: id,
     targetLanguage: room?.peer?.language || (room?.me.language === "fr" ? "en" : "fr"),
-    onDelta: delta => publisher.current?.append(delta),
+    onDelta: delta => { publisher.current?.append(delta); recorder.current?.heard(); },
     shouldEnableMicrophone: micShouldBeOn,
   });
   const translationRef = useRef(translation);

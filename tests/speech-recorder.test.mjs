@@ -17,6 +17,13 @@ class FakeRecorder {
   emit(bytes) { this.ondataavailable({ data: new Blob([new Uint8Array(bytes)]) }); }
 }
 
+// Transcript fragments arrive several times a second while someone talks; anything sparser
+// would be treated as separate short bursts, which is the point of the tail.
+function speak(recorder, advance, ms) {
+  recorder.heard();
+  for (let elapsed = 0; elapsed < ms; elapsed += 500) { advance(500); recorder.heard(); }
+}
+
 function setup() {
   globalThis.MediaRecorder = FakeRecorder;
   const realNow = Date.now;
@@ -30,19 +37,41 @@ function setup() {
   };
 }
 
-test('only the time between listening and pausing is counted as speech', () => {
+test('an open microphone with nobody speaking counts as no speech at all', () => {
   const { recorder, advance, restore } = setup();
   try {
-    const stream = {};
-    recorder.listen(stream);
-    advance(12_000);
+    recorder.listen({});
+    advance(120_000); // reading the screen, waiting for the other person, thinking
+    assert.equal(recorder.seconds, 0, 'holding the floor is not speaking');
     recorder.pause();
-    advance(60_000); // the other person speaks: this must not count
-    assert.equal(Math.round(recorder.seconds), 12);
-    recorder.listen(stream);
-    advance(8_000);
+    assert.equal(recorder.seconds, 0);
+  } finally { restore(); }
+});
+
+test('speech runs from the first transcript fragment to the last, plus a short tail', () => {
+  const { recorder, advance, restore } = setup();
+  try {
+    recorder.listen({});
+    advance(20_000);
+    speak(recorder, advance, 10_000);
+    assert.equal(recorder.seconds, 10, 'the stretch in progress is counted as it runs');
+    advance(60_000); // a long silence must not be credited
+    assert.equal(recorder.seconds, 11.5, 'only the tail is added once the voice stops');
+    speak(recorder, advance, 4_000);
+    assert.equal(recorder.seconds, 15.5, 'a later stretch adds to the first');
+  } finally { restore(); }
+});
+
+test('pausing closes the stretch instead of crediting the silence that follows', () => {
+  const { recorder, advance, restore } = setup();
+  try {
+    recorder.listen({});
+    speak(recorder, advance, 6_000);
     recorder.pause();
-    assert.equal(Math.round(recorder.seconds), 20, 'a second turn adds to the first');
+    const counted = recorder.seconds;
+    assert.equal(counted, 6);
+    advance(300_000);
+    assert.equal(recorder.seconds, counted, 'time while the other person talks is never counted');
   } finally { restore(); }
 });
 
@@ -52,13 +81,13 @@ test('resuming the same stream continues one recording, a new stream starts a se
     const first = {};
     recorder.listen(first);
     FakeRecorder.last.emit(4000);
-    advance(30_000);
+    speak(recorder, advance, 30_000);
     recorder.pause();
     assert.equal(recorder.samples().length, 1, 'one container so far');
     recorder.listen(first);
     assert.equal(FakeRecorder.last.state, 'recording', 'the same stream resumes rather than restarting');
     FakeRecorder.last.emit(4000);
-    advance(30_000);
+    speak(recorder, advance, 30_000);
     recorder.pause();
     assert.equal(recorder.samples().length, 1, 'still a single container');
 
@@ -66,7 +95,7 @@ test('resuming the same stream continues one recording, a new stream starts a se
     const second = {};
     recorder.listen(second);
     FakeRecorder.last.emit(4000);
-    advance(30_000);
+    speak(recorder, advance, 30_000);
     recorder.pause();
     const samples = recorder.samples();
     assert.equal(samples.length, 2, 'the finished recording is kept whole beside the new one');
@@ -80,7 +109,7 @@ test('discarding frees the audio once the final clone exists', () => {
   try {
     recorder.listen({});
     FakeRecorder.last.emit(4000);
-    advance(40_000);
+    speak(recorder, advance, 40_000);
     recorder.pause();
     assert.equal(recorder.samples().length, 1);
     recorder.discard();

@@ -92,8 +92,9 @@ real failures on real devices.
    sample by concatenating the output of *separate* `MediaRecorder` runs — each carries its own
    container header and the result is silently truncated, so completed recordings are kept whole and
    sent as several files; and never delete the clone in service before the replacement has been
-   stored. Transcript length as a plausibility filter is designed but not wired: empty or noisy
-   segments are still counted.
+   stored. The speech clock runs on transcript fragments, not on an open microphone: holding the
+   floor in silence must never advance a tier, which it did once the start button began claiming
+   the floor. Transcript *length* as a quality filter is still not wired.
 3. **Accounts — done.** Creator only, **Google and nothing else**. There is no password anywhere,
    so there is no address to verify and no reset flow to write. A Google identity is mapped onto a
    row of `adu_users` by e-mail on first sign in, because the saved voice hangs off that id — keep
