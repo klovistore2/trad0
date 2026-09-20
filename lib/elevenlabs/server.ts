@@ -17,17 +17,6 @@ export async function fallbackVoice() {
   fallback = data.voices[0].voice_id as string;
   return fallback;
 }
-export async function voiceCredentials(voiceId?: string) {
-  const model = process.env.ELEVENLABS_TTS_MODEL?.trim();
-  if (!model) throw new HttpError(503, "Le modèle vocal n’est pas configuré.");
-  const voice = voiceId || await fallbackVoice();
-  const response = await fetch("https://api.elevenlabs.io/v1/single-use-token/tts_websocket", {
-    method: "POST", headers: elevenHeaders(), signal: AbortSignal.timeout(10_000), cache: "no-store",
-  });
-  const data = await response.json();
-  if (!response.ok || typeof data.token !== "string") throw new HttpError(502, "La voix est indisponible. Le texte reste accessible.");
-  return { token: data.token as string, voiceId: voice, model };
-}
 export async function deleteVoice(voiceId: string) {
   const response = await fetch(`https://api.elevenlabs.io/v1/voices/${encodeURIComponent(voiceId)}`, { method: "DELETE", headers: elevenHeaders(), signal: AbortSignal.timeout(10_000) });
   if (!response.ok && response.status !== 404) throw new HttpError(502, "La suppression de la voix doit être réessayée.");

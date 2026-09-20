@@ -42,7 +42,6 @@ export function SharedConversation({ id }: { id: string }) {
               ? <>
                   <p className="floor-state live" role="status"><span className="status-dot active" />{english ? "Your microphone is open — speak" : "Votre micro est ouvert — parlez"}</p>
                   <button disabled={session.claiming} className="primary-button stop-button" onClick={() => void session.releaseFloor()}>{english ? "Done speaking" : "J’ai fini de parler"}</button>
-                  <button className="demo-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
                 </>
               : <>
                   <p className="floor-state" role="status"><span className="status-dot" />{session.floorFree
@@ -51,7 +50,6 @@ export function SharedConversation({ id }: { id: string }) {
                   <button disabled={session.claiming} className="primary-button" onClick={() => void session.takeFloor()}>{session.floorFree
                     ? (english ? "Speak" : "Parler")
                     : (english ? "Let me speak" : "À moi de parler")}</button>
-                  <button className="demo-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
                 </>}
           {session.enabled && <button className="demo-button sound-toggle" aria-pressed={session.soundOn} onClick={() => session.toggleSound()}>
             {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}

@@ -9,8 +9,17 @@ const baseURL = process.env.TEST_BASE_URL || 'http://localhost:3100';
 const browser = await chromium.launch({ headless:true, args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
 const contexts=[];let sessionId;
 const errors=[];
-const pcm=Buffer.alloc(24000);
-for(let i=0;i<12000;i++) pcm.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*440/24000)*1000),i*2);
+// A real, short WAV so the audio element can actually decode, play and fire 'ended'.
+function wavClip(seconds=1.5, frequency=440, rate=8000) {
+ const samples=Math.floor(seconds*rate); const buffer=Buffer.alloc(44+samples*2);
+ buffer.write('RIFF',0); buffer.writeUInt32LE(36+samples*2,4); buffer.write('WAVEfmt ',8);
+ buffer.writeUInt32LE(16,16); buffer.writeUInt16LE(1,20); buffer.writeUInt16LE(1,22);
+ buffer.writeUInt32LE(rate,24); buffer.writeUInt32LE(rate*2,28); buffer.writeUInt16LE(2,32); buffer.writeUInt16LE(16,34);
+ buffer.write('data',36); buffer.writeUInt32LE(samples*2,40);
+ for(let i=0;i<samples;i++) buffer.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*frequency/rate)*6000),44+i*2);
+ return buffer;
+}
+const clip=wavClip();
 async function client() {
  const context=await browser.newContext({baseURL,viewport:{width:390,height:844},permissions:['microphone']});contexts.push(context);
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
@@ -28,13 +37,7 @@ async function client() {
  });
  await page.route('**/api/openai/realtime-token',route=>route.fulfill({json:{value:'test-token'}}));
  await page.route('https://api.openai.com/v1/realtime/translations/calls',route=>route.fulfill({body:'synthetic-answer'}));
- await page.route('**/api/elevenlabs/token',route=>route.fulfill({json:{token:'synthetic-token',voiceId:'synthetic-voice',model:'synthetic-model'}}));
- await page.routeWebSocket('wss://api.elevenlabs.io/**',socket=>{
-  socket.onMessage(message=>{
-   const event=JSON.parse(String(message));
-   if(event.text==='') {socket.send(JSON.stringify({audio:pcm.toString('base64')}));socket.send(JSON.stringify({isFinal:true}));}
-  });
- });
+ await page.route('**/api/elevenlabs/speak',route=>route.fulfill({contentType:'audio/wav',body:clip}));
  return page;
 }
 try {
@@ -104,8 +107,7 @@ try {
  await b.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.getByText('Les deux micros sont fermés').waitFor();
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
- await a.getByRole('button',{name:'Mettre en pause'}).click();
- await a.waitForFunction(()=>window.testMicrophone.readyState==='ended');
+ // Recording a voice sample stops the session, so the microphone stream is released.
  await a.getByText('Utiliser ma voix',{exact:true}).click();
  await a.getByRole('button',{name:/J’accepte/}).click();
  await a.getByRole('button',{name:'Annuler',exact:true}).waitFor();

@@ -14,7 +14,7 @@ npm run dev
 Variables serveur :
 
 - `OPENAI_API_KEY` et `OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate`.
-- `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5` pour le streaming WebSocket. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
+- `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
 - `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus la colonne `adu_sessions.floor_slot` (nullable) pour le tour de parole. `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
 - `CRON_SECRET` : secret aléatoire pour protéger la purge des voix. Obligatoire pour autoriser le clonage.
@@ -80,9 +80,11 @@ La purge retire les textes expirés et les voix connues. Elle recherche aussi le
 - OpenAI : jeton éphémère via `/v1/realtime/translations/client_secrets`, puis microphone directement en WebRTC vers `/v1/realtime/translations/calls`. Aucun `response.create`, aucun assistant visible.
 - Neon : identité invitée hachée, deux places atomiques, expiration, transport de texte. Pas d’audio en base.
 - `PeerTransport` : première implémentation par requêtes courtes toutes les 500 ms, avec publications groupées et identifiants idempotents. Neon ne remplace pas Supabase Realtime ; ce compromis augmente les requêtes et la latence. Un transport push pourra remplacer cet adaptateur sans changer les fournisseurs.
-- ElevenLabs : jeton à usage unique puis WebSocket direct depuis le navigateur ; PCM 24 kHz joué progressivement avec Web Audio. Les phrases sont envoyées après ponctuation ou une pause d’environ une seconde. Les sous-titres arrivent avant l’audio.
+- ElevenLabs : la synthèse est **relayée par `/api/elevenlabs/speak`**, qui transmet le flux `audio/mpeg` sans jamais l’écrire ni le journaliser. Le navigateur ne contacte donc que cette origine, et la lecture se fait dans un élément `<audio>`.
+- Ce choix remplace une WebSocket ouverte du navigateur vers `api.elevenlabs.io`, que proxys, VPN et extensions bloquent couramment — panne invisible côté serveur. Il coûte environ 700 ms de latence supplémentaire et évite Web Audio, dont la sortie est coupée par l’interrupteur silencieux d’un iPhone. La latence est un chantier identifié ; une lecture qui ne démarre pas n’en est pas un.
+- Les phrases sont envoyées après ponctuation ou une pause d’environ une seconde. Les sous-titres arrivent avant l’audio.
 - La voix choisie pour le destinataire est celle de **l’autre participant**, déterminée côté serveur. Aucun ID de clone arbitraire fourni par le client n’est accepté par la route de jeton.
-- Les jetons ElevenLabs sont temporaires, mais ne constituent pas une restriction d’usage par phrase. Avant une ouverture publique, ajouter limitation de débit distribuée, quotas et suivi des coûts. Le contrôle d’origine ne remplace pas une protection contre les abus.
+- La route de synthèse est authentifiée par session et bornée à 4000 caractères, mais ne limite pas le débit. Avant une ouverture publique, ajouter limitation de débit distribuée, quotas et suivi des coûts. Le contrôle d’origine ne remplace pas une protection contre les abus.
 - L’API de traduction ne fournit pas de confiance calibrée dans les événements utilisés : `quality: "unknown"` reste explicite.
 - Le texte reçu est conservé temporairement en base pour la livraison, puis effacé à la fin de session ou par la purge. Les fournisseurs appliquent aussi leurs propres règles de conservation.
 - Le clonage est implémenté et testé avec réponses simulées ; un essai réel nécessite l’enregistrement consenti de l’utilisateur. Safari/iPhone, Bluetooth, réseaux mobiles et qualité des clones restent à valider sur appareils physiques.
@@ -104,6 +106,6 @@ Pour une instance isolée : `NEXT_TEST_BUILD=1 NEXT_PUBLIC_APP_URL=http://localh
 
 Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `npx playwright install chromium`, deux profils isolés, Neon réel et des fournisseurs audio simulés. Aucun clonage réel n’y est déclenché.
 
-Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs WebSocket](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input), [jetons temporaires](https://elevenlabs.io/docs/api-reference/tokens/create), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
+Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
 Validation effectuée : build de production, lint, TypeScript, 19 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

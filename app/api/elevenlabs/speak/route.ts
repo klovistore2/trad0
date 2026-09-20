@@ -1,0 +1,39 @@
+import { member } from "@/lib/session/auth";
+import { db } from "@/lib/neon/db";
+import { elevenHeaders, fallbackVoice } from "@/lib/elevenlabs/server";
+import { checkOrigin, failure, HttpError, readJson } from "@/lib/server/http";
+
+export const maxDuration = 30;
+
+// Speech is relayed instead of opening a browser websocket to the provider: the page only ever
+// talks to this origin, which survives proxies and extensions that block third-party sockets.
+export async function POST(request: Request) {
+  try {
+    checkOrigin(request);
+    const body = await readJson(request);
+    const text = typeof body.text === "string" ? body.text.trim() : "";
+    if (!text || text.length > 4000) throw new HttpError(400, "Texte invalide.");
+    const language = typeof body.language === "string" && /^[a-z]{2}$/.test(body.language) ? body.language : undefined;
+    let voiceId: string | undefined;
+    if (body.sessionId !== undefined) {
+      if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
+      const me = await member(body.sessionId);
+      const rows = await db()`SELECT voice_id, voice_status FROM adu_participants WHERE session_id=${body.sessionId} AND slot<>${me.slot}`;
+      if (!rows[0]) throw new HttpError(409, "L’autre personne n’a pas encore rejoint.");
+      // The receiver hears the other participant's voice; a client supplied ID is never accepted.
+      if (rows[0].voice_status === "ready") voiceId = rows[0].voice_id;
+    }
+    const model = process.env.ELEVENLABS_TTS_MODEL?.trim();
+    if (!model) throw new HttpError(503, "Le modèle vocal n’est pas configuré.");
+    const voice = voiceId || await fallbackVoice();
+    const upstream = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream?output_format=mp3_22050_32`, {
+      method: "POST",
+      headers: { ...elevenHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ text, model_id: model, ...(language ? { language_code: language } : {}) }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!upstream.ok || !upstream.body) throw new HttpError(502, "La voix est indisponible. Le texte reste accessible.");
+    // Piped straight through: no audio is buffered, written or logged here.
+    return new Response(upstream.body, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+  } catch (error) { return failure(error); }
+}

@@ -1,45 +1,75 @@
 import type { VoiceProvider, VoiceStatus } from "@/types/voice";
-import { pcm16ToFloat32 } from "@/lib/audio/pcm";
+
+// A short WAV built in memory: used to prime playback during a gesture, and as a local test beep.
+function wav(seconds: number, frequency: number, rate = 8000) {
+  const samples = Math.floor(seconds * rate);
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const text = (offset: number, value: string) => { for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i)); };
+  text(0, "RIFF"); view.setUint32(4, 36 + samples * 2, true); text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, "data"); view.setUint32(40, samples * 2, true);
+  for (let i = 0; i < samples; i++) {
+    const fade = Math.min(1, Math.min(i, samples - i) / (rate * 0.02));
+    view.setInt16(44 + i * 2, frequency ? Math.round(Math.sin((i * 2 * Math.PI * frequency) / rate) * 9000 * fade) : 0, true);
+  }
+  return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+}
 
 export class ElevenLabsVoiceProvider implements VoiceProvider {
-  private context?: AudioContext;
+  private element?: HTMLAudioElement;
   private active?: AbortController;
-  private sources = new Set<AudioBufferSourceNode>();
-  private nextTime = 0;
+  private source?: string;
+  private ready = false;
   private failure = "";
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
-  async unlock() {
-    this.context ??= new AudioContext();
-    await this.context.resume();
-    if (this.context.state !== "running") throw new Error("Touchez Activer le son pour écouter la traduction.");
+  private audio() {
+    if (!this.element) {
+      const element = new Audio();
+      element.preload = "auto";
+      // Media playback, not Web Audio: this is what keeps sound alive on a silenced iPhone.
+      element.setAttribute("playsinline", "");
+      this.element = element;
+    }
+    return this.element;
   }
-  get contextState() { return this.context?.state ?? "absent"; }
-  // Browsers hide websocket failure reasons behind a generic event; keep what they do expose.
+  private play(source: string) {
+    const element = this.audio();
+    if (this.source) URL.revokeObjectURL(this.source);
+    this.source = source;
+    element.src = source;
+    return element.play();
+  }
+
+  async unlock() {
+    if (this.ready) return;
+    try {
+      await this.play(wav(0.05, 0));
+      this.ready = true;
+    } catch {
+      throw new Error("Touchez l’écran pour entendre la traduction.");
+    }
+  }
+  get contextState() { return this.ready ? "running" : "absent"; }
   get lastFailure() { return this.failure; }
-  // A local beep separates an OS-level mute from a broken pipeline: no network, same output path.
   async testTone() {
     await this.unlock();
-    const context = this.context!;
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    oscillator.frequency.value = 440;
-    gain.gain.setValueAtTime(0.0001, context.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.45);
-    oscillator.connect(gain); gain.connect(context.destination);
-    oscillator.start(context.currentTime);
-    oscillator.stop(context.currentTime + 0.5);
+    await this.play(wav(0.4, 440));
   }
   stop() {
     this.active?.abort();
     this.active = undefined;
-    for (const source of this.sources) source.stop();
-    this.sources.clear();
-    this.nextTime = 0;
+    this.element?.pause();
     this.onStatus("idle");
   }
-  dispose() { this.stop(); void this.context?.close(); this.context = undefined; }
+  dispose() {
+    this.stop();
+    if (this.source) URL.revokeObjectURL(this.source);
+    this.source = undefined;
+    this.element = undefined;
+  }
 
   async speakStream({ textStream, language, sessionId, signal }: Parameters<VoiceProvider["speakStream"]>[0]) {
     this.stop();
@@ -52,102 +82,39 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (controller.signal.aborted) return;
       await this.unlock();
       this.onStatus("loading");
-      const response = await fetch("/api/elevenlabs/token", {
+      let text = "";
+      for await (const chunk of textStream) text += chunk;
+      if (!text.trim() || controller.signal.aborted) return;
+      const response = await fetch("/api/elevenlabs/speak", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId }), signal: controller.signal,
+        body: JSON.stringify({ sessionId, text, language }), signal: controller.signal,
       });
-      const credentials = await response.json();
-      if (!response.ok) throw new Error(credentials.error || "La voix est indisponible.");
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        this.failure = `speech HTTP ${response.status}`;
+        throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
+      }
+      const blob = await response.blob();
       if (controller.signal.aborted) return;
-      const params = new URLSearchParams({ model_id: credentials.model, single_use_token: credentials.token, output_format: "pcm_24000", language_code: language });
+      if (!blob.size) { this.failure = "empty audio"; throw new Error("Aucun son reçu. Réessayez."); }
+      const element = this.audio();
+      await this.play(URL.createObjectURL(blob));
+      this.onStatus("playing");
       await new Promise<void>((resolve, reject) => {
-        const socket = new WebSocket(`wss://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(credentials.voiceId)}/stream-input?${params}`);
-        let finished = false;
-        let finalReceived = false;
-        let opened = false;
-        let pendingByte: number | undefined;
-        let receivedAudio = false;
-        let timer: ReturnType<typeof setTimeout>;
-        let playbackTimer: ReturnType<typeof setTimeout>;
-        const finish = (error?: Error) => {
-          if (finished) return;
-          finished = true;
-          clearTimeout(timer); clearTimeout(playbackTimer);
-          controller.signal.removeEventListener("abort", abort);
-          socket.close();
+        const settle = (error?: Error) => {
+          element.onended = null; element.onerror = null;
+          controller.signal.removeEventListener("abort", onAbort);
           if (error) reject(error); else resolve();
         };
-        const abort = () => finish();
-        controller.signal.addEventListener("abort", abort, { once: true });
-        const timeout = () => {
-          clearTimeout(timer);
-          timer = setTimeout(() => finish(new Error("La lecture prend trop de temps. Réessayez.")), 20_000);
-        };
-        timeout();
-        socket.onopen = async () => {
-          opened = true;
-          try {
-            socket.send(JSON.stringify({ text: " " }));
-            for await (const text of textStream) {
-              if (finished || controller.signal.aborted) return;
-              socket.send(JSON.stringify({ text }));
-            }
-            if (!finished) socket.send(JSON.stringify({ text: "" }));
-          } catch { finish(new Error("La lecture a été interrompue.")); }
-        };
-        socket.onmessage = ({ data }: MessageEvent<string>) => {
-          if (finished || controller.signal.aborted) return;
-          timeout();
-          try {
-            const event = JSON.parse(data);
-            if (event.error) throw new Error("La synthèse vocale a échoué. Le texte reste accessible.");
-            if (typeof event.audio === "string" && event.audio) {
-              const raw = atob(event.audio);
-              const bytes = new Uint8Array(raw.length + (pendingByte === undefined ? 0 : 1));
-              let offset = 0;
-              if (pendingByte !== undefined) bytes[offset++] = pendingByte;
-              for (let i = 0; i < raw.length; i++) bytes[offset + i] = raw.charCodeAt(i);
-              pendingByte = bytes.length % 2 ? bytes[bytes.length - 1] : undefined;
-              const samples = pcm16ToFloat32(bytes.subarray(0, bytes.length - bytes.length % 2));
-              const context = this.context;
-              if (!context || context.state !== "running") throw new Error("Touchez Activer le son pour reprendre la lecture.");
-              if (samples.length) {
-                const buffer = context.createBuffer(1, samples.length, 24_000);
-                buffer.copyToChannel(samples, 0);
-                const source = context.createBufferSource();
-                source.buffer = buffer; source.connect(context.destination);
-                this.nextTime = Math.max(context.currentTime + 0.025, this.nextTime);
-                source.start(this.nextTime); this.nextTime += buffer.duration;
-                this.sources.add(source);
-                source.onended = () => { this.sources.delete(source); source.disconnect(); };
-                receivedAudio = true;
-                this.onStatus("playing");
-              }
-            }
-            if (event.isFinal || event.is_final) {
-              finalReceived = true;
-              clearTimeout(timer);
-              if (!receivedAudio || pendingByte !== undefined) throw new Error("Aucun son lisible reçu. Réessayez.");
-              const delay = Math.max(0, this.nextTime - (this.context?.currentTime ?? 0));
-              playbackTimer = setTimeout(() => finish(), delay * 1000 + 50);
-            }
-          } catch (error) { finish(error instanceof Error ? error : new Error("La lecture a été interrompue.")); }
-        };
-        socket.onerror = () => {
-          this.failure = opened ? "socket error after open" : "handshake refused (token, origin or network)";
-          finish(new Error("Connexion audio perdue. Réessayez."));
-        };
-        socket.onclose = event => {
-          if (finalReceived) return;
-          this.failure = `${opened ? "closed" : "handshake"} code ${event.code}${event.reason ? ` · ${event.reason}` : ""}`;
-          finish(new Error("La lecture a été interrompue."));
-        };
+        const onAbort = () => settle();
+        controller.signal.addEventListener("abort", onAbort, { once: true });
+        element.onended = () => settle();
+        element.onerror = () => { this.failure = "audio element error"; settle(new Error("La lecture a été interrompue.")); };
       });
-      if (!controller.signal.aborted) this.onStatus("idle");
+      if (!controller.signal.aborted) { this.failure = ""; this.onStatus("idle"); }
     } catch (error) {
       if (!controller.signal.aborted) {
-        for (const source of this.sources) source.stop();
-        this.sources.clear(); this.nextTime = 0;
+        this.element?.pause();
         const message = error instanceof Error ? error.message : "La voix est indisponible.";
         this.onStatus("error", message);
         throw new Error(message);

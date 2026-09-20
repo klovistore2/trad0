@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLoader } from './load-ts.mjs';
-import { pcm16ToFloat32 } from '../lib/audio/pcm.ts';
 import { validSample } from '../lib/voice/consent.ts';
 
 const origin = 'http://localhost:3000';
-function request(body, method='POST') { return new Request(`${origin}/api/elevenlabs/token`, {method,headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)}); }
-
-test('PCM decoder preserves negative and positive amplitudes and rejects partial samples', () => {
-  assert.deepEqual([...pcm16ToFloat32(new Uint8Array([0,128,0,0,255,127]))], [-1,0,32767/32768]);
-  assert.throws(() => pcm16ToFloat32(new Uint8Array([1])));
-});
+function request(body, path='/api/elevenlabs/speak', method='POST') { return new Request(`${origin}${path}`, {method,headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)}); }
 
 test('voice samples require supported audio and enough recording time', () => {
   const sample = new File([new Uint8Array(10001)],'voice.webm',{type:'audio/webm;codecs=opus'});
@@ -20,21 +14,51 @@ test('voice samples require supported audio and enough recording time', () => {
   assert.equal(validSample(new File(['text'],'voice.txt',{type:'text/plain'}),45),false);
 });
 
-test('receiver credentials select the other participant’s ready clone, never a client supplied voice ID', async () => {
-  const previous = process.env.NEXT_PUBLIC_APP_URL; process.env.NEXT_PUBLIC_APP_URL=origin;
-  let selected;
+test('relayed speech uses the other participant’s ready clone, never a client supplied voice ID', async () => {
+  const env = {NEXT_PUBLIC_APP_URL:origin, ELEVENLABS_TTS_MODEL:'test-model', ELEVENLABS_API_KEY:'test-key'};
+  const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
+  Object.assign(process.env, env);
+  const originalFetch = globalThis.fetch;
+  let upstream;
+  globalThis.fetch = async (url, init) => {
+    upstream = {url:String(url), body:JSON.parse(init.body), key:init.headers['xi-api-key']};
+    return new Response(new Uint8Array([0,1,2,3]), {status:200});
+  };
   const load = createLoader({
     '@/lib/session/auth': {member: async id => {assert.equal(id,'session');return {slot:0};}},
     '@/lib/neon/db': {db: () => async (strings,...values) => {
       assert.match(strings.join('?'),/slot<>/); assert.deepEqual(values,['session',0]);
       return [{voice_id:'peer-clone',voice_status:'ready'}];
     }},
-    '@/lib/elevenlabs/server': {voiceCredentials: async voice => {selected=voice;return {token:'temporary',voiceId:voice,model:'test-model'};}},
   });
   try {
-    const response = await load('app/api/elevenlabs/token/route.ts').POST(request({sessionId:'session',voiceId:'unrelated-voice'}));
-    assert.equal(response.status,200); assert.equal(selected,'peer-clone');
-  } finally {if(previous===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=previous;}
+    const response = await load('app/api/elevenlabs/speak/route.ts').POST(request({sessionId:'session',voiceId:'unrelated-voice',text:'Bonjour',language:'fr'}));
+    assert.equal(response.status,200);
+    assert.equal(response.headers.get('content-type'),'audio/mpeg');
+    assert.match(upstream.url,/\/peer-clone\/stream/);
+    assert.doesNotMatch(upstream.url,/unrelated-voice/);
+    assert.equal(upstream.body.model_id,'test-model');
+    assert.equal(upstream.body.language_code,'fr');
+    assert.equal(upstream.key,'test-key');
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key,value] of Object.entries(previous)) {if(value===undefined)delete process.env[key];else process.env[key]=value;}
+  }
+});
+
+test('relayed speech refuses empty or oversized text before reaching the provider', async () => {
+  const previousUrl = process.env.NEXT_PUBLIC_APP_URL; process.env.NEXT_PUBLIC_APP_URL=origin;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {throw new Error('provider must not be reached');};
+  const load = createLoader({'@/lib/session/auth': {member: async () => ({slot:0})}, '@/lib/neon/db': {db: () => async () => []}});
+  try {
+    const route = load('app/api/elevenlabs/speak/route.ts');
+    assert.equal((await route.POST(request({text:'   '}))).status,400);
+    assert.equal((await route.POST(request({text:'a'.repeat(4001)}))).status,400);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if(previousUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=previousUrl;
+  }
 });
 
 test('cloning without explicit consent cannot reach database or provider', async () => {
