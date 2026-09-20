@@ -12,7 +12,6 @@ import { AudioDiagnostics } from "./audio-diagnostics";
 export function SharedConversation({ id }: { id: string }) {
   const router = useRouter();
   const session = useSharedConversation(id);
-  const [voiceBusy, setVoiceBusy] = useState(false);
   const [closingMessage, setClosingMessage] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const room = session.room;
@@ -37,7 +36,7 @@ export function SharedConversation({ id }: { id: string }) {
           {session.connectionLost && <p className="quiet-note" role="status">{english ? "Reconnecting…" : "Reconnexion…"}</p>}
           {!session.soundReady && session.received > 0 && <button className="demo-button" onClick={() => void session.enableSound()}>{english ? "Hear the translation" : "Entendre la traduction"}</button>}
           {!session.enabled
-            ? <button disabled={voiceBusy} className="primary-button" onClick={() => void session.start()}>{english ? "Start the conversation" : "Démarrer la conversation"}</button>
+            ? <button className="primary-button" onClick={() => void session.start()}>{english ? "Start the conversation" : "Démarrer la conversation"}</button>
             : session.hasFloor
               ? <>
                   <p className="floor-state live" role="status"><span className="status-dot active" />{english ? "Your microphone is open — speak" : "Votre micro est ouvert — parlez"}</p>
@@ -54,7 +53,7 @@ export function SharedConversation({ id }: { id: string }) {
           {session.enabled && <button className="demo-button sound-toggle" aria-pressed={session.soundOn} onClick={() => session.toggleSound()}>
             {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}
           </button>}
-          <VoiceConsent sessionId={id} voiceStatus={room.me.voiceStatus} english={english} onRecord={session.stop} onBusy={setVoiceBusy} />
+          <VoiceConsent sessionId={id} me={room.me} seconds={session.speechSeconds} english={english} onConsent={() => void session.giveConsent()} onRefresh={session.refresh} />
           <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()} voiceStatus={session.voiceStatus} received={session.received} english={english} me={room.me} peer={room.peer} />
           <button className="demo-button" onClick={() => { session.stop(); setShowInvite(true); }}>{english ? "Invitation link" : "Lien d’invitation"}</button>
         </div>

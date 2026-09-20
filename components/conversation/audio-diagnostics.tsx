@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
+import { FINAL_TIER, VOICE_TIERS } from "@/lib/voice/consent";
 import type { Participant } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
 type AudioState = {
   context: string; stopped: string; failure: string; voice: string;
   range: { frames: number; median: number; range: string | null };
+  speech: number;
   queued: number; speaking: boolean; running: boolean; sound: boolean;
 };
 
@@ -43,15 +45,20 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
     : detected?.frames
       ? `analyse… ${detected.frames} trames${detected.median ? ` · ${detected.median} Hz` : ""}`
       : "en attente de parole";
+  const nextTier = VOICE_TIERS.find(step => step.tier > me.voiceTier);
   const row = (label: string, value: string | number) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>;
   return <details className="audio-diagnostics" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary>{english ? "Voice & sound diagnostics" : "Diagnostic voix et son"}</summary>
     <button className="demo-button" onClick={onTestTone}>{english ? "Play a test beep" : "Jouer un bip de test"}</button>
     <dl>
       {row("Voix entendue ici", state?.voice ?? "—")}
-      {row("Mon clone", cloneLabels[me.voiceStatus])}
+      {row("Mon clone", `${cloneLabels[me.voiceStatus]} · palier ${me.voiceTier}/${FINAL_TIER}`)}
+      {row("Consentement donné", me.consented ? "oui" : "non")}
+      {row("Parole cumulée", me.consented
+        ? `${state?.speech ?? 0} s${nextTier ? ` · prochain palier à ${nextTier.seconds} s` : " · palier final atteint"}`
+        : "capture inactive")}
       {row("Mon registre détecté", rangeLabel)}
-      {row("Clone de l’autre", cloneLabels[peer.voiceStatus])}
+      {row("Clone de l’autre", `${cloneLabels[peer.voiceStatus]} · palier ${peer.voiceTier}/${FINAL_TIER}`)}
       {row("Registre de l’autre", peer.voiceRange === "low" ? "grave" : peer.voiceRange === "high" ? "aigu" : "non détecté")}
       {row("Contexte audio", state?.context ?? "—")}
       {row("Lecture", voiceStatus)}

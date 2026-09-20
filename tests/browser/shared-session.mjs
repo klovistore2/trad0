@@ -108,17 +108,18 @@ try {
  await a.getByText('Les deux micros sont fermés').waitFor();
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
  // Recording a voice sample stops the session, so the microphone stream is released.
+ // Consent is a single tap and is recorded server side; cloning then follows speech on its own.
  await a.getByText('Utiliser ma voix',{exact:true}).click();
  await a.getByRole('button',{name:/J’accepte/}).click();
- await a.getByRole('button',{name:'Annuler',exact:true}).waitFor();
- await a.getByRole('button',{name:'Annuler',exact:true}).click();
+ await a.locator('.voice-consent').getByText(/Parole captée/).waitFor();
+ await a.getByRole('button',{name:'Ne plus utiliser ma voix'}).click();
  await a.getByRole('button',{name:/J’accepte/}).waitFor();
  await a.getByRole('button',{name:'Changer le thème clair ou sombre'}).click();
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice consent/cancel, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;

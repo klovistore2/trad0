@@ -5,6 +5,8 @@ import { NeonPeerTransport } from "@/lib/realtime/neon-transport";
 import { TurnPublisher } from "@/lib/realtime/turn-publisher";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
 import { VoiceRangeDetector } from "@/lib/audio/voice-range";
+import { SpeechRecorder } from "@/lib/audio/speech-recorder";
+import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
 import type { ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
@@ -19,11 +21,15 @@ export function useSharedConversation(id: string) {
   const floorKnown = useRef(false);
   const [claiming, setClaiming] = useState(false);
   const [received, setReceived] = useState(0);
+  const [speechSeconds, setSpeechSeconds] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
   const [soundReady, setSoundReady] = useState(false);
   const soundReadyRef = useRef(false);
   const rearm = useRef<() => void>(() => {});
   const detector = useRef<VoiceRangeDetector | null>(null);
+  const recorder = useRef<SpeechRecorder | null>(null);
+  const cloning = useRef(false);
+  const refreshNow = useRef<() => void>(() => {});
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<TurnPublisher | null>(null);
@@ -48,14 +54,53 @@ export function useSharedConversation(id: string) {
   });
   const translationRef = useRef(translation);
   useEffect(() => { translationRef.current = translation; }, [translation]);
+  // Reaching a tier sends the speech captured so far; the clone in service keeps playing until
+  // the new one is stored, and the request runs in the background so speech is never blocked.
+  const cloneIfDue = useCallback(async () => {
+    const me = roomRef.current?.me;
+    const speech = recorder.current;
+    if (!me?.consented || !speech || cloning.current) return;
+    const seconds = speech.seconds;
+    const target = [...VOICE_TIERS].reverse().find(step => seconds >= step.seconds && step.tier > me.voiceTier);
+    if (!target) return;
+    const samples = speech.samples();
+    if (!samples.length) return;
+    cloning.current = true;
+    try {
+      const form = new FormData();
+      form.set("sessionId", id);
+      form.set("consent", VOICE_CONSENT);
+      form.set("seconds", String(Math.round(seconds)));
+      form.set("tier", String(target.tier));
+      samples.forEach((blob, index) => {
+        const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
+        form.append("sample", blob, `voice-${index}.${extension}`);
+      });
+      const response = await fetch(`/api/voice/clone`, { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      if (target.tier === FINAL_TIER) speech.discard();
+      refreshNow.current();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "La voix n’a pas pu être créée.");
+    } finally { cloning.current = false; }
+  }, [id]);
+
   const syncMicrophone = useCallback(() => {
     const open = micShouldBeOn();
     translationRef.current.setMicrophoneEnabled(open);
-    // Range detection listens to the live stream only while this device is the one speaking.
-    if (!open) return;
+    if (!open) {
+      // End of a turn: pause the capture, then see whether a tier has been reached.
+      recorder.current?.pause();
+      setSpeechSeconds(Math.round(recorder.current?.seconds ?? 0));
+      void cloneIfDue();
+      return;
+    }
     const stream = translationRef.current.getStream?.();
-    if (stream) detector.current?.listen(stream);
-  }, [micShouldBeOn]);
+    if (!stream) return;
+    detector.current?.listen(stream);
+    recorder.current?.listen(stream);
+  }, [micShouldBeOn, cloneIfDue]);
 
   const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
   const playQueue = useCallback(async () => {
@@ -79,6 +124,15 @@ export function useSharedConversation(id: string) {
     }
   }, [id, syncMicrophone, canPlay]);
 
+  // A tier must not wait for the floor to be handed back: someone can hold it for minutes.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSpeechSeconds(Math.round(recorder.current?.seconds ?? 0));
+      void cloneIfDue();
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [cloneIfDue]);
+
   useEffect(() => {
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout>;
@@ -93,6 +147,7 @@ export function useSharedConversation(id: string) {
         body: JSON.stringify({ range }), signal: controller.signal,
       }).catch(() => {});
     });
+    recorder.current = new SpeechRecorder();
     const player = new ElevenLabsVoiceProvider((status, error) => {
       if (controller.signal.aborted) return;
       setVoiceStatus(status);
@@ -150,6 +205,7 @@ export function useSharedConversation(id: string) {
         if (!controller.signal.aborted && ++failures >= 3) setConnectionLost(true);
       } finally { if (!controller.signal.aborted) refreshTimer = setTimeout(() => void refresh(), 3000); }
     }
+    refreshNow.current = () => { void refresh(); };
     async function join() {
       try {
         const response = await fetch(`/api/sessions/${id}/join`, { method: "POST", signal: controller.signal });
@@ -204,7 +260,7 @@ export function useSharedConversation(id: string) {
     return () => {
       controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", visibility);
       document.removeEventListener("pointerdown", armSound); document.removeEventListener("keydown", armSound);
-      unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose(); detector.current?.stop(); detector.current = null;
+      unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose(); detector.current?.stop(); detector.current = null; recorder.current?.stop(); recorder.current = null;
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
@@ -257,6 +313,18 @@ export function useSharedConversation(id: string) {
     if (!next) { queue.current = []; voice.current?.stop(); speaking.current = false; }
     syncMicrophone();
   }
+  async function giveConsent() {
+    setMessage("");
+    try {
+      const response = await fetch("/api/voice/consent", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id, consent: VOICE_CONSENT }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      refreshNow.current();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
+  }
   async function playTestTone() {
     setMessage("");
     try { await voice.current?.testTone(); soundReadyRef.current = true; setSoundReady(true); }
@@ -268,6 +336,7 @@ export function useSharedConversation(id: string) {
     failure: voice.current?.lastFailure || "none",
     voice: voice.current?.lastVoice || "none",
     range: detector.current?.state ?? { frames: 0, median: 0, range: null },
+    speech: Math.round(recorder.current?.seconds ?? 0),
     queued: queue.current.length,
     speaking: speaking.current,
     running: running.current,
@@ -275,5 +344,5 @@ export function useSharedConversation(id: string) {
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, received, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, enableSound, playTestTone, readAudioState };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

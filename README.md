@@ -16,7 +16,7 @@ Variables serveur :
 - `OPENAI_API_KEY` et `OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate`.
 - `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
-- `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus les colonnes `adu_sessions.floor_slot` (tour de parole) et `adu_participants.voice_range` (registre détecté). `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
+- `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus les colonnes `adu_sessions.floor_slot` (tour de parole), `adu_participants.voice_range` (registre détecté) et `adu_participants.voice_tier` (palier de clonage). `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
 - `CRON_SECRET` : secret aléatoire pour protéger la purge des voix. Obligatoire pour autoriser le clonage.
 - `NEXT_PUBLIC_APP_URL` : origine exacte du site, par exemple `http://localhost:3000` en local.
 
@@ -65,11 +65,17 @@ C'est une mesure de **hauteur de voix**, pas une affirmation sur la personne : d
 
 ## Cloner sa voix
 
-Dans une conversation partagée, ouvrir **Utiliser ma voix**, puis accepter explicitement l’enregistrement de sa propre voix pour cette session. Parler seul, au calme, pendant 30 à 60 secondes. L’application met la conversation en pause pendant l’enregistrement ; elle n’enregistre pas silencieusement le dialogue.
+Le clonage est **progressif** et démarre après un seul accord. Dans une conversation partagée, ouvrir **Utiliser ma voix** et accepter. Rien n'est enregistré avant cet appui.
 
-L’extrait est envoyé à ElevenLabs, jamais écrit dans Neon ou sur le disque de l’application. Dès que le clone est prêt, les nouvelles traductions reçues par l’autre participant utilisent ce clone. Si ElevenLabs exige une vérification, la voix standard reste utilisée. L’accès au clonage dépend des droits et de l’offre ElevenLabs du compte.
+Ensuite l'application capte vos tours de parole pendant que vous parlez, et seulement eux : l'enregistreur est mis en pause par le même signal que le micro, donc ni les silences ni la voix de l'autre personne n'entrent dans l'échantillon. La durée retenue est la parole effective, pas le temps écoulé.
 
-**Supprimer ma voix** retire son clone. **Terminer la session et supprimer les voix** ferme la session pour les deux participants et supprime leurs clones. Une fermeture d’onglet n’équivaut pas à cette action : les sessions expirent au bout d’une heure et la purge prend le relais.
+Deux paliers : un premier clone vers **30 secondes** de parole, une version affinée vers **150 secondes**, puis plus jamais. Le clone en service reste utilisé jusqu'à ce que le suivant soit créé et enregistré ; l'ancien n'est supprimé qu'après la bascule, jamais avant. Après le palier final, l'audio en mémoire est effacé.
+
+L'échantillon vit uniquement dans la mémoire du navigateur, n'est jamais écrit dans Neon ni sur le disque de l'application, et part directement chez ElevenLabs au moment du clonage. Si le flux micro est recréé — retour d'arrière-plan, reprise — le conteneur en cours ne peut pas être prolongé : il est conservé entier comme segment et le clonage envoie plusieurs fichiers de la même voix.
+
+**Ne plus utiliser ma voix** retire le consentement et supprime le clone. **Terminer la session et supprimer les voix** ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
+
+Si ElevenLabs exige une vérification, la voix standard reste utilisée. L'accès au clonage dépend des droits et de l'offre ElevenLabs du compte.
 
 ### Purge obligatoire
 
@@ -116,4 +122,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 24 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 29 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

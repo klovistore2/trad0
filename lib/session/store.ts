@@ -27,7 +27,7 @@ export async function joinSession(id: string) {
 export async function sessionState(id: string): Promise<SharedSession> {
   const me = await member(id); const sql = db();
   await sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`;
-  const rows = await sql`SELECT slot, language, voice_status as "voiceStatus", voice_range as "voiceRange", last_seen>now()-interval '15 seconds' as online FROM adu_participants WHERE session_id=${id} ORDER BY slot`;
+  const rows = await sql`SELECT slot, language, voice_status as "voiceStatus", voice_range as "voiceRange", voice_tier as "voiceTier", consent_at IS NOT NULL as consented, last_seen>now()-interval '15 seconds' as online FROM adu_participants WHERE session_id=${id} ORDER BY slot`;
   return { id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
 }
 

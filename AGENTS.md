@@ -19,8 +19,10 @@ real failures on real devices.
 
 - **Milestones 1–4.** Microphone → OpenAI Realtime Translation over WebRTC (ephemeral token from
   `/api/openai/realtime-token`) → translated text → sent to the peer → spoken to the receiver.
-- **Milestone 5, partially.** Manual, explicitly consented, one-shot voice clone. Progressive
-  cloning is designed but not built (see *Remaining*).
+- **Milestone 5.** Progressive cloning behind a single consent tap. One `MediaRecorder` per
+  microphone stream, paused by the same signal as the floor, so only the speaker's own turns are
+  captured. Tiers at 30 s and 150 s of effective speech, then never again. The clone in service is
+  replaced only once the new one is stored, and the old one deleted only after that swap.
 - **Turn taking**, not in the specification below. Exactly one microphone open at a time.
 - **Vocal range detection**, not in the specification below. Picks a fitting standard voice
   before any clone exists.
@@ -40,7 +42,6 @@ real failures on real devices.
 ### Not built
 
 - **Milestone 6**, text input fallback.
-- **Progressive cloning** (tiers, automatic re-clone).
 - **Language selection or detection.** French ↔ Thai, the primary target use case, is not reachable.
 - **Manual correction of the detected vocal range.** The specification requires every detected
   value to be correctable; this one is not yet. Fix this before any non-developer uses the app.
@@ -67,14 +68,12 @@ real failures on real devices.
 ### Remaining work, in agreed order
 
 1. **Ergonomics — done.** One button per state, sound on by default, explicit floor.
-2. **Progressive cloning.** Agreed design: a single `MediaRecorder` for the whole session driven by
-   `pause()` / `resume()` from the same signal as the floor — never concatenate separate recorder
-   outputs, each carries its own container header and the result is silently truncated. Count only
-   active speech; use transcript length purely as a plausibility filter to drop empty segments.
-   Tiers around 30 s, then 2–3 minutes, then never again. Keep the current clone until the next one
-   is created **and** verified, then swap `voice_id`, then delete the old one. Buffer in browser RAM
-   only, freed after the final clone. Blocker to lift: `app/api/voice/clone/route.ts` guards on
-   `voice_id IS NULL`, so a second clone is refused; replace it with a tier or generation column.
+2. **Progressive cloning — done.** Two traps worth keeping in mind if you touch it: never build a
+   sample by concatenating the output of *separate* `MediaRecorder` runs — each carries its own
+   container header and the result is silently truncated, so completed recordings are kept whole and
+   sent as several files; and never delete the clone in service before the replacement has been
+   stored. Transcript length as a plausibility filter is designed but not wired: empty or noisy
+   segments are still counted.
 3. **Latency.** Roughly 2.5 s after a sentence ends, plus the 700 ms the relay added. Levers, by
    value: stream text to the speech route instead of waiting for a committed sentence; pre-open the
    connection; replace 500 ms polling with push; lower the commit fallback from 1000 ms.
@@ -837,7 +836,8 @@ DELETE /api/sessions/[id]/floor           release it, leaving both microphones c
 POST   /api/sessions/[id]/voice-range     record the detected vocal range, "low" or "high"
 POST   /api/openai/realtime-token         ephemeral OpenAI credential
 POST   /api/elevenlabs/speak              relay speech as audio/mpeg (replaces the token route)
-POST   /api/voice/clone                   create a consented clone
+POST   /api/voice/consent                 record consent once per session, gates every tier
+POST   /api/voice/clone                   create or replace a clone at a given tier
 DELETE /api/voice                         delete one's own clone
 GET    /api/cleanup                       scheduled purge, guarded by CRON_SECRET
 ```
@@ -1069,7 +1069,7 @@ Optimize end-to-end latency.
 
 Milestone 5
 
-**Status: partial** — manual, consented, one-shot clone. Progressive cloning is next; its design is in the status section.
+**Status: done** — progressive, behind one consent tap. Tiers at 30 s and 150 s of effective speech.
 
 Voice cloning.
 

@@ -142,8 +142,8 @@ test('consented clone uses multipart samples and stores readiness; an expired se
     '@/lib/session/auth':{member:async()=>({slot:0})},
     '@/lib/neon/db':{db:()=>async(strings,...values)=>{
       const sql=strings.join('?');
-      if(sql.includes("voice_status='learning'"))return [{slot:0}];
-      if(sql.includes('SET voice_id=')){assert.equal(values[0],'synthetic-clone');assert.equal(values[1],'ready');return saveAllowed?[{slot:0}]:[];}
+      if(sql.includes("SET voice_status='learning'")){assert.match(sql,/consent_at IS NOT NULL/);assert.match(sql,/voice_tier</);return [{previousVoiceId:null}];}
+      if(sql.includes('SET voice_id=')){assert.equal(values[0],'synthetic-clone');assert.equal(values[1],'ready');assert.equal(values[2],1);return saveAllowed?[{slot:0}]:[];}
       return [];
     }},
     '@/lib/elevenlabs/server':{elevenHeaders:()=>({'xi-api-key':'test-key'}),deleteVoice:async id=>{deleted=id;}},
@@ -154,12 +154,42 @@ test('consented clone uses multipart samples and stores readiness; an expired se
     assert.equal(JSON.parse(options.body.get('labels')).app,'a-deux-session');
     return Response.json({voice_id:'synthetic-clone',requires_verification:false});
   };
-  const make=()=>{const form=new FormData();form.set('sessionId','synthetic-session');form.set('consent','session-voice-v1');form.set('seconds','45');form.set('sample',new File([new Uint8Array(10001)],'voice.webm',{type:'audio/webm'}));return new Request(`${origin}/api/voice/clone`,{method:'POST',headers:{origin},body:form});};
+  const make=()=>{const form=new FormData();form.set('sessionId','synthetic-session');form.set('consent','session-voice-v1');form.set('seconds','45');form.set('tier','1');form.set('sample',new File([new Uint8Array(10001)],'voice.webm',{type:'audio/webm'}));return new Request(`${origin}/api/voice/clone`,{method:'POST',headers:{origin},body:form});};
   try {
     const route=load('app/api/voice/clone/route.ts');
     const result=await route.POST(make());assert.equal(result.status,200);assert.equal((await result.json()).status,'ready');
     saveAllowed=false;
     assert.equal((await route.POST(make())).status,409);assert.equal(deleted,'synthetic-clone');
+  } finally {
+    globalThis.fetch=oldFetch;
+    if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;
+    if(oldSecret===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=oldSecret;
+  }
+});
+
+test('a later tier replaces the clone in service and only then deletes the previous one', async () => {
+  const oldUrl=process.env.NEXT_PUBLIC_APP_URL, oldSecret=process.env.CRON_SECRET, oldFetch=globalThis.fetch;
+  process.env.NEXT_PUBLIC_APP_URL=origin; process.env.CRON_SECRET='test-cleanup-secret';
+  const order=[];let swapSucceeds=true;
+  const load=createLoader({
+    '@/lib/session/auth':{member:async()=>({slot:0})},
+    '@/lib/neon/db':{db:()=>async(strings,...values)=>{
+      const sql=strings.join('?');
+      if(sql.includes("SET voice_status='learning'")){order.push('lease');return [{previousVoiceId:'tier-one-clone'}];}
+      if(sql.includes('SET voice_id=')){order.push('swap');assert.equal(values[2],2);return swapSucceeds?[{slot:0}]:[];}
+      return [];
+    }},
+    '@/lib/elevenlabs/server':{elevenHeaders:()=>({'xi-api-key':'test-key'}),deleteVoice:async id=>{order.push('delete:'+id);}},
+  });
+  globalThis.fetch=async()=>Response.json({voice_id:'tier-two-clone',requires_verification:false});
+  const make=()=>{const form=new FormData();form.set('sessionId','synthetic-session');form.set('consent','session-voice-v1');form.set('seconds','160');form.set('tier','2');form.set('sample',new File([new Uint8Array(40001)],'voice.webm',{type:'audio/webm'}));return new Request(`${origin}/api/voice/clone`,{method:'POST',headers:{origin},body:form});};
+  try {
+    const route=load('app/api/voice/clone/route.ts');
+    assert.equal((await route.POST(make())).status,200);
+    assert.deepEqual(order,['lease','swap','delete:tier-one-clone'],'the old clone must outlive the swap');
+    order.length=0; swapSucceeds=false;
+    assert.equal((await route.POST(make())).status,409);
+    assert.deepEqual(order,['lease','swap','delete:tier-two-clone'],'a failed swap discards the new clone, never the one in service');
   } finally {
     globalThis.fetch=oldFetch;
     if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;
