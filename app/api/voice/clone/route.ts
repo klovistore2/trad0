@@ -9,7 +9,11 @@ export async function POST(request: Request) {
   let sessionId: string | undefined; let slot: number | undefined; let locked = false;
   try {
     checkOrigin(request);
-    if (!process.env.CRON_SECRET) throw new HttpError(503, "La suppression automatique des voix doit être configurée avant le clonage.");
+    if (!process.env.CRON_SECRET) {
+      // Detailed cause stays in the development log; the user only needs to know the fallback holds.
+      if (process.env.NODE_ENV === "development") console.error("CRON_SECRET is missing: cloning stays disabled until the purge is configured.");
+      throw new HttpError(503, "La voix personnalisée n’est pas disponible. La voix standard reste utilisée.");
+    }
     // Bound the multipart payload before parsing it. No audio is written to disk.
     const reader = request.body?.getReader();
     if (!reader) throw new HttpError(400, "Enregistrement manquant.");

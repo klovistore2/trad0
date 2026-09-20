@@ -9,7 +9,11 @@ export async function POST(request: Request, context: RouteContext<"/api/voice/c
   void context;
   try {
     checkOrigin(request);
-    if (!process.env.CRON_SECRET) throw new HttpError(503, "La suppression automatique des voix doit être configurée avant le clonage.");
+    if (!process.env.CRON_SECRET) {
+      // Detailed cause stays in the development log; the user only needs to know the fallback holds.
+      if (process.env.NODE_ENV === "development") console.error("CRON_SECRET is missing: cloning stays disabled until the purge is configured.");
+      throw new HttpError(503, "La voix personnalisée n’est pas disponible. La voix standard reste utilisée.");
+    }
     const body = await readJson(request);
     if (body.consent !== VOICE_CONSENT) throw new HttpError(400, "Votre consentement est nécessaire pour utiliser votre voix.");
     if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
