@@ -23,7 +23,9 @@ real failures on real devices.
   microphone stream, paused by the same signal as the floor, so only the speaker's own turns are
   captured. Tiers at 30 s and 150 s of effective speech, then never again. The clone in service is
   replaced only once the new one is stored, and the old one deleted only after that swap.
-- **Turn taking**, not in the specification below. Exactly one microphone open at a time.
+- **Turn taking**, not in the specification below. Exactly one microphone open at a time. Starting
+  the conversation claims the floor in the same tap, but **only when it is free**: a second person
+  starting up while someone speaks must never take the microphone from them.
 - **Vocal range detection**, not in the specification below. Picks a fitting standard voice
   before any clone exists.
 - **Accounts (Auth.js, Google only, users in Neon)** for the person creating a conversation, so
@@ -63,6 +65,9 @@ real failures on real devices.
   memory to ElevenLabs. Vocal range detection transmits only the word `low` or `high`.
 - `adu_events` holds text only, erased at session end or by the purge.
 - `CRON_SECRET` must be set before cloning is allowed, because expired clones need the purge.
+- **Instant voice cloning needs a paid ElevenLabs plan.** A free key synthesises speech but answers
+  `paid_plan_required` to `/v1/voices/add`, so everything except cloning works. Provider refusals
+  are logged in development: never swallow the provider's own explanation again.
 - A voice saved to an account is **never** deleted by a session ending or by the purge. Session
   clones are labelled `a-deux-session` and swept by session id; account clones are labelled
   `a-deux-user` and only the account can remove them. Any new deletion path must keep that split.

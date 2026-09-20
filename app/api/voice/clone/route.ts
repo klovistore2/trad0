@@ -53,7 +53,11 @@ export async function POST(request: Request) {
     for (const sample of samples) payload.append("files", sample, sample.name);
     const response = await fetch("https://api.elevenlabs.io/v1/voices/add", { method: "POST", headers: elevenHeaders(), body: payload, signal: AbortSignal.timeout(45_000) });
     const data = await response.json();
-    if (!response.ok || typeof data.voice_id !== "string") throw new HttpError(502, "La création de voix a échoué. Vérifiez votre accès au clonage ElevenLabs ; la voix standard reste disponible.");
+    if (!response.ok || typeof data.voice_id !== "string") {
+      // The provider explains itself; throwing that away cost a long investigation once.
+      if (process.env.NODE_ENV === "development") console.error("Voice cloning refused:", JSON.stringify(data?.detail ?? data).slice(0, 400));
+      throw new HttpError(502, "La création de voix a échoué. Vérifiez votre accès au clonage ElevenLabs ; la voix standard reste disponible.");
+    }
     const status = data.requires_verification ? "verification_required" : "ready";
     // If the session ended while ElevenLabs was processing, delete the new voice.
     const saved = await sql`UPDATE adu_participants SET voice_id=${data.voice_id}, voice_status=${status}, voice_tier=${tier}, cloning_until=NULL

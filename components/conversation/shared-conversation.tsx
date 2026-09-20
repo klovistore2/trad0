@@ -51,7 +51,9 @@ export function SharedConversation({ id }: { id: string }) {
           {session.connectionLost && <p className="quiet-note" role="status">{english ? "Reconnecting…" : "Reconnexion…"}</p>}
           {!session.soundReady && session.received > 0 && <button className="demo-button" onClick={() => void session.enableSound()}>{english ? "Hear the translation" : "Entendre la traduction"}</button>}
           {!session.enabled
-            ? <button className="primary-button" onClick={() => void session.start()}>{english ? "Start the conversation" : "Démarrer la conversation"}</button>
+            ? <button className="primary-button" onClick={() => void session.start()}>{session.floorFree
+                ? (english ? "Start talking" : "Commencer à parler")
+                : (english ? "Join in · they are speaking" : "Rejoindre · l’autre personne parle")}</button>
             : session.hasFloor
               ? <>
                   <p className="floor-state live" role="status"><span className="status-dot active" />{english ? "Your microphone is open — speak" : "Votre micro est ouvert — parlez"}</p>

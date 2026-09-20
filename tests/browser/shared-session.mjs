@@ -74,16 +74,14 @@ try {
  // Accepting from the dialog records consent server side, with no trip through settings.
  await b.getByRole('button',{name:'Use my voice'}).click();
  await expect(b.getByRole('dialog')).toHaveCount(0);
- await b.getByRole('button',{name:'Start the conversation'}).waitFor();
- await a.getByRole('button',{name:'Démarrer la conversation'}).waitFor();
+ // Nobody is speaking yet, so both sides are offered the one-tap start.
+ await b.getByRole('button',{name:'Start talking'}).waitFor();
+ await a.getByRole('button',{name:'Commencer à parler'}).waitFor();
  const c=await client();await c.goto(link);
  await expect(c.locator('.error-message')).toContainText(/terminée|inaccessible/);
- await a.getByRole('button',{name:'Démarrer la conversation'}).click();
+ // A single tap starts the conversation and claims the free floor: no second press to speak.
+ await a.getByRole('button',{name:'Commencer à parler'}).click();
  await a.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
- // No one holds the floor at first, so no microphone can capture the other device's speaker.
- await a.getByText('Les deux micros sont fermés').waitFor();
- await a.waitForFunction(()=>window.testMicrophone.enabled===false);
- await a.getByRole('button',{name:'Parler',exact:true}).click();
  await a.getByText('Votre micro est ouvert — parlez').waitFor();
  await a.waitForFunction(()=>window.testMicrophone.enabled===true);
  // A listener who never started a microphone session hears anyway: any touch arms playback,
@@ -98,8 +96,8 @@ try {
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'A second sentence plays by itself.'})}));
  await b.getByText('A second sentence plays by itself.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
- // Joining in with a microphone keeps exactly one open, because A holds the floor.
- await b.getByRole('button',{name:'Start the conversation'}).click();
+ // Joining while someone speaks must never steal the floor, so B's tap only starts listening.
+ await b.getByRole('button',{name:/Join in/}).click();
  await b.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
  await a.waitForFunction(()=>window.testMicrophone.enabled===true);
  await b.waitForFunction(()=>window.testMicrophone.enabled===false);
@@ -156,7 +154,7 @@ try {
  }
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, voice consent and withdrawal, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(process.env.DATABASE_URL) {

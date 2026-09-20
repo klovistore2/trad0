@@ -29,6 +29,8 @@ export function useSharedConversation(id: string) {
   const detector = useRef<VoiceRangeDetector | null>(null);
   const recorder = useRef<SpeechRecorder | null>(null);
   const cloning = useRef(false);
+  // A provider that refuses to clone will refuse again: stop asking every ten seconds.
+  const cloningBlocked = useRef(false);
   const refreshNow = useRef<() => void>(() => {});
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
@@ -59,7 +61,7 @@ export function useSharedConversation(id: string) {
   const cloneIfDue = useCallback(async () => {
     const me = roomRef.current?.me;
     const speech = recorder.current;
-    if (!me?.consented || !speech || cloning.current) return;
+    if (!me?.consented || !speech || cloning.current || cloningBlocked.current) return;
     const seconds = speech.seconds;
     const target = [...VOICE_TIERS].reverse().find(step => seconds >= step.seconds && step.tier > me.voiceTier);
     if (!target) return;
@@ -82,6 +84,7 @@ export function useSharedConversation(id: string) {
       if (target.tier === FINAL_TIER) speech.discard();
       refreshNow.current();
     } catch (error) {
+      cloningBlocked.current = true;
       setMessage(error instanceof Error ? error.message : "La voix n’a pas pu être créée.");
     } finally { cloning.current = false; }
   }, [id]);
@@ -283,7 +286,10 @@ export function useSharedConversation(id: string) {
       await unlockSound();
       running.current = true; setEnabled(true); stopped.current = "running";
       await translation.start();
-      syncMicrophone();
+      // One tap should be enough to speak. Claiming only a free floor keeps the guarantee that
+      // a second person starting up cannot steal the microphone from whoever is talking.
+      if (floorRef.current === null) await takeFloor();
+      else syncMicrophone();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
   }
   function stop() {
@@ -322,6 +328,8 @@ export function useSharedConversation(id: string) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
+      // Agreeing again is an explicit retry, so cloning gets another chance.
+      cloningBlocked.current = false;
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
   }, [id]);

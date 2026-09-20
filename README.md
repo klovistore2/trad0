@@ -57,7 +57,7 @@ Google n'accepte pas de joker : une URL de preview Vercel, qui change à chaque 
 
 1. Se connecter, puis cliquer **Parler à deux · inviter quelqu’un**.
 2. Scanner le QR ou ouvrir le lien sur le second appareil.
-3. Chaque participant touche **Démarrer la conversation** / **Start the conversation**. Le micro et le son s’activent dans le même geste ; le navigateur n’a pas de permission séparée pour la lecture audio.
+3. Chaque participant touche **Commencer à parler** / **Start talking**. Micro, son et prise de parole s’activent dans le même geste — un seul appui suffit pour parler.
 
 La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. **Son activé · toucher pour le texte seul** coupe la lecture si besoin.
 4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
@@ -108,7 +108,11 @@ L'échantillon vit uniquement dans la mémoire du navigateur, n'est jamais écri
 
 **Ne plus utiliser ma voix** retire le consentement et supprime le clone. **Terminer la session et supprimer les voix**, au bas des paramètres, ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
 
-Si ElevenLabs exige une vérification, la voix standard reste utilisée. L'accès au clonage dépend des droits et de l'offre ElevenLabs du compte.
+Si ElevenLabs exige une vérification, la voix standard reste utilisée.
+
+**Le clonage instantané demande une offre ElevenLabs payante.** Sur l'offre gratuite, la synthèse vocale fonctionne mais la création de voix renvoie `paid_plan_required` et l'application reste sur la voix standard adaptée au registre. La cause exacte renvoyée par le fournisseur est écrite dans le log serveur en développement. Après un refus, l'application cesse de réessayer jusqu'à ce que l'accord soit redonné, pour ne pas renvoyer l'échantillon toutes les dix secondes.
+
+La clé API doit porter les permissions `voices_read` et `voices_write` en plus de la synthèse.
 
 ### Purge obligatoire
 
