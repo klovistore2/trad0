@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { FINAL_TIER, VOICE_TIERS } from "@/lib/voice/consent";
+import { rememberVoiceDecision } from "./voice-intro";
 import type { Participant } from "@/types/session";
 
 // Consent is given once, then the clone improves on its own from the conversation.
@@ -31,7 +32,7 @@ export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRef
           <p>{english
             ? "The recording stays in this browser, is never stored on our servers, and the clone is deleted when the session ends."
             : "L’enregistrement reste dans ce navigateur, n’est jamais stocké sur nos serveurs, et le clone est supprimé à la fin de la session."}</p>
-          <button className="demo-button" disabled={busy} onClick={async () => { setBusy(true); await onConsent(); setBusy(false); }}>
+          <button className="demo-button" disabled={busy} onClick={async () => { setBusy(true); rememberVoiceDecision("accepted"); await onConsent(); setBusy(false); }}>
             {english ? "I agree · use my voice for this session" : "J’accepte · utiliser ma voix pour cette session"}
           </button>
         </>
@@ -48,7 +49,8 @@ export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRef
               const response = await fetch("/api/voice", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId }) });
               const data = await response.json();
               if (!response.ok) throw new Error(data.error);
-              // Withdrawing must refresh the session, never re-grant consent.
+              // Remember the refusal: forgetting it would re-apply consent, or reopen the dialog.
+              rememberVoiceDecision("declined");
               onRefresh();
             } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
             finally { setBusy(false); }

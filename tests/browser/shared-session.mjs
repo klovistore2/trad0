@@ -44,9 +44,15 @@ try {
  const a=await client();await a.goto('/');
  await a.getByRole('button',{name:/Parler à deux/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
+ // The voice choice is asked once, on arrival. Declining keeps a standard voice.
+ await a.getByRole('button',{name:/Pas maintenant/}).click();
+ await expect(a.getByRole('dialog')).toHaveCount(0);
  await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
  const link=await a.getByRole('textbox',{name:'Lien d’invitation'}).inputValue();assert.match(link,/\/join\//);
  const b=await client();await b.goto(link);
+ // Accepting from the dialog records consent server side, with no trip through settings.
+ await b.getByRole('button',{name:'Use my voice'}).click();
+ await expect(b.getByRole('dialog')).toHaveCount(0);
  await b.getByRole('button',{name:'Start the conversation'}).waitFor();
  await a.getByRole('button',{name:'Démarrer la conversation'}).waitFor();
  const c=await client();await c.goto(link);
@@ -122,9 +128,14 @@ try {
  await a.getByRole('button',{name:'Changer le thème clair ou sombre'}).click();
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});
  assert.deepEqual(errors,[]);
+ if (process.env.DATABASE_URL) {
+  // What the dialog and the settings did is what reached the database: A declined then withdrew, B accepted.
+  const consent=await neon(process.env.DATABASE_URL)`SELECT slot, consent_at IS NOT NULL AS consented FROM adu_participants WHERE session_id=${sessionId} ORDER BY slot`;
+  assert.deepEqual(consent.map(row=>row.consented),[false,true]);
+ }
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, settings panel, voice consent and withdrawal, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, settings panel, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;

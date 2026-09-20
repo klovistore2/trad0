@@ -19,7 +19,7 @@ real failures on real devices.
 
 - **Milestones 1–4.** Microphone → OpenAI Realtime Translation over WebRTC (ephemeral token from
   `/api/openai/realtime-token`) → translated text → sent to the peer → spoken to the receiver.
-- **Milestone 5.** Progressive cloning behind a single consent tap. One `MediaRecorder` per
+- **Milestone 5.** Progressive cloning behind a one-time consent dialog, remembered across sessions. One `MediaRecorder` per
   microphone stream, paused by the same signal as the floor, so only the speaker's own turns are
   captured. Tiers at 30 s and 150 s of effective speech, then never again. The clone in service is
   replaced only once the new one is stored, and the old one deleted only after that swap.
@@ -59,6 +59,12 @@ real failures on real devices.
   memory to ElevenLabs. Vocal range detection transmits only the word `low` or `high`.
 - `adu_events` holds text only, erased at session end or by the purge.
 - `CRON_SECRET` must be set before cloning is allowed, because expired clones need the purge.
+- Cloning consent is asked **once**, in a dialog on arrival, and the answer is remembered in
+  `localStorage` for every later conversation. The behaviour is identical in development and
+  production: an environment-dependent consent rule was tried and removed, because a feature that
+  behaves differently in dev than in prod is the kind of thing that hides bugs until release.
+  Settings and the dialog write the same memory, and withdrawing records a refusal rather than
+  forgetting — forgetting would reopen the dialog on top of the app.
 - `/api/elevenlabs/speak` resolves the voice **server-side** from the peer's row. A client-supplied
   voice ID is never accepted.
 - **Playback must not depend on the microphone session.** Someone who only wants to listen hears
@@ -1071,7 +1077,7 @@ Optimize end-to-end latency.
 
 Milestone 5
 
-**Status: done** — progressive, behind one consent tap. Tiers at 30 s and 150 s of effective speech.
+**Status: done** — progressive, behind a one-time remembered consent dialog. Tiers at 30 s and 150 s of effective speech.
 
 Voice cloning.
 

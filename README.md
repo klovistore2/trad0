@@ -67,7 +67,13 @@ C'est une mesure de **hauteur de voix**, pas une affirmation sur la personne : d
 
 ## Cloner sa voix
 
-Le clonage est **progressif** et démarre après un seul accord. Ouvrir les **paramètres** (roue dentée, en haut), puis **Utiliser ma voix**, et accepter. Rien n'est enregistré avant cet appui.
+Le clonage est **progressif**.
+
+Le choix est demandé **une seule fois**, dans une fenêtre à l'arrivée sur une conversation : utiliser sa voix, ou garder une voix standard. La réponse est mémorisée dans le navigateur et ne sera plus jamais redemandée, y compris dans les conversations suivantes. Le comportement est identique en développement et en production.
+
+Si vous acceptez, le clonage part tout seul : rien d'autre à toucher. Si vous refusez, la voix standard adaptée à votre registre est utilisée. **Utiliser ma voix** dans les paramètres permet de revenir sur un refus, **Ne plus utiliser ma voix** sur un accord — les deux écrivent la même mémoire, donc la fenêtre ne réapparaît pas.
+
+Rien n'est enregistré avant l'accord.
 
 Ensuite l'application capte vos tours de parole pendant que vous parlez, et seulement eux : l'enregistreur est mis en pause par le même signal que le micro, donc ni les silences ni la voix de l'autre personne n'entrent dans l'échantillon. La durée retenue est la parole effective, pas le temps écoulé.
 

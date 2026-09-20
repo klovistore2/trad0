@@ -19,3 +19,4 @@ export function validSamples(files: File[], seconds: number) {
 export function validSample(file: File, seconds: number) {
   return validSamples([file], seconds);
 }
+

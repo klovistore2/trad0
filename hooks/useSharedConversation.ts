@@ -313,7 +313,7 @@ export function useSharedConversation(id: string) {
     if (!next) { queue.current = []; voice.current?.stop(); speaking.current = false; }
     syncMicrophone();
   }
-  async function giveConsent() {
+  const giveConsent = useCallback(async () => {
     setMessage("");
     try {
       const response = await fetch("/api/voice/consent", {
@@ -324,7 +324,7 @@ export function useSharedConversation(id: string) {
       if (!response.ok) throw new Error(data.error);
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
-  }
+  }, [id]);
   async function playTestTone() {
     setMessage("");
     try { await voice.current?.testTone(); soundReadyRef.current = true; setSoundReady(true); }

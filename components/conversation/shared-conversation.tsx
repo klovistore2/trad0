@@ -6,6 +6,7 @@ import { languageNames } from "@/types/session";
 import { ThemeToggle } from "./theme-toggle";
 import { ShareSession } from "./share-session";
 import { SettingsPanel } from "./settings-panel";
+import { VoiceIntro } from "./voice-intro";
 
 export function SharedConversation({ id }: { id: string }) {
   const session = useSharedConversation(id);
@@ -13,6 +14,7 @@ export function SharedConversation({ id }: { id: string }) {
   const room = session.room;
   const english = room?.me.language === "en";
   return <main className="conversation">
+    {room && <VoiceIntro consented={room.me.consented} english={english} onAccept={session.giveConsent} />}
     <header className="topbar">
       <Link className="wordmark" href="/">à deux<span className="brand-dot">.</span></Link>
       <div className="topbar-actions">

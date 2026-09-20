@@ -172,3 +172,9 @@ button:disabled { opacity: .5; cursor: wait; }
 .settings-group .share-session { padding: 8px 0; }
 .settings-danger button { color: var(--error); }
 @media (max-width: 600px) { .settings h1 { font-size: 30px; } }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; padding: 24px; background: color-mix(in srgb, var(--ink) 55%, transparent); }
+.modal { width: min(100%, 420px); max-height: 90svh; overflow-y: auto; background: var(--background); border: 1px solid var(--surface-border); border-radius: 20px; padding: 28px 24px 20px; text-align: center; }
+.modal h2 { font-size: 24px; margin: 0 0 16px; }
+.modal p { font-size: 13px; line-height: 1.7; color: var(--muted); margin: 0 0 14px; text-align: left; }
+.modal .primary-button { margin-top: 6px; }
