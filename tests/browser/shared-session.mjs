@@ -50,7 +50,12 @@ try {
  await expect(c.locator('.error-message')).toContainText(/terminée|inaccessible/);
  await a.getByRole('button',{name:'Démarrer la conversation'}).click();
  await a.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
- await a.getByText('À vous — parlez').waitFor();
+ // No one holds the floor at first, so no microphone can capture the other device's speaker.
+ await a.getByText('Les deux micros sont fermés').waitFor();
+ await a.waitForFunction(()=>window.testMicrophone.enabled===false);
+ await a.getByRole('button',{name:'Parler',exact:true}).click();
+ await a.getByText('Votre micro est ouvert — parlez').waitFor();
+ await a.waitForFunction(()=>window.testMicrophone.enabled===true);
  // A listener who never started a microphone session hears anyway: any touch arms playback,
  // and nothing specific has to be pressed.
  await b.locator('.translation-area').click();
@@ -63,7 +68,7 @@ try {
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'A second sentence plays by itself.'})}));
  await b.getByText('A second sentence plays by itself.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
- // Joining in with a microphone keeps exactly one open, because the creator holds the floor.
+ // Joining in with a microphone keeps exactly one open, because A holds the floor.
  await b.getByRole('button',{name:'Start the conversation'}).click();
  await b.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
  await a.waitForFunction(()=>window.testMicrophone.enabled===true);
@@ -94,6 +99,11 @@ try {
  await a.getByRole('button',{name:'À moi de parler'}).waitFor();
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Ceci est un test de traduction.'})}));
  await a.getByText('Ceci est un test de traduction.',{exact:true}).waitFor();
+ // Handing the floor back leaves both microphones closed, the resting state of a session.
+ await b.getByRole('button',{name:'Done speaking'}).click();
+ await b.waitForFunction(()=>window.testMicrophone.enabled===false);
+ await a.getByText('Les deux micros sont fermés').waitFor();
+ await a.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.getByRole('button',{name:'Mettre en pause'}).click();
  await a.waitForFunction(()=>window.testMicrophone.readyState==='ended');
  await a.getByText('Utiliser ma voix',{exact:true}).click();
@@ -106,7 +116,7 @@ try {
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor handover, playback across a hidden screen, poll failure recovery, sound toggle, voice consent/cancel, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice consent/cancel, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(sessionId && process.env.DATABASE_URL)await neon(process.env.DATABASE_URL)`DELETE FROM adu_sessions WHERE id=${sessionId}`;

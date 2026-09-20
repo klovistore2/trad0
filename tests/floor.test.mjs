@@ -63,6 +63,19 @@ test("a poll issued after a claim still reflects the other participant", async (
   peer.disconnect();
 });
 
+test("releasing the floor leaves it free for either participant", async () => {
+  const Transport = load(async (url, options) => reply(url.includes("/floor") ? { floor: options?.method === "DELETE" ? null : 1 } : { events: [], floor: null }));
+  const peer = new Transport(() => {});
+  const seen = [];
+  peer.onFloor(slot => seen.push(slot));
+  assert.equal(await peer.takeFloor(), 1);
+  assert.equal(await peer.releaseFloor(), null);
+  await tick();
+  await peer.connect("session");
+  assert.deepEqual(seen, [1, null, null], "a free floor must reach both sides as null");
+  peer.disconnect();
+});
+
 test("a refused claim surfaces the server message", async () => {
   const Transport = load(async () => ({ ok: false, status: 403, json: async () => ({ error: "Cette conversation est terminée ou inaccessible." }) }));
   const peer = new Transport(() => {});

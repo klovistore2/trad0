@@ -37,6 +37,12 @@ export async function takeFloor(id: string) {
   await db()`UPDATE adu_sessions SET floor_slot=${me.slot} WHERE id=${id} AND closed=false AND expires_at>now()`;
   return me.slot;
 }
+// Releasing leaves both microphones closed, which is the resting state of a session.
+export async function releaseFloor(id: string) {
+  const me = await member(id);
+  await db()`UPDATE adu_sessions SET floor_slot=NULL WHERE id=${id} AND floor_slot=${me.slot}`;
+  return null;
+}
 
 export async function targetLanguageForSession(id: string) {
   const me = await member(id);

@@ -161,3 +161,4 @@ button:disabled { opacity: .5; cursor: wait; }
 .audio-diagnostics dl { margin: 10px 0; display: grid; gap: 4px; }
 .audio-diagnostics dl div { display: flex; justify-content: space-between; gap: 12px; }
 .audio-diagnostics dd { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+.floor-state.live { color: var(--symbol-ink); font-weight: 600; }

@@ -40,12 +40,17 @@ export function SharedConversation({ id }: { id: string }) {
             ? <button disabled={voiceBusy} className="primary-button" onClick={() => void session.start()}>{english ? "Start the conversation" : "Démarrer la conversation"}</button>
             : session.hasFloor
               ? <>
-                  <p className="floor-state" role="status"><span className="status-dot active" />{english ? "Your turn — just speak" : "À vous — parlez"}</p>
-                  <button className="primary-button stop-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
+                  <p className="floor-state live" role="status"><span className="status-dot active" />{english ? "Your microphone is open — speak" : "Votre micro est ouvert — parlez"}</p>
+                  <button disabled={session.claiming} className="primary-button stop-button" onClick={() => void session.releaseFloor()}>{english ? "Done speaking" : "J’ai fini de parler"}</button>
+                  <button className="demo-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
                 </>
               : <>
-                  <p className="floor-state" role="status"><span className="status-dot" />{english ? "They have the floor" : "L’autre personne a la parole"}</p>
-                  <button disabled={session.claiming} className="primary-button" onClick={() => void session.takeFloor()}>{english ? "Let me speak" : "À moi de parler"}</button>
+                  <p className="floor-state" role="status"><span className="status-dot" />{session.floorFree
+                    ? (english ? "Both microphones are closed" : "Les deux micros sont fermés")
+                    : (english ? "They are speaking" : "L’autre personne parle")}</p>
+                  <button disabled={session.claiming} className="primary-button" onClick={() => void session.takeFloor()}>{session.floorFree
+                    ? (english ? "Speak" : "Parler")
+                    : (english ? "Let me speak" : "À moi de parler")}</button>
                   <button className="demo-button" onClick={() => session.stop()}>{english ? "Pause" : "Mettre en pause"}</button>
                 </>}
           {session.enabled && <button className="demo-button sound-toggle" aria-pressed={session.soundOn} onClick={() => session.toggleSound()}>

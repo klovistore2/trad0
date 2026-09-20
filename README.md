@@ -16,7 +16,7 @@ Variables serveur :
 - `OPENAI_API_KEY` et `OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate`.
 - `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5` pour le streaming WebSocket. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
-- `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus la colonne `adu_sessions.floor_slot` pour le tour de parole. `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
+- `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus la colonne `adu_sessions.floor_slot` (nullable) pour le tour de parole. `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
 - `CRON_SECRET` : secret aléatoire pour protéger la purge des voix. Obligatoire pour autoriser le clonage.
 - `NEXT_PUBLIC_APP_URL` : origine exacte du site, par exemple `http://localhost:3000` en local.
 
@@ -41,9 +41,11 @@ Chaque appareil affiche principalement ce qu’il reçoit. Les paroles émises s
 
 ### Tour de parole
 
-Deux téléphones dans la même pièce entendent tous les deux la personne qui parle. Un seul micro est donc ouvert à la fois : celui du participant qui **a la parole**. Le créateur de la session l’a au départ, pour que le premier à parler n’ait rien à demander.
+Deux téléphones dans la même pièce entendent tous les deux la personne qui parle. Un seul micro est donc ouvert à la fois : celui du participant qui **a la parole**.
 
-L’autre participant touche **À moi de parler** / **Let me speak** pour prendre la main. Le micro bascule des deux côtés en moins d’une seconde, le temps d’un cycle de scrutation. La prise de parole est unilatérale et n’a pas besoin d’être acceptée ; la base sérialise deux demandes simultanées, et la phrase en cours est publiée avant que le micro se ferme.
+**Au démarrage, personne ne l’a** et les deux micros sont fermés. C’est délibéré : un micro ouvert du mauvais côté capte la personne qui parle vers l’autre appareil, et lui renvoie ses propres mots présentés comme ceux de son interlocuteur. Un micro ouvert est donc toujours le résultat d’un geste explicite.
+
+**Parler** / **Speak** ouvre son micro. **À moi de parler** / **Let me speak** le reprend à l’autre. **J’ai fini de parler** / **Done speaking** le rend, et la session revient à son état de repos, deux micros fermés. Le micro bascule des deux côtés en moins d’une seconde, le temps d’un cycle de scrutation. La prise de parole est unilatérale et n’a pas besoin d’être acceptée ; la base sérialise deux demandes simultanées, et la phrase en cours est publiée avant que le micro se ferme.
 
 Le micro reste également fermé pendant la lecture d’une traduction, pour que le haut-parleur ne se fasse pas retraduire.
 
@@ -104,4 +106,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs WebSocket](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream-input), [jetons temporaires](https://elevenlabs.io/docs/api-reference/tokens/create), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 18 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 19 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

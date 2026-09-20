@@ -7,10 +7,10 @@ export class NeonPeerTransport implements PeerTransport {
   private cursor = "0";
   private subscribers = new Set<(event: ReceivedEvent) => void>();
   private sending = Promise.resolve();
-  private floor: (slot: number) => void = () => {};
+  private floor: (slot: number | null) => void = () => {};
   private claimedAt = 0;
   constructor(private onError: (message: string) => void) {}
-  onFloor(cb: (slot: number) => void) { this.floor = cb; }
+  onFloor(cb: (slot: number | null) => void) { this.floor = cb; }
   async connect(sessionId: string) {
     this.sessionId = sessionId;
     await this.poll();
@@ -31,7 +31,7 @@ export class NeonPeerTransport implements PeerTransport {
         this.cursor = event.seq;
       }
       // A poll issued before our own claim landed carries a stale floor: ignore it.
-      if (typeof data.floor === "number" && startedAt > this.claimedAt) this.floor(data.floor);
+      if ("floor" in data && startedAt > this.claimedAt) this.floor(data.floor);
     } catch (error) {
       if (!this.controller.signal.aborted) this.onError(error instanceof Error ? error.message : "Connexion perdue.");
     } finally {
@@ -57,13 +57,15 @@ export class NeonPeerTransport implements PeerTransport {
     }).catch(error => { if (!this.controller.signal.aborted) this.onError(error instanceof Error ? error.message : "Envoi impossible."); });
     return this.sending;
   }
-  async takeFloor() {
-    const response = await fetch(`/api/sessions/${this.sessionId}/floor`, { method: "POST", signal: this.controller.signal });
+  takeFloor() { return this.claimFloor("POST", "Impossible de prendre la parole."); }
+  releaseFloor() { return this.claimFloor("DELETE", "Impossible de rendre la parole."); }
+  private async claimFloor(method: string, failureMessage: string) {
+    const response = await fetch(`/api/sessions/${this.sessionId}/floor`, { method, signal: this.controller.signal });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Impossible de prendre la parole.");
+    if (!response.ok) throw new Error(data.error || failureMessage);
     this.claimedAt = Date.now();
     this.floor(data.floor);
-    return data.floor as number;
+    return data.floor as number | null;
   }
   disconnect() { this.controller.abort(); clearTimeout(this.timer); this.subscribers.clear(); }
 }

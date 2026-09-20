@@ -16,7 +16,7 @@ export async function guestHash(create = false) {
   }
   return createHash("sha256").update(token).digest("hex");
 }
-export type Membership = { slot: number; language: Language; voice_id: string | null; voice_status: string; expires_at: string; floor_slot: number };
+export type Membership = { slot: number; language: Language; voice_id: string | null; voice_status: string; expires_at: string; floor_slot: number | null };
 export async function member(id: string, allowClosed = false): Promise<Membership> {
   if (!validId(id)) throw new HttpError(404, "Cette conversation n’existe pas.");
   const hash = await guestHash();

@@ -15,6 +15,7 @@ export function useSharedConversation(id: string) {
   const [enabled, setEnabled] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [floor, setFloor] = useState<number | null>(null);
+  const floorKnown = useRef(false);
   const [claiming, setClaiming] = useState(false);
   const [received, setReceived] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
@@ -84,7 +85,8 @@ export function useSharedConversation(id: string) {
     voice.current = player;
     const committed = new Set<string>();
     peer.onFloor(slot => {
-      if (controller.signal.aborted || floorRef.current === slot) return;
+      if (controller.signal.aborted || (floorKnown.current && floorRef.current === slot)) return;
+      floorKnown.current = true;
       floorRef.current = slot;
       setFloor(slot);
       // Losing the floor mid-sentence: publish what was said rather than dropping it.
@@ -140,7 +142,7 @@ export function useSharedConversation(id: string) {
         if (controller.signal.aborted) return;
         roomRef.current = data; setRoom(data);
         // Seed the floor once; the 500 ms poll owns it from here.
-        if (floorRef.current === null) { floorRef.current = data.floor; setFloor(data.floor); }
+        if (!floorKnown.current) { floorKnown.current = true; floorRef.current = data.floor; setFloor(data.floor); }
         void peer.connect(id); void refresh();
       } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Impossible de rejoindre."); }
     }
@@ -218,12 +220,19 @@ export function useSharedConversation(id: string) {
   }
   async function takeFloor() {
     if (claiming || floorRef.current === roomRef.current?.me.slot) return;
+    await changeFloor(() => transport.current?.takeFloor(), "Impossible de prendre la parole.");
+  }
+  async function releaseFloor() {
+    if (claiming || floorRef.current !== roomRef.current?.me.slot) return;
+    await changeFloor(() => transport.current?.releaseFloor(), "Impossible de rendre la parole.");
+  }
+  async function changeFloor(action: () => Promise<number | null> | undefined, failureMessage: string) {
     setClaiming(true);
     setMessage("");
     try {
-      const slot = await transport.current?.takeFloor();
-      if (typeof slot === "number") { floorRef.current = slot; setFloor(slot); syncMicrophone(); }
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Impossible de prendre la parole."); }
+      const slot = await action();
+      if (slot !== undefined) { floorKnown.current = true; floorRef.current = slot; setFloor(slot); syncMicrophone(); }
+    } catch (error) { setMessage(error instanceof Error ? error.message : failureMessage); }
     finally { setClaiming(false); }
   }
   function toggleSound() {
@@ -247,5 +256,6 @@ export function useSharedConversation(id: string) {
     sound: sound.current,
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, claiming, received, connectionLost, soundReady, translation, start, stop, takeFloor, toggleSound, enableSound, playTestTone, readAudioState };
+  const floorFree = floor === null;
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, received, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, enableSound, playTestTone, readAudioState };
 }
