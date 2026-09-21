@@ -4,6 +4,7 @@ import type { Language } from "@/types/session";
 // whoever runs the app, not for the person who was handed a phone and does not share a language.
 // English is the base; a missing key falls back to it, so a new language can be added partially.
 const en = {
+  keepVoiceTitle: "Keep your voice", keepVoiceBody: "Want to hear your own voice in translation? Sign in with Google, then choose whether to create your voice.", keepVoiceAction: "Sign in to keep my voice", notNow: "Not now",
   iSpeak: "I speak", theySpeak: "They speak", autoLanguage: "Auto",
   detectOnSpeech: "Detected when you speak", languageDetected: "Detected · change if needed",
   chooseLanguage: "Choose the language", untestedLanguage: "untested",
@@ -34,7 +35,7 @@ const en = {
   nothingYet: "Nothing recognised yet.",
   voiceTitle: "Speak with your own voice",
   voiceBody: "The other person can hear your translated words in your own voice. It is learned from this conversation and sent to ElevenLabs to create it.",
-  voiceNote: "Only your own turns are recorded. The recording stays in this browser and the voice is deleted when the session ends.",
+  voiceNote: "Only your own turns are recorded. Samples are sent to ElevenLabs to create your voice. Your voice is saved to your account until you remove it.",
   voiceAccept: "Use my voice",
   voiceDecline: "Not now — keep a standard voice",
 } as const;
@@ -45,6 +46,7 @@ export type StringKey = keyof typeof en;
 // in front of real users; a wrong label in a translation product is worse than an English one.
 const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>> = {
   fr: {
+    keepVoiceTitle: "Gardez votre voix", keepVoiceBody: "Envie de traduire avec votre propre voix ? Connectez-vous avec Google, puis choisissez de créer votre voix.", keepVoiceAction: "Me connecter pour garder ma voix", notNow: "Pas maintenant",
     iSpeak: "Je parle", theySpeak: "L’autre parle", autoLanguage: "Auto", detectOnSpeech: "Détection à la prise de parole", languageDetected: "Détectée · modifiable", chooseLanguage: "Choisissez la langue", untestedLanguage: "à tester",
     muteSound: "Couper le son", unmuteSound: "Activer le son", soundOn: "Son activé", textOnly: "Texte seul",
     theirWords: "SES MOTS, DANS VOTRE LANGUE", connectedTitle: "Vous êtes ensemble.",
@@ -59,10 +61,11 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     whatTheyReceive: "Ce que l’autre reçoit", whatISaid: "Ce que j’ai dit", nothingYet: "Rien de reconnu pour l’instant.",
     voiceTitle: "Parler avec votre voix",
     voiceBody: "L’autre personne peut entendre vos mots traduits avec votre voix. Elle est apprise à partir de cette conversation, puis transmise à ElevenLabs pour la créer.",
-    voiceNote: "Seuls vos tours de parole sont enregistrés. L’enregistrement reste dans ce navigateur et la voix est supprimée à la fin de la session.",
+    voiceNote: "Seuls vos tours de parole sont enregistrés. Les échantillons sont envoyés à ElevenLabs pour créer votre voix. Votre voix est conservée sur votre compte jusqu’à sa suppression.",
     voiceAccept: "Utiliser ma voix", voiceDecline: "Pas maintenant — garder une voix standard",
   },
   th: {
+    keepVoiceTitle: "เก็บเสียงของคุณ", keepVoiceBody: "ต้องการใช้เสียงของคุณในการแปลไหม? เข้าสู่ระบบด้วย Google แล้วเลือกว่าจะสร้างเสียงของคุณหรือไม่", keepVoiceAction: "เข้าสู่ระบบเพื่อเก็บเสียงของฉัน", notNow: "ยังไม่ใช่ตอนนี้",
     iSpeak: "ฉันพูด", theySpeak: "อีกฝ่ายพูด", autoLanguage: "อัตโนมัติ", detectOnSpeech: "ตรวจจับเมื่อพูด", languageDetected: "ตรวจพบแล้ว · เปลี่ยนได้", chooseLanguage: "เลือกภาษา", untestedLanguage: "ยังไม่ทดสอบ",
     muteSound: "ปิดเสียง", unmuteSound: "เปิดเสียง", soundOn: "เปิดเสียงอยู่", textOnly: "ข้อความเท่านั้น",
     theirWords: "คำพูดของอีกฝ่าย ในภาษาของคุณ", connectedTitle: "คุณเชื่อมต่อแล้ว",
@@ -76,7 +79,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     whatTheyReceive: "สิ่งที่อีกฝ่ายได้รับ", whatISaid: "สิ่งที่ฉันพูด", nothingYet: "ยังไม่มีข้อความที่รับรู้ได้",
     voiceTitle: "พูดด้วยเสียงของคุณเอง",
     voiceBody: "อีกฝ่ายสามารถได้ยินคำแปลของคุณด้วยเสียงของคุณเอง เสียงนี้เรียนรู้จากบทสนทนานี้ และส่งไปยัง ElevenLabs เพื่อสร้างขึ้น",
-    voiceNote: "บันทึกเฉพาะช่วงที่คุณพูดเท่านั้น การบันทึกอยู่ในเบราว์เซอร์นี้ และเสียงจะถูกลบเมื่อจบเซสชัน",
+    voiceNote: "บันทึกเฉพาะช่วงที่คุณพูดเท่านั้น ตัวอย่างเสียงจะถูกส่งไปยัง ElevenLabs เพื่อสร้างเสียงของคุณ เสียงของคุณจะถูกเก็บไว้ในบัญชีจนกว่าคุณจะลบ",
     voiceAccept: "ใช้เสียงของฉัน", voiceDecline: "ยังก่อน — ใช้เสียงมาตรฐาน",
   },
   es: {
@@ -94,7 +97,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Todavía no se ha reconocido nada.",
     voiceTitle: "Hablar con tu propia voz",
     voiceBody: "La otra persona puede oír tus palabras traducidas con tu propia voz. Se aprende de esta conversación y se envía a ElevenLabs para crearla.",
-    voiceNote: "Solo se graban tus turnos de palabra. La grabación se queda en este navegador y la voz se borra al terminar la sesión.",
+    voiceNote: "Solo se graban tus turnos de palabra. Las muestras se envían a ElevenLabs para crear tu voz. Tu voz se guarda en tu cuenta hasta que la elimines.",
     voiceAccept: "Usar mi voz", voiceDecline: "Ahora no — mantener una voz estándar",
   },
   pt: {
@@ -112,7 +115,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Ainda não foi reconhecido nada.",
     voiceTitle: "Falar com a sua própria voz",
     voiceBody: "A outra pessoa pode ouvir as suas palavras traduzidas na sua própria voz. É aprendida desta conversa e enviada à ElevenLabs para a criar.",
-    voiceNote: "Apenas os seus turnos são gravados. A gravação fica neste navegador e a voz é apagada no fim da sessão.",
+    voiceNote: "Apenas os seus turnos são gravados. As amostras são enviadas à ElevenLabs para criar a sua voz. A voz fica na sua conta até a apagar.",
     voiceAccept: "Usar a minha voz", voiceDecline: "Agora não — manter uma voz padrão",
   },
   it: {
@@ -130,7 +133,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Non è ancora stato riconosciuto nulla.",
     voiceTitle: "Parlare con la tua voce",
     voiceBody: "L’altra persona può sentire le tue parole tradotte con la tua voce. Viene appresa da questa conversazione e inviata a ElevenLabs per crearla.",
-    voiceNote: "Vengono registrati solo i tuoi turni di parola. La registrazione resta in questo browser e la voce viene eliminata a fine sessione.",
+    voiceNote: "Vengono registrati solo i tuoi turni di parola. I campioni vengono inviati a ElevenLabs per creare la tua voce. La voce resta nel tuo account finché non la elimini.",
     voiceAccept: "Usare la mia voce", voiceDecline: "Non ora — mantenere una voce standard",
   },
   de: {
@@ -148,7 +151,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Noch nichts erkannt.",
     voiceTitle: "Mit deiner eigenen Stimme sprechen",
     voiceBody: "Die andere Person kann deine übersetzten Worte mit deiner eigenen Stimme hören. Sie wird aus diesem Gespräch gelernt und an ElevenLabs gesendet, um sie zu erzeugen.",
-    voiceNote: "Nur deine eigenen Sprechbeiträge werden aufgenommen. Die Aufnahme bleibt in diesem Browser und die Stimme wird am Ende der Sitzung gelöscht.",
+    voiceNote: "Nur deine eigenen Sprechbeiträge werden aufgenommen. Die Aufnahmen werden zur Erstellung deiner Stimme an ElevenLabs gesendet. Deine Stimme bleibt in deinem Konto, bis du sie löschst.",
     voiceAccept: "Meine Stimme verwenden", voiceDecline: "Jetzt nicht — Standardstimme behalten",
   },
   ja: {
@@ -166,7 +169,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "まだ認識されていません。",
     voiceTitle: "自分の声で話す",
     voiceBody: "相手はあなたの訳をあなた自身の声で聞くことができます。この会話から学習し、ElevenLabs に送って作成されます。",
-    voiceNote: "録音されるのはあなたが話した部分だけです。録音はこのブラウザに留まり、セッション終了時に声は削除されます。",
+    voiceNote: "録音されるのはあなたが話した部分だけです。音声サンプルは声の作成のためElevenLabsに送信されます。声は削除するまでアカウントに保存されます。",
     voiceAccept: "自分の声を使う", voiceDecline: "今はしない — 標準の声のまま",
   },
   ko: {
@@ -184,7 +187,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "아직 인식된 내용이 없습니다.",
     voiceTitle: "내 목소리로 말하기",
     voiceBody: "상대는 번역된 말을 당신의 목소리로 들을 수 있습니다. 이 대화에서 학습되어 ElevenLabs로 전송되어 만들어집니다.",
-    voiceNote: "당신이 말한 부분만 녹음됩니다. 녹음은 이 브라우저에 남고, 세션이 끝나면 목소리는 삭제됩니다.",
+    voiceNote: "당신이 말한 부분만 녹음됩니다. 음성 샘플은 목소리 생성을 위해 ElevenLabs로 전송됩니다. 목소리는 삭제할 때까지 계정에 저장됩니다.",
     voiceAccept: "내 목소리 사용", voiceDecline: "지금은 아니요 — 기본 목소리 유지",
   },
   zh: {
@@ -202,7 +205,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "尚未识别到内容。",
     voiceTitle: "用你自己的声音说话",
     voiceBody: "对方可以用你自己的声音听到译文。声音从这段对话中学习，并发送到 ElevenLabs 来创建。",
-    voiceNote: "只录制你说话的部分。录音留在此浏览器中，会话结束时声音会被删除。",
+    voiceNote: "只录制你说话的部分。录音样本会发送到 ElevenLabs 以创建你的声音。声音保存在你的账户中，直到你将其删除。",
     voiceAccept: "使用我的声音", voiceDecline: "暂时不用 — 保留标准声音",
   },
   vi: {
@@ -220,7 +223,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Chưa nhận ra nội dung nào.",
     voiceTitle: "Nói bằng chính giọng của bạn",
     voiceBody: "Người kia có thể nghe lời dịch bằng chính giọng của bạn. Giọng được học từ cuộc trò chuyện này và gửi tới ElevenLabs để tạo ra.",
-    voiceNote: "Chỉ ghi lại phần bạn nói. Bản ghi ở lại trình duyệt này và giọng sẽ bị xóa khi kết thúc phiên.",
+    voiceNote: "Chỉ ghi lại phần bạn nói. Mẫu ghi âm được gửi tới ElevenLabs để tạo giọng. Giọng được lưu trong tài khoản cho đến khi bạn xóa.",
     voiceAccept: "Dùng giọng của tôi", voiceDecline: "Chưa cần — giữ giọng mặc định",
   },
   id: {
@@ -238,7 +241,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Belum ada yang dikenali.",
     voiceTitle: "Bicara dengan suaramu sendiri",
     voiceBody: "Orang lain bisa mendengar terjemahanmu dengan suaramu sendiri. Suara itu dipelajari dari percakapan ini dan dikirim ke ElevenLabs untuk dibuat.",
-    voiceNote: "Hanya giliran bicaramu yang direkam. Rekaman tetap di peramban ini dan suara dihapus saat sesi berakhir.",
+    voiceNote: "Hanya giliran bicaramu yang direkam. Sampel dikirim ke ElevenLabs untuk membuat suaramu. Suara disimpan di akunmu sampai kamu menghapusnya.",
     voiceAccept: "Gunakan suara saya", voiceDecline: "Nanti saja — pakai suara standar",
   },
   ru: {
@@ -256,7 +259,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "Пока ничего не распознано.",
     voiceTitle: "Говорить своим голосом",
     voiceBody: "Собеседник может слышать перевод вашим собственным голосом. Он создаётся из этого разговора и передаётся в ElevenLabs.",
-    voiceNote: "Записываются только ваши реплики. Запись остаётся в этом браузере, а голос удаляется в конце сессии.",
+    voiceNote: "Записываются только ваши реплики. Образцы отправляются в ElevenLabs для создания голоса. Голос хранится в вашем аккаунте, пока вы его не удалите.",
     voiceAccept: "Использовать мой голос", voiceDecline: "Не сейчас — обычный голос",
   },
   hi: {
@@ -274,7 +277,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     nothingYet: "अभी तक कुछ पहचाना नहीं गया।",
     voiceTitle: "अपनी ही आवाज़ में बोलें",
     voiceBody: "दूसरा व्यक्ति आपके अनुवाद को आपकी अपनी आवाज़ में सुन सकता है। यह इसी बातचीत से सीखी जाती है और बनाने के लिए ElevenLabs को भेजी जाती है।",
-    voiceNote: "केवल आपके बोलने के हिस्से रिकॉर्ड होते हैं। रिकॉर्डिंग इसी ब्राउज़र में रहती है और सत्र समाप्त होने पर आवाज़ हटा दी जाती है।",
+    voiceNote: "केवल आपके बोलने के हिस्से रिकॉर्ड होते हैं। आवाज़ बनाने के लिए नमूने ElevenLabs को भेजे जाते हैं। आवाज़ आपके खाते में तब तक रहती है जब तक आप उसे हटा नहीं देते।",
     voiceAccept: "मेरी आवाज़ इस्तेमाल करें", voiceDecline: "अभी नहीं — सामान्य आवाज़ रखें",
   },
 };

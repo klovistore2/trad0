@@ -3,7 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslationSession } from "./useTranslationSession";
 import { useLanguageDetection } from "./useLanguageDetection";
 import { NeonPeerTransport } from "@/lib/realtime/neon-transport";
-import { TurnPublisher } from "@/lib/realtime/turn-publisher";
+import { ConversationPipeline } from "@/lib/translation/conversation-pipeline";
+import { desiredMode, type ConversationMode, type ModePreference } from "@/lib/translation/modes";
+import { PeerAudioLink } from "@/lib/realtime/audio-link";
+import { SpeechClock } from "@/lib/audio/speech-clock";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
 import { VoiceRangeDetector } from "@/lib/audio/voice-range";
 import { SpeechRecorder } from "@/lib/audio/speech-recorder";
@@ -11,7 +14,7 @@ import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
-export function useSharedConversation(id: string) {
+export function useSharedConversation(id: string, signedIn = false) {
   const [room, setRoom] = useState<SharedSession | null>(null);
   const [message, setMessage] = useState("");
   const [incoming, setIncoming] = useState("");
@@ -25,6 +28,15 @@ export function useSharedConversation(id: string) {
   const [changingLanguage, setChangingLanguage] = useState(false);
   const changingLanguageRef = useRef(false);
   const refreshSequence = useRef(0);
+  const [activeMode, setActiveMode] = useState<ConversationMode>("direct");
+  const [contextTranslation, setContextTranslation] = useState("");
+  const [spokenSeconds, setSpokenSeconds] = useState(0);
+  const speechClock = useRef(new SpeechClock());
+  const directAudio = useRef<PeerAudioLink | null>(null);
+  const directUnavailable = useRef(false);
+  const modeReason = useRef("");
+  const remoteSpeaking = useRef(false);
+  const sourceCommitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [received, setReceived] = useState(0);
   const [speechSeconds, setSpeechSeconds] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
@@ -41,7 +53,7 @@ export function useSharedConversation(id: string) {
   const refreshNow = useRef<() => void>(() => {});
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
-  const publisher = useRef<TurnPublisher | null>(null);
+  const publisher = useRef<ConversationPipeline | null>(null);
   const voice = useRef<ElevenLabsVoiceProvider | null>(null);
   const running = useRef(false);
   const sound = useRef(true);
@@ -52,13 +64,20 @@ export function useSharedConversation(id: string) {
 
   // The microphone is open only while this device holds the floor and nothing is playing.
   const micShouldBeOn = useCallback(
-    () => running.current && floorRef.current === roomRef.current?.me.slot && !speaking.current,
+    () => running.current && floorRef.current === roomRef.current?.me.slot && !speaking.current && !remoteSpeaking.current,
     [],
   );
   const translation = useTranslationSession({
     sessionId: id,
     targetLanguage: room?.peer?.language || "en",
-    onDelta: delta => { publisher.current?.append(delta); recorder.current?.heard(); },
+    onDelta: delta => { publisher.current?.translation(delta); },
+    onOriginal: delta => {
+      publisher.current?.original(delta);
+      if (micShouldBeOn()) { speechClock.current.heard(); recorder.current?.heard(); }
+      clearTimeout(sourceCommitTimer.current);
+      sourceCommitTimer.current = setTimeout(() => translationRef.current.commitInput(), 1500);
+    },
+    onAudio: track => { void directAudio.current?.setTrack(track); },
     shouldEnableMicrophone: micShouldBeOn,
   });
   const translationRef = useRef(translation);
@@ -69,7 +88,7 @@ export function useSharedConversation(id: string) {
   const cloneIfDue = useCallback(async () => {
     const me = roomRef.current?.me;
     const speech = recorder.current;
-    if (!me?.consented || !speech || cloning.current || cloningBlocked.current) return;
+    if (!me?.hasAccount || !me.consented || !speech || cloning.current || cloningBlocked.current) return;
     const seconds = speech.seconds;
     const target = [...VOICE_TIERS].reverse().find(step => seconds >= step.seconds && step.tier > me.voiceTier);
     if (!target) return;
@@ -89,7 +108,7 @@ export function useSharedConversation(id: string) {
       const response = await fetch(`/api/voice/clone`, { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      if (target.tier === FINAL_TIER) speech.discard();
+      if (target.tier === FINAL_TIER) { speech.stop(); speech.discard(); recorder.current = new SpeechRecorder(); }
       refreshNow.current();
     } catch (error) {
       cloningBlocked.current = true;
@@ -102,6 +121,7 @@ export function useSharedConversation(id: string) {
     translationRef.current.setMicrophoneEnabled(open);
     if (!open) {
       // End of a turn: pause the capture, then see whether a tier has been reached.
+      speechClock.current.pause();
       recorder.current?.pause();
       setSpeechSeconds(Math.round(recorder.current?.seconds ?? 0));
       void cloneIfDue();
@@ -110,18 +130,21 @@ export function useSharedConversation(id: string) {
     const stream = translationRef.current.getStream?.();
     if (!stream) return;
     detector.current?.listen(stream);
-    recorder.current?.listen(stream);
+    const me = roomRef.current?.me;
+    if (me?.hasAccount && me.consented && me.voiceTier < FINAL_TIER) recorder.current?.listen(stream);
+    else recorder.current?.pause();
   }, [micShouldBeOn, cloneIfDue]);
 
   const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
   const playQueue = useCallback(async () => {
     if (speaking.current || !canPlay()) return;
     speaking.current = true;
+    directAudio.current?.setIncomingEnabled(false);
     syncMicrophone();
     try {
       while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
-        await voice.current?.speakStream({ sessionId: id, language: roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
+        await voice.current?.speakStream({ sessionId: id, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
         const measured = voice.current?.lastLatency;
         if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
       }
@@ -133,6 +156,7 @@ export function useSharedConversation(id: string) {
       } else setMessage(error instanceof Error ? error.message : "Le son est indisponible. Le texte reste accessible.");
     } finally {
       speaking.current = false;
+      directAudio.current?.setIncomingEnabled(roomRef.current?.peer?.activeMode !== "context");
       syncMicrophone();
     }
   }, [id, syncMicrophone, canPlay]);
@@ -141,8 +165,9 @@ export function useSharedConversation(id: string) {
   useEffect(() => {
     const timer = setInterval(() => {
       setSpeechSeconds(Math.round(recorder.current?.seconds ?? 0));
+      setSpokenSeconds(Math.floor(speechClock.current.seconds));
       void cloneIfDue();
-    }, 10_000);
+    }, 1000);
     return () => clearInterval(timer);
   }, [cloneIfDue]);
 
@@ -151,7 +176,27 @@ export function useSharedConversation(id: string) {
     let refreshTimer: ReturnType<typeof setTimeout>;
     const peer = new NeonPeerTransport(setMessage);
     transport.current = peer;
-    const turns = new TurnPublisher(event => { void peer.send(event); });
+    const turns = new ConversationPipeline({
+      sessionId: id, speaker: () => roomRef.current?.me.slot ?? 0,
+      languages: () => ({ sourceLanguage: roomRef.current?.me.language ?? "en", targetLanguage: roomRef.current?.peer?.language ?? "en" }),
+      send: event => peer.send(event), onTranslation: text => setContextTranslation(previous => (previous + " " + text).trim().slice(-12_000)),
+      onError: setMessage, canSwitch: () => !directAudio.current?.isSendingAudio(),
+      switchMode: async mode => {
+        if (controller.signal.aborted) return;
+        clearTimeout(sourceCommitTimer.current);
+        if (running.current) {
+          recorder.current?.pause();
+          translationRef.current.stop();
+          await translationRef.current.start(false, mode === "context");
+          syncMicrophone();
+        }
+        if (controller.signal.aborted) return;
+        setActiveMode(mode);
+        const response = await fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: mode }), signal: controller.signal });
+        if (!response.ok) setMessage("The translation mode changed locally, but could not be shared yet.");
+        refreshNow.current();
+      },
+    });
     publisher.current = turns;
     detector.current = new VoiceRangeDetector(range => {
       if (controller.signal.aborted) return;
@@ -163,7 +208,7 @@ export function useSharedConversation(id: string) {
     recorder.current = new SpeechRecorder();
     const player = new ElevenLabsVoiceProvider((status, error) => {
       if (controller.signal.aborted) return;
-      setVoiceStatus(status);
+      setVoiceStatus(status === "idle" && remoteSpeaking.current ? "playing" : status);
       if (error) setMessage(error);
     });
     voice.current = player;
@@ -174,17 +219,21 @@ export function useSharedConversation(id: string) {
       floorRef.current = slot;
       setFloor(slot);
       // Losing the floor mid-sentence: publish what was said rather than dropping it.
-      if (slot !== roomRef.current?.me.slot) turns.commit();
+      if (slot !== roomRef.current?.me.slot) turns.flush();
       syncMicrophone();
     });
     const unsubscribe = peer.subscribe(event => {
       if (controller.signal.aborted) return;
+      turns.receive(event, roomRef.current?.peer?.slot ?? 1);
+      if (event.kind === "original") return;
       setIncoming(event.text);
       if (event.committed && !committed.has(event.turnId)) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
         setReceived(count => count + 1);
         if (typeof event.ageMs === "number") timing.current = { transport: event.ageMs, request: 0, playback: 0 };
+        if (event.mode === "context") directAudio.current?.setIncomingEnabled(false);
+        if (event.mode === "direct") return; // OpenAI audio arrives over the peer media track.
         if (sound.current) {
           // Before the first tap, hold only the latest sentence so it plays instead of a backlog.
           if (!soundReadyRef.current) queue.current = [event];
@@ -208,7 +257,7 @@ export function useSharedConversation(id: string) {
           if ([401, 403, 404].includes(response.status)) {
             setMessage(data.error || "La conversation est terminée.");
             stopped.current = "session ended";
-            running.current = false; setEnabled(false); player.stop(); translationRef.current.stop();
+            running.current = false; setEnabled(false); player.stop(); directAudio.current?.dispose(); turns.dispose(); translationRef.current.stop();
             return;
           }
           throw new Error(data.error);
@@ -216,10 +265,21 @@ export function useSharedConversation(id: string) {
         if (controller.signal.aborted || sequence !== refreshSequence.current) return;
         failures = 0; setConnectionLost(false);
         if (data.peer?.language && data.peer.language !== roomRef.current?.peer?.language) {
-          turns.commit();
+          turns.flush();
           translationRef.current.setTargetLanguage(data.peer.language);
         }
+        if (roomRef.current?.me.consented && !data.me.consented) {
+          recorder.current?.stop(); recorder.current?.discard(); recorder.current = new SpeechRecorder();
+        }
         roomRef.current = data; setRoom(data);
+        const wanted = desiredMode(data.me);
+        const unsupportedDirect = data.peer?.language === "th";
+        if (unsupportedDirect) modeReason.current = "Thai output uses the contextual pipeline: OpenAI live translation does not document Thai output.";
+        turns.requestMode((directUnavailable.current || unsupportedDirect) && wanted === "direct" ? "context" : wanted);
+        // Event metadata selects TTS per phrase. This prevents delayed direct audio from
+        // overlapping contextual speech after the remote speaker has switched modes.
+        directAudio.current?.setIncomingEnabled(data.peer?.activeMode !== "context" && !speaking.current);
+        syncMicrophone();
       } catch {
         // A dropped poll must never end the conversation: a waking phone drops several in a row.
         if (!controller.signal.aborted && ++failures >= 3) setConnectionLost(true);
@@ -229,10 +289,39 @@ export function useSharedConversation(id: string) {
     async function join() {
       try {
         const response = await fetch(`/api/sessions/${id}/join`, { method: "POST", signal: controller.signal });
-        const data = await response.json();
+        let data = await response.json();
         if (!response.ok) throw new Error(data.error);
+        if (signedIn && !data.me.hasAccount) {
+          const linked = await fetch(`/api/sessions/${id}/account`, { method: "POST", signal: controller.signal });
+          if (!linked.ok) throw new Error((await linked.json()).error);
+          const refreshed = await fetch(`/api/sessions/${id}`, { signal: controller.signal, cache: "no-store" });
+          if (!refreshed.ok) throw new Error("Could not restore your conversation.");
+          data = await refreshed.json();
+        }
         if (controller.signal.aborted) return;
+        const initialMode = data.peer?.language === "th" ? "context" : desiredMode(data.me);
+        turns.mode = initialMode; turns.desired = initialMode; setActiveMode(initialMode);
         roomRef.current = data; setRoom(data);
+        // A reload starts a new provider; publish its actual mode even if the previous
+        // browser left a different active mode in the session row.
+        void fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: initialMode }), signal: controller.signal }).catch(() => {});
+        const audio = new PeerAudioLink(id, data.me.slot, playing => {
+          if (controller.signal.aborted) return;
+          remoteSpeaking.current = playing;
+          if (!speaking.current) setVoiceStatus(playing ? "playing" : "idle");
+          syncMicrophone();
+        }, error => {
+          if (controller.signal.aborted) return;
+          modeReason.current = error; setMessage(error);
+          if (audio.status === "unavailable") {
+            directUnavailable.current = true;
+            turns.requestMode("context");
+          } else { soundReadyRef.current = false; setSoundReady(false); rearm.current(); }
+        });
+        directAudio.current = audio;
+        void audio.start();
+        // If the first gesture happened while joining, arm this new element on the next touch.
+        soundReadyRef.current = false; setSoundReady(false); rearm.current();
         // Seed the floor once; the 500 ms poll owns it from here.
         if (!floorKnown.current) { floorKnown.current = true; floorRef.current = data.floor; setFloor(data.floor); }
         void peer.connect(id); void refresh();
@@ -247,7 +336,7 @@ export function useSharedConversation(id: string) {
       document.removeEventListener("pointerdown", armSound);
       document.removeEventListener("keydown", armSound);
       armed = false;
-      player.unlock().then(() => {
+      Promise.all([player.unlock(), directAudio.current?.unlock()]).then(() => {
         if (controller.signal.aborted) return;
         soundReadyRef.current = true; setSoundReady(true);
         void playQueue();
@@ -264,12 +353,12 @@ export function useSharedConversation(id: string) {
     // Leaving the page tears the microphone down for privacy, but the session stays active:
     // a receiving phone whose screen went dark must still speak when it comes back.
     const visibility = () => {
-      if (document.hidden) { queue.current = []; player.stop(); turns.commit(); return; }
+      if (document.hidden) { queue.current = []; player.stop(); turns.flush(); return; }
       if (!running.current || controller.signal.aborted) return;
       void (async () => {
         try {
           await unlockSound();
-          await translationRef.current.start();
+          await translationRef.current.start(false, turns.mode === "context");
           syncMicrophone();
         } catch (error) {
           setMessage(error instanceof Error ? error.message : "Touchez Activer le micro pour reprendre.");
@@ -278,16 +367,16 @@ export function useSharedConversation(id: string) {
     };
     document.addEventListener("visibilitychange", visibility);
     return () => {
-      controller.abort(); clearTimeout(refreshTimer); document.removeEventListener("visibilitychange", visibility);
+      controller.abort(); clearTimeout(refreshTimer); clearTimeout(sourceCommitTimer.current); directAudio.current?.dispose(); directAudio.current = null; document.removeEventListener("visibilitychange", visibility);
       document.removeEventListener("pointerdown", armSound); document.removeEventListener("keydown", armSound);
       unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose(); detector.current?.stop(); detector.current = null; recorder.current?.stop(); recorder.current = null;
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
-  }, [id, playQueue, syncMicrophone, canPlay]);
+  }, [id, signedIn, playQueue, syncMicrophone, canPlay]);
 
   async function unlockSound() {
-    await voice.current?.unlock();
+    await Promise.all([voice.current?.unlock(), directAudio.current?.unlock()]);
     soundReadyRef.current = true; setSoundReady(true);
   }
   async function enableSound() {
@@ -308,14 +397,14 @@ export function useSharedConversation(id: string) {
       // steal the microphone from whoever is talking.
       if (floorRef.current === null) await takeFloor();
       running.current = true; setEnabled(true); stopped.current = "running";
-      await translation.start();
+      await translation.start(false, publisher.current?.mode === "context");
       syncMicrophone();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
     finally { setStarting(false); }
   }
   function stop() {
     running.current = false; setEnabled(false); stopped.current = "paused by you"; queue.current = [];
-    publisher.current?.commit(); translation.stop(); voice.current?.stop();
+    publisher.current?.flush(); translation.stop(); voice.current?.stop();
   }
   async function takeFloor() {
     if (claiming || floorRef.current === roomRef.current?.me.slot) return;
@@ -336,7 +425,7 @@ export function useSharedConversation(id: string) {
   }
   function toggleSound() {
     const next = !sound.current;
-    sound.current = next; setSoundOn(next);
+    sound.current = next; setSoundOn(next); directAudio.current?.setMuted(!next);
     if (!next) { queue.current = []; voice.current?.stop(); speaking.current = false; }
     syncMicrophone();
   }
@@ -365,6 +454,14 @@ export function useSharedConversation(id: string) {
       if (!response.ok) throw new Error(data.error);
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
+  }
+  async function setMode(preference: ModePreference) {
+    setMessage("");
+    try {
+      const response = await fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preference }) });
+      if (!response.ok) throw new Error((await response.json()).error);
+      refreshNow.current();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not change mode."); }
   }
   async function setLanguage(slot: number, language: Language | "auto") {
     if (changingLanguageRef.current) return;
@@ -400,7 +497,13 @@ export function useSharedConversation(id: string) {
     running: running.current,
     sound: sound.current,
   }), []);
+  const readPipelineState = useCallback(() => ({
+    active: publisher.current?.mode ?? "direct", desired: publisher.current?.desired ?? "direct",
+    switching: publisher.current?.switching ?? false, directAudio: directAudio.current?.status ?? "waiting",
+    reason: modeReason.current, contextTurns: publisher.current?.memory.recent().length ?? 0,
+    timing: publisher.current?.timing ?? null, receivedTiming: timing.current,
+  }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { activeMode, setMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

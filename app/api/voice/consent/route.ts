@@ -19,6 +19,7 @@ export async function POST(request: Request, context: RouteContext<"/api/voice/c
     if (body.consent !== VOICE_CONSENT) throw new HttpError(400, "Votre consentement est nécessaire pour utiliser votre voix.");
     if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
     const me = await member(body.sessionId);
+    if (!me.user_id) throw new HttpError(403, "Sign in with Google before enabling voice cloning.");
     await db()`UPDATE adu_participants SET consent_at=now() WHERE session_id=${body.sessionId} AND slot=${me.slot} AND consent_at IS NULL`;
     // An account keeps the agreement, so the dialog is not asked again on the next conversation.
     if (me.user_id) await saveProfileConsent(me.user_id, true);

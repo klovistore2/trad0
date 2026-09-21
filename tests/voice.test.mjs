@@ -139,7 +139,7 @@ test('consented clone uses multipart samples and stores readiness; an expired se
   process.env.NEXT_PUBLIC_APP_URL=origin; process.env.CRON_SECRET='test-cleanup-secret';
   let saveAllowed=true;let deleted;
   const load=createLoader({
-    '@/lib/session/auth':{member:async()=>({slot:0})},
+    '@/lib/session/auth':{member:async()=>({slot:0,user_id:"user-1"})},
     '@/lib/neon/db':{db:()=>async(strings,...values)=>{
       const sql=strings.join('?');
       if(sql.includes("SET voice_status='learning'")){assert.match(sql,/consent_at IS NOT NULL/);assert.match(sql,/voice_tier</);return [{previousVoiceId:null}];}
@@ -151,7 +151,7 @@ test('consented clone uses multipart samples and stores readiness; an expired se
   globalThis.fetch=async(url,options)=>{
     assert.equal(url,'https://api.elevenlabs.io/v1/voices/add');
     assert.ok(options.body.get('files') instanceof File);
-    assert.equal(JSON.parse(options.body.get('labels')).app,'a-deux-session');
+    assert.equal(JSON.parse(options.body.get('labels')).app,'a-deux-user');
     return Response.json({voice_id:'synthetic-clone',requires_verification:false});
   };
   const make=()=>{const form=new FormData();form.set('sessionId','synthetic-session');form.set('consent','session-voice-v1');form.set('seconds','45');form.set('tier','1');form.set('sample',new File([new Uint8Array(10001)],'voice.webm',{type:'audio/webm'}));return new Request(`${origin}/api/voice/clone`,{method:'POST',headers:{origin},body:form});};
@@ -172,7 +172,7 @@ test('a later tier replaces the clone in service and only then deletes the previ
   process.env.NEXT_PUBLIC_APP_URL=origin; process.env.CRON_SECRET='test-cleanup-secret';
   const order=[];let swapSucceeds=true;
   const load=createLoader({
-    '@/lib/session/auth':{member:async()=>({slot:0})},
+    '@/lib/session/auth':{member:async()=>({slot:0,user_id:"user-1"})},
     '@/lib/neon/db':{db:()=>async(strings,...values)=>{
       const sql=strings.join('?');
       if(sql.includes("SET voice_status='learning'")){order.push('lease');return [{previousVoiceId:'tier-one-clone'}];}

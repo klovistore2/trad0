@@ -15,6 +15,33 @@ is actually built and which decisions deliberately diverge from it. **Do not "re
 detail listed as a divergence without reading why it was changed** — several were paid for with
 real failures on real devices.
 
+### Two-mode implementation (supersedes the original single-pipeline target)
+
+- Each participant has independent `preferred_mode` (auto/direct/context) and `active_mode`.
+  Auto selects direct OpenAI speech until that participant's consented, enabled clone is ready.
+  Context mode is available without cloning or an account. Mode changes wait for a sentence pause
+  and pending LLM calls. Migration `011_conversation_modes.sql` is required.
+- Direct audio forwards only OpenAI's translated track to the other browser over WebRTC.
+  `adu_audio_links` contains bounded SDP signalling only; no microphone audio enters this link.
+  Configure `WEBRTC_ICE_SERVERS` with TURN for mobile/filtered networks. Failed links fall back
+  to context mode. Real-device reliability is still unverified.
+- Context mode uses a transcription-only Realtime session, then `/api/translate` with
+  `OPENAI_TEXT_TRANSLATION_MODEL` (default `gpt-4.1-mini`), then the existing ElevenLabs relay.
+  Original conversation turns from both speakers are retained from mode 1 in bounded memory.
+  Recent direct translations are stored separately by speaker: never pair differently segmented
+  source and translated streams positionally.
+  OpenAI direct translation still has no custom prompt/context or documented voice selector.
+- Thai output uses context mode immediately; it is not a documented direct output language.
+- Guests may join and use either mode without signing in. After 30 seconds of observed speech,
+  they are offered Google sign-in with a return to the same conversation. Both consent and clone
+  endpoints now require an attached account. NO clone capture before account AND consent.
+  The pre-sign-in speech clock has no access to audio and cannot seed a clone retrospectively.
+- `APP_DIAGNOSTICS=1` enables the development mode/timing panel on the conversation screen.
+  Without the flag it appears only in development; `0` hides it everywhere. This is a deliberate
+  temporary exception to the minimal conversation screen, explicitly requested by the owner.
+- Tests simulate providers. Do not describe their success as proof of real translation quality,
+  iPhone playback, mobile-network connectivity, or clone quality.
+
 ### Built and verified
 
 - **Milestones 1–4.** Microphone → OpenAI Realtime Translation over WebRTC (ephemeral token from
@@ -57,21 +84,12 @@ real failures on real devices.
 | ElevenLabs single-use client token, browser connects directly | Server relay: `POST /api/elevenlabs/speak` streams `audio/mpeg` through, played in an `<audio>` element | **The browser WebSocket to `api.elevenlabs.io` was refused on a real user's machine while the identical request succeeded from Node on that same machine** — the proxy / VPN / extension class of failure, invisible server-side. The relay also escapes an iPhone's silent switch, which mutes Web Audio but not media playback. Costs roughly 700 ms of added latency. |
 | "Do NOT design the core audio pipeline around a long-running Vercel serverless request" | The relay above is a serverless request | A sentence-length relay lasts about 1.5 s, `maxDuration` 30. Accepted knowingly: playback that never starts is worse than playback that is slower. |
 | Both participants speak freely | Explicit floor; nobody holds it by default | Two phones in one room both hear whoever speaks. Worse, a microphone open on the wrong side captures the person speaking at the *other* device and returns their own words to them as if the other person had said them. A microphone is now only ever opened by a deliberate tap. |
-| "No mandatory account. A first conversation must work as guest ↔ guest" | The **creator** signs in; the invited person never does | A guest clone is thrown away with its session, so every conversation rebuilt one and burned provider credits and voice slots. The scan-and-talk promise is preserved for the person being invited, which is the half that matters for a stranger. The cost is real and deliberate: the creator no longer reaches a first conversation without an account. |
+| "No mandatory account. A first conversation must work as guest ↔ guest" | The **creator** signs in; the invited person signs in only if they want a clone | A guest clone is thrown away with its session, so every conversation rebuilt one and burned provider credits and voice slots. The scan-and-talk promise is preserved for the person being invited, which is the half that matters for a stranger. The cost is real and deliberate: the creator no longer reaches a first conversation without an account. |
 | Automatic language detection | Application-side classification of the first source transcripts, plus two editable menus | Translation transcript events do not report a source-language code. Detection runs asynchronously; a manual correction always wins. |
 
 ### Not built
 
 - **Milestone 6**, text input fallback.
-- **French → Thai, the project's primary use case, is probably impossible with this model.**
-  `gpt-realtime-translate` documents **13 output languages** — Spanish, Portuguese, French,
-  Japanese, Russian, Chinese, German, Korean, Hindi, Indonesian, Vietnamese, Italian, English —
-  and **Thai is not among them**. Thai appears only in the 70+ *input* languages, so Thai → French
-  should work while French → Thai should not. Creating a session with `language: "th"` is accepted
-  by the API, so the restriction is not enforced at session creation and proves nothing; only real
-  speech will show what comes out. Thai is therefore kept selectable and marked "à tester" in the
-  picker. If it is confirmed impossible, that direction needs a different pipeline — realtime
-  transcription, a text translation, then TTS — which is slower and is a separate design.
 - **Manual correction of the detected vocal range.** The specification requires every detected
   value to be correctable; this one is not yet. Fix this before any non-developer uses the app.
 - **Push transport.** Still 500 ms polling.
@@ -83,7 +101,7 @@ real failures on real devices.
   around feeding it history: any added intelligence belongs in the application. `session.audio`
   does accept `input.transcription` (enabled, it is what produces source transcripts) and
   `input.noise_reduction` (`near_field` / `far_field`, left off, commented in the token route).
-- **Echoed and duplicated speech, and the conversation memory that would catch it.** Known, left
+- **Echoed and duplicated speech.** Bounded original conversation memory now exists, but echo detection is not implemented. Known, left
   for later: an edge case people notice by themselves. While A holds the floor, B's loudspeaker
   plays A's translated sentence, A's open microphone picks it up, and A's session transcribes it,
   "translates" it into the language it is already in and sends it back — an attenuating loop that

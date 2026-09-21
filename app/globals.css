@@ -207,3 +207,8 @@ button:disabled { opacity: .5; cursor: wait; }
 .language-choice label { font-size: 12px; color: var(--muted); }
 .language-choice .language-picker { margin: 0; width: 100%; min-height: 44px; border: 1px solid var(--surface-border); border-radius: 16px; background: var(--surface); }
 .language-hint { font-size: 11px; color: var(--muted); }
+
+.pipeline-diagnostics, .guest-voice-offer { width: 100%; max-width: 460px; margin: 12px 0; padding: 12px; border: 1px solid var(--surface-border); border-radius: 12px; font-size: 12px; }
+.pipeline-diagnostics dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-wrap: anywhere; }
+.pipeline-diagnostics dd { margin: 0; }
+.settings .language-picker { max-width: 100%; }

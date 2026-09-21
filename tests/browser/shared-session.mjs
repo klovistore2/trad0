@@ -9,7 +9,7 @@ import { neon } from '@neondatabase/serverless';
 createRequire(import.meta.url)('@next/env').loadEnvConfig(process.cwd());
 const baseURL = process.env.TEST_BASE_URL || 'http://localhost:3100';
 const browser = await chromium.launch({ headless:true, args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
-const contexts=[];let sessionId;let accountEmail;
+const contexts=[];let sessionId;let accountEmail;let guestEmail;
 const errors=[];
 // A real, short WAV so the audio element can actually decode, play and fire 'ended'.
 function wavClip(seconds=1.5, frequency=440, rate=8000) {
@@ -33,18 +33,46 @@ async function client(account) {
  if(account) await context.addCookies(await signedInContext(account));
  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(() => {
+  const NativePeer = window.RTCPeerConnection;
+  const NativeRecorder = window.MediaRecorder;
+  window.testRecordings = 0;
+  window.MediaRecorder = class extends NativeRecorder {
+   constructor(...args) { super(...args); window.testRecordings++; }
+  };
   class TestPeer {
    connectionState='new';
+   constructor(options) {
+    if (options) {
+     const peer = new NativePeer(options); (window.testAudioPeers ??= []).push(peer); return peer;
+    }
+    const audio = new AudioContext(); this.audio = audio;
+    const oscillator = audio.createOscillator(); const gain = audio.createGain(); gain.gain.value = 0;
+    const destination = audio.createMediaStreamDestination(); oscillator.connect(gain).connect(destination); oscillator.start();
+    this.output = destination.stream.getAudioTracks()[0]; this.gain = gain;
+   }
    addTrack(track) { window.testMicrophone=track; }
-   createDataChannel(){this.channel={readyState:'open',send(data){window.testUpdates??=[];window.testUpdates.push(JSON.parse(data));},close(){this.onclose?.();}};window.testChannel=this.channel;return this.channel;}
+   createDataChannel(){
+    const { audio, gain } = this;
+    this.channel={readyState:'open',send(data){window.testUpdates??=[];window.testUpdates.push(JSON.parse(data));},close(){this.onclose?.();},
+     set onmessage(handler) { this.handler = event => {
+      if (JSON.parse(event.data).type === 'session.output_transcript.delta') {
+       void audio.resume(); gain.gain.value = 0.25;
+       setTimeout(() => { gain.gain.value = 0; }, 2000);
+      }
+      handler(event);
+     }; }, get onmessage() { return this.handler; }
+    };window.testChannel=this.channel;return this.channel;
+   }
    async createOffer(){return {type:'offer',sdp:'synthetic-offer'};}
    async setLocalDescription(){}
-   async setRemoteDescription(){this.connectionState='connected';this.channel.onopen?.();}
-   close(){this.connectionState='closed';this.onconnectionstatechange?.();}
+   async setRemoteDescription(){this.connectionState='connected';this.channel.onopen?.();this.ontrack?.({track:this.output});}
+   close(){this.connectionState='closed';void this.audio.close();this.onconnectionstatechange?.();}
   }
   window.RTCPeerConnection=TestPeer;
  });
  await page.route('**/api/openai/realtime-token',route=>route.fulfill({json:{value:'test-token'}}));
+ await page.route('**/api/openai/transcription-token',route=>route.fulfill({json:{value:'test-token'}}));
+ await page.route('https://api.openai.com/v1/realtime/calls',route=>route.fulfill({body:'synthetic-answer'}));
  await page.route('https://api.openai.com/v1/realtime/translations/calls',route=>route.fulfill({body:'synthetic-answer'}));
  await page.route('**/api/elevenlabs/speak',route=>route.fulfill({contentType:'audio/wav',body:clip}));
  return page;
@@ -79,8 +107,7 @@ try {
  await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
  const link=await a.getByRole('textbox',{name:'Lien d’invitation'}).inputValue();assert.match(link,/\/join\//);
  const b=await client();await b.goto(link);
- // Accepting from the dialog records consent server side, with no trip through settings.
- await b.getByRole('button',{name:'Use my voice'}).click();
+ // A guest can converse immediately; cloning requires an account and later consent.
  await expect(b.getByRole('dialog')).toHaveCount(0);
  // Nobody is speaking yet, so both sides are offered the one-tap start.
  await b.getByRole('button',{name:'Start talking'}).waitFor();
@@ -97,9 +124,10 @@ try {
  // A listener who never started a microphone session hears anyway: any touch arms playback,
  // and nothing specific has to be pressed.
  await b.locator('.translation-area').click();
+ await a.waitForFunction(()=>window.testAudioPeers?.some(p=>p.connectionState==='connected'));
+ await b.waitForFunction(()=>window.testAudioPeers?.some(p=>p.connectionState==='connected'));
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'This is a synthetic translation test.'})}));
- await b.getByText('This is a synthetic translation test.',{exact:true}).waitFor();
- await b.getByText(/Playing translation/).waitFor();
+ await Promise.all([b.getByText('This is a synthetic translation test.',{exact:true}).waitFor(), b.getByText(/Playing translation/).waitFor()]);
  // The speaker icon is the only sound control: no separate prompt, no separate button.
  await expect(b.locator('.sound-icon')).toHaveCount(1);
  await expect(b.locator('.sound-icon.needs-tap')).toHaveCount(0);
@@ -114,8 +142,7 @@ try {
  // Arming happens once, not per sentence: the flow keeps coming with no further interaction.
  await expect(b.getByText(/Playing translation/)).toBeHidden();
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'A second sentence plays by itself.'})}));
- await b.getByText('A second sentence plays by itself.',{exact:true}).waitFor();
- await b.getByText(/Playing translation/).waitFor();
+ await Promise.all([b.getByText('A second sentence plays by itself.',{exact:true}).waitFor(), b.getByText(/Playing translation/).waitFor()]);
  // Joining while someone speaks must never steal the floor, so B's tap only starts listening.
  await b.getByRole('button',{name:/Join in/}).click();
  await b.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
@@ -127,8 +154,7 @@ try {
  await b.evaluate(()=>{Object.defineProperty(document,'hidden',{value:false,configurable:true});document.dispatchEvent(new Event('visibilitychange'));});
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Playback survives a dark screen.'})}));
- await b.getByText('Playback survives a dark screen.',{exact:true}).waitFor();
- await b.getByText(/Playing translation/).waitFor();
+ await Promise.all([b.getByText('Playback survives a dark screen.',{exact:true}).waitFor(), b.getByText(/Playing translation/).waitFor()]);
  // A dropped status poll must not end the conversation: only a closed session does.
  const statusPoll=url=>/\/api\/sessions\/[0-9a-f-]{36}$/.test(url.pathname);
  await b.route(statusPoll,route=>route.abort());
@@ -151,11 +177,11 @@ try {
  // Both language menus synchronize and update the active translation without replacing the mic.
  await b.locator('#peer-language').selectOption('es');
  await expect(a.locator('#my-language')).toHaveValue('es');
- await b.waitForFunction(()=>window.testUpdates?.some(e=>e.session.audio.output.language==='es'));
+ await b.waitForFunction(()=>window.testUpdates?.some(e=>e.session?.audio?.output?.language==='es'));
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
  await b.locator('#peer-language').selectOption('fr');
  await expect(a.locator('#my-language')).toHaveValue('fr');
- await b.waitForFunction(()=>window.testUpdates?.at(-1)?.session.audio.output.language==='fr');
+ await b.waitForFunction(()=>window.testUpdates?.at(-1)?.session?.audio?.output?.language==='fr');
  // Speech detection is asynchronous. Mock its model result at the HTTP boundary, keep real
  // persistence and polling, then verify an explicit correction disables future detection.
  const sqlLanguage=neon(process.env.DATABASE_URL);
@@ -174,6 +200,27 @@ try {
  assert.equal(detectionCalls,1);
  await b.locator('#my-language').selectOption('en');
  await expect(b.locator('#my-language')).toHaveValue('en');
+ // Mode 2 works for a guest who has not consented, while A stays in mode 1.
+ let llmCalls=0;
+ await b.route('**/api/translate',async route=>{
+  const body=route.request().postDataJSON();llmCalls++;
+  assert.equal(body.text,'Can we go there tomorrow?');
+  assert.ok(body.context.some(turn=>turn.speaker===0 && turn.original.includes('réellement')));
+  assert.ok(body.context.some(turn=>turn.speaker===1 && turn.original.includes('actually speaking')));
+  await route.fulfill({json:{text:'Peut-on y aller demain ?',targetLanguage:'fr',model:'test-fast-llm',contextTurns:body.context.length,translationMs:42}});
+ });
+ await b.getByRole('button',{name:'Settings'}).click();
+ await b.locator('#translation-mode').selectOption('context');
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
+ await b.getByRole('button',{name:'Back to the conversation'}).click();
+ await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');
+ await expect(a.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'conversation.item.input_audio_transcription.delta',delta:'Can we go there tomorrow?'})}));
+ await a.getByText('Peut-on y aller demain ?', {exact:true}).waitFor();
+ await a.getByText(/Traduction en cours/).waitFor();
+ assert.equal(llmCalls,1);
+ assert.equal(await a.evaluate(()=>window.testRecordings),0);
+ assert.equal(await b.evaluate(()=>window.testRecordings),0);
  // Handing the floor back leaves both microphones closed, the resting state of a session.
  await b.getByRole('button',{name:'Done speaking'}).click();
  await b.waitForFunction(()=>window.testMicrophone.enabled===false);
@@ -196,10 +243,24 @@ try {
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});
  assert.deepEqual(errors,[]);
  if (process.env.DATABASE_URL) {
-  // What the dialog and the settings did is what reached the database: A declined then withdrew, B accepted.
+  // A withdrew consent; the guest used mode 2 without consenting.
   const consent=await neon(process.env.DATABASE_URL)`SELECT slot, consent_at IS NOT NULL AS consented FROM adu_participants WHERE session_id=${sessionId} ORDER BY slot`;
-  assert.deepEqual(consent.map(row=>row.consented),[false,true]);
+  assert.deepEqual(consent.map(row=>row.consented),[false,false]);
  }
+ // Google login returns the guest to the same participant, then asks explicit consent.
+ guestEmail=`browser-guest-${Date.now()}@example.test`;
+ const guestId=randomUUID();
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${guestId},${guestEmail},'google')`;
+ await b.context().addCookies(await signedInContext({id:guestId,email:guestEmail}));
+ await b.goto(`/compte?returnTo=${encodeURIComponent(`/session/${sessionId}`)}`);
+ await b.waitForURL(`**/session/${sessionId}`);
+ await b.getByRole('button',{name:'Use my voice'}).click();
+ await expect(b.getByRole('dialog')).toHaveCount(0);
+ await expect.poll(async()=>{
+  const rows=await neon(process.env.DATABASE_URL)`SELECT user_id,consent_at IS NOT NULL AS consented FROM adu_participants WHERE session_id=${sessionId} AND slot=1`;
+  return rows[0];
+ }).toEqual({user_id:guestId,consented:true});
+ assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'End session & delete voices'}).click();
  await a.waitForURL(baseURL+'/');
  console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, voice consent and withdrawal, theme, session closure.');
@@ -209,5 +270,6 @@ try {
   const sql=neon(process.env.DATABASE_URL);
   if(sessionId) await sql`DELETE FROM adu_sessions WHERE id=${sessionId}`;
   if(accountEmail) await sql`DELETE FROM adu_users WHERE email=${accountEmail}`;
+  if(guestEmail) await sql`DELETE FROM adu_users WHERE email=${guestEmail}`;
  }
 }

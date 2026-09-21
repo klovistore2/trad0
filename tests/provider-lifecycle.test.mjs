@@ -111,3 +111,25 @@ test("demo finishes in idle and does not leave an active interval", async () => 
   assert.equal(peers[0].channel.sent[0].session.audio.output.language, "ja");
   await provider.disconnect();
  });
+
+test('mode 1 exposes only the remote translated track, never the microphone',async()=>{
+ const {provider,peers,tracks}=setup(null,async url=>url.startsWith('/api/')?Response.json({value:'ephemeral'}):new Response('sdp'));
+ const output=[];provider.onTranslatedAudio(track=>output.push(track));
+ await provider.connect({targetLanguage:'en'});assert.equal(output.length,0);
+ const translated={id:'translated'};peers[0].ontrack({track:translated});
+ assert.equal(output[0],translated);assert.notEqual(output[0],tracks[0]);
+ await provider.disconnect();assert.equal(output.at(-1),null);
+});
+test('mode 2 requests transcription only and does not duplicate the completed transcript',async()=>{
+ const calls=[];
+ const {provider,peers}=setup(null,async url=>{calls.push(url);return url.startsWith('/api/')?Response.json({value:'ephemeral'}):new Response('sdp');});
+ const originals=[];const translations=[];
+ provider.onOriginalTranscript(event=>originals.push(event.delta));provider.onTranslatedText(event=>translations.push(event.delta));
+ await provider.connect({targetLanguage:'th',transcriptionOnly:true,sessionId:'room'});
+ assert.deepEqual(calls,['/api/openai/transcription-token','https://api.openai.com/v1/realtime/calls']);
+ for(const event of [{type:'conversation.item.input_audio_transcription.delta',delta:'Hello.'},{type:'conversation.item.input_audio_transcription.completed',transcript:'Hello.'},{type:'session.output_transcript.delta',delta:'Must not translate here'}])peers[0].channel.onmessage({data:JSON.stringify(event)});
+ assert.deepEqual(originals,['Hello.']);assert.deepEqual(translations,[]);
+ provider.commitInput();provider.setTargetLanguage('en');
+ assert.equal(peers[0].channel.sent.length,1);assert.equal(peers[0].channel.sent[0].type,'input_audio_buffer.commit');
+ await provider.disconnect();
+});

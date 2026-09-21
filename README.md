@@ -1,6 +1,6 @@
 # Trad0
 
-Traduction face à face dans le navigateur, sans compte pour l'invité. Langues détectées à partir des premières phrases et modifiables des deux côtés ; le thaï en sortie reste à valider. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
+Traduction face à face dans le navigateur, sans compte pour l'invité. Langues détectées à partir des premières phrases et modifiables des deux côtés ; le thaï en sortie utilise la traduction par LLM. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
 
 ## Démarrer
 
@@ -16,6 +16,10 @@ Variables serveur :
 - `OPENAI_API_KEY` et `OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate`.
 - `ELEVENLABS_API_KEY` et `ELEVENLABS_TTS_MODEL=eleven_flash_v2_5`. `eleven_v3_conversational` n’a pas fonctionné dans le test de cette intégration.
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
+- `OPENAI_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper` pour conserver la transcription en continu.
+- `OPENAI_TEXT_TRANSLATION_MODEL=gpt-4.1-mini` pour le mode avec contexte. Le modèle doit accepter Chat Completions et le JSON structuré.
+- `APP_DIAGNOSTICS=1` affiche le panneau des deux circuits sur la conversation ; absent, il est visible uniquement avec `next dev`. `0` le masque partout.
+- `WEBRTC_ICE_SERVERS` : tableau JSON des serveurs STUN/TURN pour l’audio direct entre appareils. `[]` fonctionne seulement si les réseaux permettent la connexion directe. Utiliser des identifiants TURN dédiés : cette configuration est remise aux participants authentifiés.
 - `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus les colonnes `adu_sessions.floor_slot` (tour de parole), `adu_participants.voice_range` (registre détecté) et `adu_participants.voice_tier` (palier de clonage). `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
 - `AUTH_SECRET` : clé de signature des sessions Auth.js, `openssl rand -base64 32`.
 - `AUTH_GOOGLE_ID` et `AUTH_GOOGLE_SECRET` : identifiants OAuth Google, seule méthode de connexion.
@@ -47,6 +51,22 @@ La détection utilise `OPENAI_LANGUAGE_DETECTION_MODEL` (par défaut `gpt-4.1-na
 Un choix explicite désactive la détection pour cette personne. Une réponse de détection déjà en cours ne peut pas écraser cette correction. Choisir **Auto** de nouveau utilise les nouvelles paroles, dans la limite des trois tentatives. La nouvelle langue est partagée par le suivi de session (jusqu’à environ trois secondes) et change la cible OpenAI via `session.update`, sans recréer le micro ni l’enregistreur de clonage.
 
 Appliquer `npm run db:migrate` pour les champs de la migration `010_language_detection.sql`. Les tests locaux et navigateur simulent les fournisseurs ; la qualité de reconnaissance sur de vraies paroles reste à valider.
+
+## Deux modes par personne
+
+Dans les paramètres, **My outgoing speech** propose Auto, OpenAI live speech ou Translation with context.
+
+- **Mode 1** : OpenAI traduit directement la parole et produit le texte et l’audio. La piste audio traduite est transmise au destinataire via une seconde connexion WebRTC entre les deux navigateurs. Le micro original n’entre jamais dans cette liaison. La signalisation SDP est temporairement stockée dans `adu_audio_links`, jamais l’audio.
+- **Mode 2** : OpenAI transcrit les paroles ; `/api/translate` traduit chaque phrase avec un LLM rapide et le contexte récent des deux locuteurs ; ElevenLabs prononce cette traduction. Sans clone, ElevenLabs utilise la voix standard grave/aiguë détectée. Aucun compte ni consentement au clonage n’est requis pour ce mode.
+- **Auto** commence en mode 1 et passe en mode 2 lorsque le clone de cette personne est prêt et activé. Chaque sens évolue indépendamment. La bascule attend une pause et les traductions déjà en cours. Une sortie en thaï utilise directement le mode 2, car OpenAI ne documente pas cette langue en sortie du mode 1. Une liaison audio directe en échec entraîne également un passage en mode 2.
+
+Le mode 1 ne permet pas de sélectionner une voix grave/aiguë dans son schéma documenté. La détection du registre reste active et sert à ElevenLabs. Les modèles restent configurables ; Grok et Jev ne sont pas intégrés.
+
+La mémoire est bornée aux douze derniers originaux, associés au locuteur, dès le mode 1. Les traductions du mode 2 complètent les originaux correspondants. Les six dernières traductions directes sont aussi conservées séparément, avec leur locuteur : leurs segments ne coïncident pas toujours avec les originaux. Elle reste en mémoire dans le navigateur ; les événements textuels nécessaires à la livraison restent soumis à la purge de session. Un rechargement reconstruit seulement les originaux reçus de l’autre personne à partir des événements disponibles.
+
+Le panneau **DEV** affiche les deux modes, les modèles, le clone, le contexte, l’état de la liaison audio et les mesures de délai disponibles. Il distingue les mesures de la phrase sortante de celles de la phrase reçue, sans additionner des étapes appartenant à deux phrases différentes. La latence et la qualité des traductions réelles doivent encore être mesurées sur téléphones.
+
+Appliquer la migration `011_conversation_modes.sql` avec `npm run db:migrate`. Sur réseaux mobiles ou filtrés, configurer un relais TURN pour fiabiliser le mode 1 ; sans lui, le repli en mode 2 maintient la conversation après l’échec de connexion.
 
 ## Compte
 
@@ -102,7 +122,7 @@ Sur deux téléphones, utiliser une URL **HTTPS accessible aux deux appareils**,
 
 ## Registre de voix et diagnostic
 
-Avant qu'un clone existe, le destinataire entend une voix standard **choisie selon le registre du locuteur**. Le navigateur estime la fréquence fondamentale du micro pendant que son propriétaire a la parole, par autocorrélation normalisée, et en déduit `low` ou `high` après une trentaine de trames voisées. Seul ce mot quitte l'appareil : aucun audio n'est enregistré ni transmis pour cette mesure.
+En mode 2, avant qu'un clone existe, le destinataire entend une voix standard **choisie selon le registre du locuteur**. Le navigateur estime la fréquence fondamentale du micro pendant que son propriétaire a la parole, par autocorrélation normalisée, et en déduit `low` ou `high` après une trentaine de trames voisées. Seul ce mot quitte l'appareil : aucun audio n'est enregistré ni transmis pour cette mesure.
 
 C'est une mesure de **hauteur de voix**, pas une affirmation sur la personne : des femmes ont une voix grave, des hommes une voix aiguë. Tant que rien n'est détecté, la voix reste neutre — le système ne devine pas. Côté ElevenLabs, la correspondance se fait sur le `labels.gender` de la voix elle-même, qui décrit la voix et non l'auditeur. `ELEVENLABS_VOICE_LOW` et `ELEVENLABS_VOICE_HIGH` permettent d'imposer un choix.
 
@@ -112,11 +132,13 @@ C'est une mesure de **hauteur de voix**, pas une affirmation sur la personne : d
 
 Le clonage est **progressif**.
 
-Le choix est demandé **une seule fois**, dans une fenêtre à l'arrivée sur une conversation : utiliser sa voix, ou garder une voix standard. La réponse est mémorisée dans le navigateur et ne sera plus jamais redemandée, y compris dans les conversations suivantes. Le comportement est identique en développement et en production.
+Pour une personne connectée, le choix est demandé **une seule fois**, dans une fenêtre à l'arrivée sur une conversation : utiliser sa voix, ou garder une voix standard. La réponse est mémorisée dans le navigateur et ne sera plus jamais redemandée, y compris dans les conversations suivantes. Le comportement est identique en développement et en production.
 
-Si vous acceptez, le clonage part tout seul : rien d'autre à toucher. Si vous refusez, la voix standard adaptée à votre registre est utilisée. **Utiliser ma voix** dans les paramètres permet de revenir sur un refus, **Ne plus utiliser ma voix** sur un accord — les deux écrivent la même mémoire, donc la fenêtre ne réapparaît pas.
+Si vous acceptez, le clonage part tout seul : rien d'autre à toucher. Si vous refusez, le mode 1 reste disponible et le mode 2 utilise la voix standard adaptée à votre registre. **Utiliser ma voix** dans les paramètres permet de revenir sur un refus, **Ne plus utiliser ma voix** sur un accord — les deux écrivent la même mémoire, donc la fenêtre ne réapparaît pas.
 
-Rien n'est enregistré avant l'accord.
+L’invité reçoit une proposition de connexion Google après environ 30 secondes de parole effective. Il peut la refuser et continuer dans les deux modes. La connexion revient à la même conversation et conserve sa place ; le clonage demande ensuite un accord explicite. Les 30 secondes avant cet accord ne sont pas enregistrées et ne comptent pas dans l’échantillon du clone.
+
+Rien n'est enregistré avant le compte et l'accord.
 
 Ensuite l'application capte vos tours de parole pendant que vous parlez, et seulement eux : l'enregistreur est mis en pause par le même signal que le micro, donc ni les silences ni la voix de l'autre personne n'entrent dans l'échantillon. La durée retenue est la **parole effective** : elle ne court qu'entre le premier et le dernier fragment de transcription, avec une courte marge pour ne pas découper les pauses entre les mots. Garder la parole en lisant l'écran ou en attendant l'autre personne ne compte pas une seconde.
 
@@ -126,7 +148,7 @@ L'échantillon vit uniquement dans la mémoire du navigateur, n'est jamais écri
 
 **Cloned voice in use · tap for the standard voice** bascule entre les deux **sans rien supprimer** : le modèle reste enregistré et revient d'un appui. Utile pour comparer les deux voix en conditions réelles.
 
-**Stop using my voice** retire le consentement et supprime le clone. **End session & delete voices**, au bas des paramètres, ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
+**Stop using my voice** retire le consentement et supprime le clone. **End session & delete voices**, au bas des paramètres, ferme la session pour les deux participants et supprime les données temporaires. Les voix enregistrées sur les comptes sont conservées. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
 
 Si ElevenLabs exige une vérification, la voix standard reste utilisée.
 
@@ -151,11 +173,11 @@ La purge retire les textes expirés et les voix connues. Elle recherche aussi le
 - OpenAI : jeton éphémère via `/v1/realtime/translations/client_secrets`, puis microphone directement en WebRTC vers `/v1/realtime/translations/calls`. Aucun `response.create`, aucun assistant visible.
 - Neon : identité invitée hachée, deux places atomiques, expiration, transport de texte. Pas d’audio en base.
 - `PeerTransport` : première implémentation par requêtes courtes toutes les 500 ms, avec publications groupées et identifiants idempotents. Neon ne remplace pas Supabase Realtime ; ce compromis augmente les requêtes et la latence. Un transport push pourra remplacer cet adaptateur sans changer les fournisseurs.
-- OpenAI : la traduction se fait **dans le flux audio**, pas en deux temps. Une seule connexion WebRTC renvoie la transcription d’origine et la traduction, en continu. La piste audio traduite qu’OpenAI renvoie est volontairement ignorée : elle arrive chez celui qui parle, alors qu’il faut le son chez celui qui écoute, avec la voix du locuteur.
-- Le modèle de traduction **n’accepte ni instructions, ni prompt, ni contexte de conversation** — vérifié dans le guide et le cookbook courants, qui indiquent qu’il ne prend pas de « custom prompting ». Toute intelligence supplémentaire doit donc vivre côté application. `audio.input.noise_reduction` est documenté mais laissé désactivé, en commentaire dans la route de jeton.
+- OpenAI en mode 1 : la traduction se fait **dans le flux audio**. Une seule connexion WebRTC renvoie la transcription d’origine et la traduction, en continu. En mode 1, la piste audio traduite est transférée à l’autre appareil par WebRTC ; en mode 2, seule la transcription est demandée à OpenAI avant le LLM et ElevenLabs.
+- Le modèle de traduction du mode 1 **n’accepte ni instructions, ni prompt, ni contexte de conversation** — vérifié dans le guide et le cookbook courants, qui indiquent qu’il ne prend pas de « custom prompting ». Toute intelligence supplémentaire doit donc vivre côté application. `audio.input.noise_reduction` est documenté mais laissé désactivé, en commentaire dans la route de jeton.
 - ElevenLabs : la synthèse est **relayée par `/api/elevenlabs/speak`**, qui transmet le flux `audio/mpeg` sans jamais l’écrire ni le journaliser. Le navigateur ne contacte donc que cette origine, et la lecture se fait dans un élément `<audio>`.
 - Ce choix remplace une WebSocket ouverte du navigateur vers `api.elevenlabs.io`, que proxys, VPN et extensions bloquent couramment — panne invisible côté serveur. Il coûte environ 700 ms de latence supplémentaire et évite Web Audio, dont la sortie est coupée par l’interrupteur silencieux d’un iPhone. La latence est un chantier identifié ; une lecture qui ne démarre pas n’en est pas un.
-- Les phrases sont envoyées après ponctuation ou une pause d’environ une seconde. Les sous-titres arrivent avant l’audio.
+- Les phrases sont envoyées après ponctuation ou une pause d’environ une seconde. En mode 1, audio et sous-titres suivent des chemins distincts ; leur ordre d’arrivée n’est pas garanti.
 - La voix choisie pour le destinataire est celle de **l’autre participant**, déterminée côté serveur. Aucun ID de clone arbitraire fourni par le client n’est accepté par la route de jeton.
 - La route de synthèse est authentifiée par session et bornée à 4000 caractères, mais ne limite pas le débit. Avant une ouverture publique, ajouter limitation de débit distribuée, quotas et suivi des coûts. Le contrôle d’origine ne remplace pas une protection contre les abus.
 - L’API de traduction ne fournit pas de confiance calibrée dans les événements utilisés : `quality: "unknown"` reste explicite.
@@ -181,4 +203,8 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 38 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Le parcours navigateur vérifie les deux modes, la lecture sans microphone, la reprise après masquage, la mémoire, le refus du clonage invité et le retour Google à la même conversation. Les fournisseurs sont simulés ; ce test ne prouve pas la qualité des traductions ou des clones réels. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+
+Validation de cette version : lint, TypeScript, 64 tests sans fournisseur réel, builds de production et de test (Webpack), parcours Chromium à deux profils avec transport Neon réel. Vérification OpenAI réelle : création d’un jeton de transcription et courte traduction synthétique en thaï acceptées (HTTP 200). Aucun essai de voix clonée réelle ni de conversation sur téléphone dans cette validation.
+
+Schémas des nouveaux appels : [sessions de transcription Realtime](https://developers.openai.com/api/docs/guides/realtime-transcription) et [sorties structurées](https://developers.openai.com/api/docs/guides/structured-outputs). Le mode direct utilise le [schéma de session de traduction](https://developers.openai.com/api/reference/resources/realtime/subresources/translations/subresources/client_secrets/methods/create), qui ne documente aucun paramètre de sélection de voix.

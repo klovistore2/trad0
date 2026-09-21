@@ -10,6 +10,7 @@ export async function cleanupSessions() {
   let cleaned = 0;
   for (const { id } of expired) {
     await sql`DELETE FROM adu_events WHERE session_id=${id}`;
+    await sql`DELETE FROM adu_audio_links WHERE session_id=${id}`;
     // Also find a clone whose creation succeeded remotely after a local timeout.
     const params = new URLSearchParams({ search: `adu-${id}-`, page_size: "100" });
     const response = await fetch(`https://api.elevenlabs.io/v2/voices?${params}`, { headers: elevenHeaders(), signal: AbortSignal.timeout(10_000) });

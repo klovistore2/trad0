@@ -7,6 +7,9 @@ export class OpenAITranslationProvider implements TranslationProvider {
   private channel?: RTCDataChannel;
   private controller = new AbortController();
   private timer?: ReturnType<typeof setTimeout>;
+  private transcriptionOnly = false;
+  private audioTrack: (track: MediaStreamTrack | null) => void = () => {};
+  onTranslatedAudio(cb: typeof this.audioTrack) { this.audioTrack = cb; }
   private pendingLanguage?: string;
   private original: (event: TranscriptEvent) => void = () => {};
   private translated: (event: TranscriptEvent) => void = () => {};
@@ -21,7 +24,8 @@ export class OpenAITranslationProvider implements TranslationProvider {
     this.status(status, message);
   }
 
-  async connect({ targetLanguage, sessionId, microphoneEnabled = true }: TranslationSessionConfig) {
+  async connect({ targetLanguage, sessionId, microphoneEnabled = true, transcriptionOnly = false }: TranslationSessionConfig) {
+    this.transcriptionOnly = transcriptionOnly;
     const signal = this.controller.signal;
     this.status("connecting");
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
@@ -37,7 +41,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
       // Apply the turn state before negotiation, so waiting for the floor never leaks audio.
       this.setMicrophoneEnabled(microphoneEnabled);
       stream.getAudioTracks().forEach(track => track.addEventListener("ended", () => this.fail("microphone_denied", "Le micro a été déconnecté. Réessayez.")));
-      const tokenResponse = await fetch("/api/openai/realtime-token", {
+      const tokenResponse = await fetch(transcriptionOnly ? "/api/openai/transcription-token" : "/api/openai/realtime-token", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetLanguage, sessionId }), signal,
       });
@@ -51,7 +55,9 @@ export class OpenAITranslationProvider implements TranslationProvider {
       const peer = new RTCPeerConnection();
       this.peer = peer;
       stream.getAudioTracks().forEach(track => peer.addTrack(track, stream));
-      // Milestone 1: do not play the remote translated audio track yet.
+      peer.ontrack = event => {
+        if (!signal.aborted && !transcriptionOnly) this.audioTrack(event.track);
+      };
       const channel = peer.createDataChannel("oai-events");
       this.channel = channel;
       channel.onopen = () => {
@@ -62,6 +68,14 @@ export class OpenAITranslationProvider implements TranslationProvider {
       };
       channel.onmessage = ({ data }: MessageEvent<unknown>) => {
         if (signal.aborted || typeof data !== "string") return;
+        if (transcriptionOnly) {
+          try {
+            const input = JSON.parse(data);
+            if (input.type === "conversation.item.input_audio_transcription.delta" && typeof input.delta === "string") this.original({ delta: input.delta, quality: "unknown" });
+            if (input.type === "error") this.fail("provider_error", "Transcription interrupted. Try again.");
+          } catch { /* Ignore malformed events. */ }
+          return;
+        }
         const event = parseTranslationMessage(data);
         if (event?.kind === "original") this.original({ delta: event.delta, quality: "unknown" });
         if (event?.kind === "translation") this.translated({ delta: event.delta, quality: "unknown" });
@@ -75,7 +89,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
       };
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
-      const response = await fetch("https://api.openai.com/v1/realtime/translations/calls", {
+      const response = await fetch(transcriptionOnly ? "https://api.openai.com/v1/realtime/calls" : "https://api.openai.com/v1/realtime/translations/calls", {
         method: "POST", headers: { Authorization: `Bearer ${token.value}`, "Content-Type": "application/sdp" }, body: offer.sdp, signal,
       });
       if (!response.ok) { this.fail("provider_error", "Impossible de démarrer la traduction. Réessayez."); return; }
@@ -93,6 +107,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
   getStream() { return this.stream; }
 
   setTargetLanguage(language: string) {
+    if (this.transcriptionOnly) return;
     this.pendingLanguage = language;
     if (this.controller.signal.aborted || this.channel?.readyState !== "open") return;
     // Documented translation session update; keeps the microphone and clone recorder intact.
@@ -104,7 +119,12 @@ export class OpenAITranslationProvider implements TranslationProvider {
     this.stream?.getAudioTracks().forEach(track => { track.enabled = enabled; });
   }
 
+  commitInput() {
+    if (this.transcriptionOnly && this.channel?.readyState === "open") this.channel.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+  }
+
   async disconnect() {
+    this.audioTrack(null);
     this.controller.abort();
     clearTimeout(this.timer);
     this.stream?.getTracks().forEach(track => track.stop());

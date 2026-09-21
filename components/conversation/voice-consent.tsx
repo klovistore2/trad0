@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState } from "react";
 import { FINAL_TIER, VOICE_TIERS } from "@/lib/voice/consent";
 import { rememberVoiceDecision } from "./voice-intro";
@@ -32,6 +33,10 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
     finally { setBusy(false); }
   }
+  if (!me.hasAccount) return <div className="voice-consent">
+    <p>Sign in with Google to use and keep your own voice. You can continue translating without an account.</p>
+    <Link className="demo-button" href={`/compte?returnTo=${encodeURIComponent(`/session/${sessionId}`)}`}>Sign in to keep my voice</Link>
+  </div>;
   const next = VOICE_TIERS.find(step => step.tier > me.voiceTier);
   const active = me.voiceStatus === "ready" || me.voiceStatus === "verification_required";
   const summary = active
@@ -43,9 +48,9 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
     {!me.consented
       ? <>
           <p>{"The other person hears your translated words in a standard voice. With your permission, your voice is learned from this conversation and sent to ElevenLabs to speak for you instead. Nothing is recorded before you agree."}</p>
-          <p>{"The recording stays in this browser, is never stored on our servers, and the clone is deleted when the session ends."}</p>
+          <p>{"Samples are held in browser memory and sent to ElevenLabs to create your voice. They are never saved on our servers. Your voice is saved to your account until you remove it."}</p>
           <button className="demo-button" disabled={busy} onClick={async () => { setBusy(true); rememberVoiceDecision("accepted"); await onConsent(); setBusy(false); }}>
-            {"I agree · use my voice for this session"}
+            {"I agree · use and save my voice"}
           </button>
         </>
       : <>

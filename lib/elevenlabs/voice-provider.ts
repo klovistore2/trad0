@@ -1,7 +1,7 @@
 import type { VoiceProvider, VoiceStatus } from "@/types/voice";
 
 // A short WAV built in memory: used to prime playback during a gesture, and as a local test beep.
-function wav(seconds: number, frequency: number, rate = 8000) {
+export function wav(seconds: number, frequency: number, rate = 8000) {
   const samples = Math.floor(seconds * rate);
   const buffer = new ArrayBuffer(44 + samples * 2);
   const view = new DataView(buffer);

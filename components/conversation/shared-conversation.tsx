@@ -8,17 +8,19 @@ import { ThemeToggle } from "./theme-toggle";
 import { ShareSession } from "./share-session";
 import { SettingsPanel } from "./settings-panel";
 import { VoiceIntro } from "./voice-intro";
+import { GuestVoiceOffer } from "./guest-voice-offer";
+import { PipelineDiagnostics } from "./pipeline-diagnostics";
 import { OwnWords } from "./own-words";
 import { LanguageMenus } from "./language-menus";
 
-export function SharedConversation({ id }: { id: string }) {
-  const session = useSharedConversation(id);
+export function SharedConversation({ id, signedIn = false }: { id: string; signedIn?: boolean }) {
+  const session = useSharedConversation(id, signedIn);
   const [settings, setSettings] = useState(false);
   const room = session.room;
   // Each participant reads their own language: the guest was handed a phone and shares none.
   const t = translator(room?.me.language ?? "en");
   return <main className="conversation">
-    {room && <VoiceIntro consented={room.me.consented} t={t} onAccept={session.giveConsent} />}
+    {room?.me.hasAccount && <VoiceIntro consented={room.me.consented} t={t} onAccept={session.giveConsent} />}
     <header className="topbar">
       <Link className="wordmark" href="/">Trad0<span className="brand-dot">.</span></Link>
       <div className="topbar-actions">
@@ -37,7 +39,7 @@ export function SharedConversation({ id }: { id: string }) {
       {!room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
       : !room.peer ? <ShareSession id={id} />
       : settings ? <SettingsPanel id={id} me={room.me} peer={room.peer} speechSeconds={session.speechSeconds}
-          onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
+          onMode={mode => void session.setMode(mode)} onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
           readAudioState={session.readAudioState} onTestTone={() => void session.playTestTone()}
           voiceStatus={session.voiceStatus} received={session.received} onClose={() => setSettings(false)} />
       : <>
@@ -63,6 +65,8 @@ export function SharedConversation({ id }: { id: string }) {
           <OwnWords original={session.translation.original} translation={session.translation.translation}
             mine={room.me.language} theirs={room.peer.language} t={t} />
         </div>
+        {!room.me.hasAccount && <GuestVoiceOffer id={id} seconds={session.spokenSeconds} t={t} />}
+        {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState} />}
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? t("peerOnline") : t("peerOffline")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}

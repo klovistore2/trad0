@@ -8,7 +8,7 @@ import type { SessionStatus, TranslationProvider } from "@/types/translation";
 type State = { status: SessionStatus; translation: string; original: string; message: string; demo: boolean };
 const initialState: State = { status: "idle", translation: "", original: "", message: "", demo: false };
 
-export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void; shouldEnableMicrophone?: () => boolean } = {}) {
+export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void; onOriginal?: (delta: string) => void; onAudio?: (track: MediaStreamTrack | null) => void; shouldEnableMicrophone?: () => boolean } = {}) {
   const callbacks = useRef(options);
   useEffect(() => { callbacks.current = options; }, [options]);
   const [state, setState] = useState(initialState);
@@ -18,6 +18,7 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
   const stop = useCallback(() => {
     const current = provider.current;
     provider.current = null;
+    callbacks.current.onAudio?.(null);
     clearTimeout(settling.current);
     void current?.disconnect();
     setState(previous => ({ ...previous, status: "idle", message: "" }));
@@ -37,10 +38,10 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
     };
   }, [stop]);
 
-  const start = useCallback(async (demo = false) => {
+  const start = useCallback(async (demo = false, transcriptionOnly = false) => {
     // Set the ref before awaiting anything, preventing duplicate starts.
     if (provider.current) return;
-    const current = demo ? new MockTranslationProvider() : new OpenAITranslationProvider();
+    const current: TranslationProvider = demo ? new MockTranslationProvider() : new OpenAITranslationProvider();
     provider.current = current;
     setState({ ...initialState, status: "connecting", demo });
     current.onStatus((status, message = "") => {
@@ -52,7 +53,9 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
       }
       setState(previous => ({ ...previous, status, message }));
     });
+    current.onTranslatedAudio?.(track => { if (provider.current === current) callbacks.current.onAudio?.(track); });
     current.onOriginalTranscript(event => {
+      if (provider.current === current) callbacks.current.onOriginal?.(event.delta);
       if (provider.current === current) setState(previous => ({ ...previous, original: (previous.original + event.delta).slice(-12_000) }));
     });
     current.onTranslatedText(event => {
@@ -71,10 +74,11 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
     await current.connect({
       targetLanguage: callbacks.current.targetLanguage || "en",
       sessionId: callbacks.current.sessionId,
+      transcriptionOnly,
       // Read at connect time: the floor may already belong to the other person.
       microphoneEnabled: callbacks.current.shouldEnableMicrophone?.() ?? true,
     });
   }, []);
 
-  return { ...state, start, stop, setTargetLanguage: (language: string) => provider.current?.setTargetLanguage?.(language), getStream: () => provider.current?.getStream?.(), setMicrophoneEnabled: (enabled: boolean) => provider.current?.setMicrophoneEnabled?.(enabled), active: ["connecting", "listening", "translating"].includes(state.status) };
+  return { ...state, start, stop, commitInput: () => provider.current?.commitInput?.(), setTargetLanguage: (language: string) => provider.current?.setTargetLanguage?.(language), getStream: () => provider.current?.getStream?.(), setMicrophoneEnabled: (enabled: boolean) => provider.current?.setMicrophoneEnabled?.(enabled), active: ["connecting", "listening", "translating"].includes(state.status) };
 }

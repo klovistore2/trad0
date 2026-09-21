@@ -4,8 +4,8 @@ import { upsertOAuthUser } from "@/lib/auth/users";
 
 export const googleEnabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET);
 
-// Accounts are optional by design: only the person creating a conversation signs in, so their
-// voice clone survives between sessions. The invited person always joins anonymously.
+// The creator signs in. A guest can join anonymously and attach an account later
+// if they choose to keep a voice clone.
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   trustHost: true,

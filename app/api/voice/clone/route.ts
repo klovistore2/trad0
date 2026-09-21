@@ -34,7 +34,9 @@ export async function POST(request: Request) {
     const tier = Number(form.get("tier"));
     if (!Number.isInteger(tier) || tier < 1 || tier > FINAL_TIER) throw new HttpError(400, "Palier de voix invalide.");
     if (typeof id !== "string" || !validSamples(samples, seconds)) throw new HttpError(400, "Parlez un peu plus longtemps avant de créer votre voix.");
-    sessionId = id; const me = await member(id); slot = me.slot; const sql = db();
+    sessionId = id; const me = await member(id); slot = me.slot;
+    if (!me.user_id) throw new HttpError(403, "Sign in with Google before enabling voice cloning.");
+    const sql = db();
     // Consent is read from the row, never implied by this request carrying audio. The lease
     // returns the clone being replaced so it can be deleted once the swap has committed.
     const rows = await sql`UPDATE adu_participants SET voice_status='learning', cloning_until=now()+interval '2 minutes'
