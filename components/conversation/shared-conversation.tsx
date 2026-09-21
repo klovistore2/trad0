@@ -9,6 +9,7 @@ import { ShareSession } from "./share-session";
 import { SettingsPanel } from "./settings-panel";
 import { VoiceIntro } from "./voice-intro";
 import { OwnWords } from "./own-words";
+import { LanguageMenus } from "./language-menus";
 
 export function SharedConversation({ id }: { id: string }) {
   const session = useSharedConversation(id);
@@ -40,7 +41,9 @@ export function SharedConversation({ id }: { id: string }) {
           readAudioState={session.readAudioState} onTestTone={() => void session.playTestTone()}
           voiceStatus={session.voiceStatus} received={session.received} onClose={() => setSettings(false)} />
       : <>
-        <div className="language-tag"><span className="language-dot" />{languageNames[room.me.language]} ↔ {languageNames[room.peer.language]}</div>
+        <LanguageMenus mine={room.me} theirs={room.peer} locale={room.me.language} disabled={session.changingLanguage}
+          onMine={language => void session.setLanguage(room.me.slot, language)}
+          onTheirs={language => void session.setLanguage(room.peer!.slot, language)} />
         <button type="button" className={`sound-icon${session.soundReady ? "" : " needs-tap"}`} aria-pressed={!session.soundOn}
           aria-label={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
           title={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}

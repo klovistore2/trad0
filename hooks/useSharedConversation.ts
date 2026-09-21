@@ -1,13 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslationSession } from "./useTranslationSession";
+import { useLanguageDetection } from "./useLanguageDetection";
 import { NeonPeerTransport } from "@/lib/realtime/neon-transport";
 import { TurnPublisher } from "@/lib/realtime/turn-publisher";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
 import { VoiceRangeDetector } from "@/lib/audio/voice-range";
 import { SpeechRecorder } from "@/lib/audio/speech-recorder";
 import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
-import type { ReceivedEvent, SharedSession } from "@/types/session";
+import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
 export function useSharedConversation(id: string) {
@@ -21,6 +22,9 @@ export function useSharedConversation(id: string) {
   const floorKnown = useRef(false);
   const [claiming, setClaiming] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [changingLanguage, setChangingLanguage] = useState(false);
+  const changingLanguageRef = useRef(false);
+  const refreshSequence = useRef(0);
   const [received, setReceived] = useState(0);
   const [speechSeconds, setSpeechSeconds] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
@@ -53,12 +57,13 @@ export function useSharedConversation(id: string) {
   );
   const translation = useTranslationSession({
     sessionId: id,
-    targetLanguage: room?.peer?.language || (room?.me.language === "fr" ? "en" : "fr"),
+    targetLanguage: room?.peer?.language || "en",
     onDelta: delta => { publisher.current?.append(delta); recorder.current?.heard(); },
     shouldEnableMicrophone: micShouldBeOn,
   });
   const translationRef = useRef(translation);
   useEffect(() => { translationRef.current = translation; }, [translation]);
+  useLanguageDetection(id, room?.me, translation.original, () => refreshNow.current());
   // Reaching a tier sends the speech captured so far; the clone in service keeps playing until
   // the new one is stored, and the request runs in the background so speech is never blocked.
   const cloneIfDue = useCallback(async () => {
@@ -116,7 +121,7 @@ export function useSharedConversation(id: string) {
     try {
       while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
-        await voice.current?.speakStream({ sessionId: id, language: roomRef.current?.me.language || "fr", textStream: (async function* () { yield event.text + " "; })() });
+        await voice.current?.speakStream({ sessionId: id, language: roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
         const measured = voice.current?.lastLatency;
         if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
       }
@@ -193,6 +198,8 @@ export function useSharedConversation(id: string) {
     });
     let failures = 0;
     async function refresh() {
+      clearTimeout(refreshTimer);
+      const sequence = ++refreshSequence.current;
       try {
         const response = await fetch(`/api/sessions/${id}`, { signal: controller.signal, cache: "no-store" });
         const data = await response.json();
@@ -206,13 +213,17 @@ export function useSharedConversation(id: string) {
           }
           throw new Error(data.error);
         }
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || sequence !== refreshSequence.current) return;
         failures = 0; setConnectionLost(false);
+        if (data.peer?.language && data.peer.language !== roomRef.current?.peer?.language) {
+          turns.commit();
+          translationRef.current.setTargetLanguage(data.peer.language);
+        }
         roomRef.current = data; setRoom(data);
       } catch {
         // A dropped poll must never end the conversation: a waking phone drops several in a row.
         if (!controller.signal.aborted && ++failures >= 3) setConnectionLost(true);
-      } finally { if (!controller.signal.aborted) refreshTimer = setTimeout(() => void refresh(), 3000); }
+      } finally { if (!controller.signal.aborted && sequence === refreshSequence.current) refreshTimer = setTimeout(() => void refresh(), 3000); }
     }
     refreshNow.current = () => { void refresh(); };
     async function join() {
@@ -355,6 +366,22 @@ export function useSharedConversation(id: string) {
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
   }
+  async function setLanguage(slot: number, language: Language | "auto") {
+    if (changingLanguageRef.current) return;
+    changingLanguageRef.current = true; setChangingLanguage(true); setMessage("");
+    ++refreshSequence.current;
+    try {
+      const response = await fetch(`/api/sessions/${id}/language`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot, language }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Choose the language again."); }
+    finally {
+      refreshNow.current();
+      changingLanguageRef.current = false; setChangingLanguage(false);
+    }
+  }
   async function playTestTone() {
     setMessage("");
     try { await voice.current?.testTone(); soundReadyRef.current = true; setSoundReady(true); }
@@ -375,5 +402,5 @@ export function useSharedConversation(id: string) {
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

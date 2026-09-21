@@ -1,6 +1,6 @@
 # Trad0
 
-Traduction face à face dans le navigateur, sans compte pour l'invité. Français → anglais pour les essais actuels ; le deuxième participant traduit en sens inverse. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
+Traduction face à face dans le navigateur, sans compte pour l'invité. Langues détectées à partir des premières phrases et modifiables des deux côtés ; le thaï en sortie reste à valider. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
 
 ## Démarrer
 
@@ -38,6 +38,16 @@ Les chaînes vivent dans [`lib/i18n/strings.ts`](lib/i18n/strings.ts). L'anglais
 
 Les paramètres et le diagnostic restent en anglais seul : ils s'adressent à qui exploite l'application, pas à la personne à qui l'on tend un téléphone.
 
+## Langues parlées
+
+Deux menus, **I speak / They speak** à l’accueil, puis traduits dans la langue du participant pendant la conversation. Chacun peut corriger les deux langues sans recréer la session. **Auto** identifie la langue réellement parlée à partir de la transcription source ; la langue du navigateur sert seulement de suggestion initiale pour le créateur. Celle de l’invité reste la suggestion choisie à l’accueil jusqu’à ses premières phrases.
+
+La détection utilise `OPENAI_LANGUAGE_DETECTION_MODEL` (par défaut `gpt-4.1-nano`) avec la clé OpenAI existante. Elle analyse au maximum 600 caractères, sans stocker le texte ni envoyer de nouvel audio. Elle tourne en parallèle de la traduction, après au moins 24 lettres reconnues : les premières traductions peuvent donc utiliser la suggestion initiale. Elle s’arrête au premier résultat exploitable, avec au maximum trois tentatives espacées de dix secondes par participant et par session. En cas d’échec ou d’incertitude, le menu reste disponible.
+
+Un choix explicite désactive la détection pour cette personne. Une réponse de détection déjà en cours ne peut pas écraser cette correction. Choisir **Auto** de nouveau utilise les nouvelles paroles, dans la limite des trois tentatives. La nouvelle langue est partagée par le suivi de session (jusqu’à environ trois secondes) et change la cible OpenAI via `session.update`, sans recréer le micro ni l’enregistreur de clonage.
+
+Appliquer `npm run db:migrate` pour les champs de la migration `010_language_detection.sql`. Les tests locaux et navigateur simulent les fournisseurs ; la qualité de reconnaissance sur de vraies paroles reste à valider.
+
 ## Compte
 
 Créer une conversation demande un compte ; **rejoindre n'en demande jamais**. La personne que vous invitez scanne le QR et parle, sans rien créer.
@@ -68,7 +78,7 @@ Google n'accepte pas de joker : une URL de preview Vercel, qui change à chaque 
 3. Chaque participant touche **Start talking** — affiché dans sa propre langue. Micro, son et prise de parole s’activent dans le même geste — un seul appui suffit pour parler.
 
 La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. L'icône de haut-parleur sous le bandeau de langues coupe la lecture si besoin.
-4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
+4. Chacun lit et entend la traduction dans sa propre langue, détectée ou choisie dans le menu.
 
 Chaque appareil affiche principalement ce qu’il reçoit. **Mes mots** donne au locuteur une double vérification : bascule entre **ce que j’ai dit** — la transcription d’origine, telle que le micro l’a comprise — et **ce que l’autre reçoit**, la traduction envoyée. Voir seulement la traduction masque un mot mal entendu derrière une phrase plausible.
 
@@ -151,7 +161,7 @@ La purge retire les textes expirés et les voix connues. Elle recherche aussi le
 - L’API de traduction ne fournit pas de confiance calibrée dans les événements utilisés : `quality: "unknown"` reste explicite.
 - Le texte reçu est conservé temporairement en base pour la livraison, puis effacé à la fin de session ou par la purge. Les fournisseurs appliquent aussi leurs propres règles de conservation.
 - Le clonage est implémenté et testé avec réponses simulées ; un essai réel nécessite l’enregistrement consenti de l’utilisateur. Safari/iPhone, Bluetooth, réseaux mobiles et qualité des clones restent à valider sur appareils physiques.
-- La saisie texte de secours et les langues configurables dans l’interface restent des étapes suivantes.
+- La saisie texte de secours reste une étape suivante. Les deux langues sont désormais configurables et détectables automatiquement.
 
 ## Vérification
 

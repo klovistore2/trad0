@@ -7,6 +7,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
   private channel?: RTCDataChannel;
   private controller = new AbortController();
   private timer?: ReturnType<typeof setTimeout>;
+  private pendingLanguage?: string;
   private original: (event: TranscriptEvent) => void = () => {};
   private translated: (event: TranscriptEvent) => void = () => {};
   private status: (status: SessionStatus, message?: string) => void = () => {};
@@ -56,6 +57,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
       channel.onopen = () => {
         if (signal.aborted) return;
         clearTimeout(this.timer);
+        if (this.pendingLanguage) this.setTargetLanguage(this.pendingLanguage);
         this.status("listening");
       };
       channel.onmessage = ({ data }: MessageEvent<unknown>) => {
@@ -89,6 +91,14 @@ export class OpenAITranslationProvider implements TranslationProvider {
   }
 
   getStream() { return this.stream; }
+
+  setTargetLanguage(language: string) {
+    this.pendingLanguage = language;
+    if (this.controller.signal.aborted || this.channel?.readyState !== "open") return;
+    // Documented translation session update; keeps the microphone and clone recorder intact.
+    this.channel.send(JSON.stringify({ type: "session.update", session: { audio: { output: { language } } } }));
+    this.pendingLanguage = undefined;
+  }
 
   setMicrophoneEnabled(enabled: boolean) {
     this.stream?.getAudioTracks().forEach(track => { track.enabled = enabled; });

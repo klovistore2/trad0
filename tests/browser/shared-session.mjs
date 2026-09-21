@@ -36,7 +36,7 @@ async function client(account) {
   class TestPeer {
    connectionState='new';
    addTrack(track) { window.testMicrophone=track; }
-   createDataChannel(){this.channel={close(){this.onclose?.();}};window.testChannel=this.channel;return this.channel;}
+   createDataChannel(){this.channel={readyState:'open',send(data){window.testUpdates??=[];window.testUpdates.push(JSON.parse(data));},close(){this.onclose?.();}};window.testChannel=this.channel;return this.channel;}
    async createOffer(){return {type:'offer',sdp:'synthetic-offer'};}
    async setLocalDescription(){}
    async setRemoteDescription(){this.connectionState='connected';this.channel.onopen?.();}
@@ -59,7 +59,8 @@ try {
  await expect(anonymous.getByRole('button',{name:'Start talking'})).toHaveCount(0);
  // The other person's language is chosen before the conversation is created.
  const picker=anonymous.getByLabel('They speak');
- await expect(picker).toHaveValue('th');
+ await expect(picker).toHaveValue('auto');
+ await expect(anonymous.getByLabel('I speak')).toHaveValue('auto');
  await expect(picker.locator('option')).toContainText(['Français','English','ไทย · untested']);
  await anonymous.getByRole('link',{name:/Sign in/}).click();
  await anonymous.getByRole('button',{name:'Continue with Google'}).waitFor();
@@ -68,6 +69,7 @@ try {
  const a=await client({id:accountId,email:accountEmail});await a.goto('/');
  await a.getByText(accountEmail).waitFor();
  // English keeps the rest of this flow readable; the picker itself is checked above.
+ await a.getByLabel('I speak').selectOption('fr');
  await a.getByLabel('They speak').selectOption('en');
  await a.getByRole('button',{name:/Talk to someone/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
@@ -146,6 +148,32 @@ try {
  await a.getByRole('button',{name:'À moi de parler'}).waitFor();
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Ceci est un test de traduction.'})}));
  await a.getByText('Ceci est un test de traduction.',{exact:true}).waitFor();
+ // Both language menus synchronize and update the active translation without replacing the mic.
+ await b.locator('#peer-language').selectOption('es');
+ await expect(a.locator('#my-language')).toHaveValue('es');
+ await b.waitForFunction(()=>window.testUpdates?.some(e=>e.session.audio.output.language==='es'));
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
+ await b.locator('#peer-language').selectOption('fr');
+ await expect(a.locator('#my-language')).toHaveValue('fr');
+ await b.waitForFunction(()=>window.testUpdates?.at(-1)?.session.audio.output.language==='fr');
+ // Speech detection is asynchronous. Mock its model result at the HTTP boundary, keep real
+ // persistence and polling, then verify an explicit correction disables future detection.
+ const sqlLanguage=neon(process.env.DATABASE_URL);
+ let detectionCalls=0;
+ await b.route('**/api/sessions/*/language',async route=>{
+  if(route.request().method()!=='POST') return route.continue();
+  detectionCalls++;
+  const {revision,text}=route.request().postDataJSON();assert.match(text,/actually speaking/);
+  await sqlLanguage`UPDATE adu_participants SET language='en',language_detected=true,language_attempts=language_attempts+1 WHERE session_id=${sessionId} AND slot=1 AND language_auto=true AND language_revision=${revision}`;
+  await route.fulfill({json:{applied:true}});
+ });
+ await b.locator('#my-language').selectOption('auto');
+ await expect(b.locator('#my-language')).toHaveValue('auto');
+ await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.input_transcript.delta',delta:'I am actually speaking English in this conversation.'})}));
+ await expect(b.getByText('Detected · change if needed',{exact:true})).toBeVisible();
+ assert.equal(detectionCalls,1);
+ await b.locator('#my-language').selectOption('en');
+ await expect(b.locator('#my-language')).toHaveValue('en');
  // Handing the floor back leaves both microphones closed, the resting state of a session.
  await b.getByRole('button',{name:'Done speaking'}).click();
  await b.waitForFunction(()=>window.testMicrophone.enabled===false);

@@ -11,7 +11,7 @@ function setup(getUserMedia, fetch) {
   const peers = [];
   class Peer {
     connectionState = "new";
-    channel = { close() { this.onclose?.(); } };
+    channel = { readyState: "open", sent: [], send(data) { this.sent.push(JSON.parse(data)); }, close() { this.onclose?.(); } };
     constructor() { peers.push(this); }
     addTrack() {}
     createDataChannel() { return this.channel; }
@@ -91,3 +91,23 @@ test("demo finishes in idle and does not leave an active interval", async () => 
   assert.deepEqual(states, ["listening", "idle"]);
   assert.equal(translation, "Hello! It’s nice to meet you. Shall we have a coffee together?");
 });
+
+ test("a language correction updates an open translation without replacing its microphone", async () => {
+  const { provider, tracks, peers } = setup(null, async url => url.startsWith("/api/") ? Response.json({ value: "ephemeral" }) : new Response("answer-sdp"));
+  await provider.connect({ targetLanguage: "en", microphoneEnabled: false });
+  provider.setTargetLanguage("es");
+  assert.equal(peers[0].channel.sent[0].session.audio.output.language, "es");
+  assert.equal(peers[0].channel.sent[0].type, "session.update");
+  assert.equal(tracks[0].stopCount, 0);
+  assert.equal(tracks[0].enabled, false);
+  await provider.disconnect();
+ });
+ test("a correction during microphone permission is applied once the channel opens", async () => {
+  let resolvePermission;
+  const { provider, peers } = setup(stream => new Promise(resolve => { resolvePermission = () => resolve(stream); }), async url => url.startsWith("/api/") ? Response.json({ value: "ephemeral" }) : new Response("answer-sdp"));
+  const connecting = provider.connect({ targetLanguage: "en" });
+  provider.setTargetLanguage("ja");
+  resolvePermission(); await connecting;
+  assert.equal(peers[0].channel.sent[0].session.audio.output.language, "ja");
+  await provider.disconnect();
+ });

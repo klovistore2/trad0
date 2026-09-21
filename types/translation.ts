@@ -10,6 +10,7 @@ export interface TranslationProvider {
   connect(config: TranslationSessionConfig): Promise<void>;
   disconnect(): Promise<void>;
   setMicrophoneEnabled?(enabled: boolean): void;
+  setTargetLanguage?(language: string): void;
   getStream?(): MediaStream | undefined;
   onOriginalTranscript(cb: (event: TranscriptEvent) => void): void;
   onTranslatedText(cb: (event: TranslationEvent) => void): void;

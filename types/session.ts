@@ -5,7 +5,7 @@ export type Language = (typeof LANGUAGES)[number];
 export const isLanguage = (value: unknown): value is Language =>
   typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
 export type VoiceRange = "low" | "high";
-export type Participant = { slot: number; language: Language; online: boolean; voiceRange: VoiceRange | null; voiceTier: number; useClone: boolean; consented: boolean; voiceStatus: "none" | "learning" | "ready" | "verification_required" };
+export type Participant = { slot: number; language: Language; languageAuto: boolean; languageDetected: boolean; languageRevision: number; languageAttempts: number; online: boolean; voiceRange: VoiceRange | null; voiceTier: number; useClone: boolean; consented: boolean; voiceStatus: "none" | "learning" | "ready" | "verification_required" };
 export type SharedSession = { id: string; expiresAt: string; floor: number | null; me: Participant; peer: Participant | null };
 export type PeerEvent = { id: string; turnId: string; text: string; committed: boolean };
 export type ReceivedEvent = PeerEvent & { seq: string; ageMs?: number };

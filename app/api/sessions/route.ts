@@ -10,7 +10,8 @@ export async function POST(request: Request) {
     const account = await auth();
     if (!account?.user?.id) throw new HttpError(401, "Connectez-vous pour créer une conversation.");
     const body = await readJson(request);
-    if (!isLanguage(body.peerLanguage)) throw new HttpError(400, "Cette langue n’est pas disponible.");
-    return json({ id: await createSession(account.user.id, body.peerLanguage) });
+    if (!isLanguage(body.peerLanguage) || !isLanguage(body.language)) throw new HttpError(400, "Cette langue n’est pas disponible.");
+    if (typeof body.languageAuto !== "boolean" || typeof body.peerLanguageAuto !== "boolean") throw new HttpError(400, "Invalid language mode.");
+    return json({ id: await createSession(account.user.id, body.peerLanguage, body.language, body.languageAuto, body.peerLanguageAuto) });
   } catch (error) { return failure(error); }
 }

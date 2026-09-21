@@ -1,18 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useTranslationSession } from "@/hooks/useTranslationSession";
 import { StartSharedSession } from "./start-shared-session";
 import { TranslationAudio } from "./translation-audio";
 import { ThemeToggle } from "./theme-toggle";
 import { AccountStatus } from "@/components/account/account-status";
-import { LANGUAGES, UNVERIFIED_OUTPUT, languageNames, type Language } from "@/types/session";
+import { languageNames, type Language } from "@/types/session";
+
+import { LanguageMenus } from "./language-menus";
+import { browserLanguage } from "@/lib/translation/language";
+const subscribeLocale = () => () => {};
+const getLocale = () => browserLanguage(navigator.languages);
+const serverLocale = () => "en" as const;
 
 // The home page never opens a microphone: a conversation needs two devices, and the only
 // thing to try alone is the scripted demonstration.
 export function Conversation({ email }: { email: string | null }) {
   const session = useTranslationSession();
+  const locale = useSyncExternalStore(subscribeLocale, getLocale, serverLocale);
+  const [myLanguage, setMyLanguage] = useState<Language | null>(null);
+  const language = myLanguage ?? locale;
+  const [peerAutomatic, setPeerAutomatic] = useState(true);
   const [peerLanguage, setPeerLanguage] = useState<Language>("th");
   const transcript = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -20,7 +30,7 @@ export function Conversation({ email }: { email: string | null }) {
     if (node) node.scrollTop = node.scrollHeight;
   }, [session.translation]);
   const status = session.active ? "Demonstration · no microphone used"
-    : session.message ? "One moment…" : `Français → ${languageNames[peerLanguage]}`;
+    : session.message ? "One moment…" : `${languageNames[language]} ↔ ${languageNames[peerLanguage]}`;
 
   return <main className="conversation">
     <header className="topbar">
@@ -29,16 +39,10 @@ export function Conversation({ email }: { email: string | null }) {
     </header>
 
     <section className="conversation-body" aria-label="Live translation">
-      <div className="language-tag">
-        <span className="language-dot" />
-        <label htmlFor="peer-language">They speak</label>
-        <select id="peer-language" className="language-picker" value={peerLanguage} lang={peerLanguage}
-          onChange={event => setPeerLanguage(event.target.value as Language)}>
-          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>
-            {languageNames[code]}{UNVERIFIED_OUTPUT.includes(code) ? " · untested" : ""}
-          </option>)}
-        </select>
-      </div>
+      <LanguageMenus mine={{ language, languageAuto: myLanguage === null }}
+        theirs={{ language: peerLanguage, languageAuto: peerAutomatic }}
+        onMine={value => setMyLanguage(value === "auto" ? null : value)}
+        onTheirs={value => { setPeerAutomatic(value === "auto"); if (value !== "auto") setPeerLanguage(value); }} />
       <div className={`translation-area ${session.translation ? "has-translation" : ""}`}>
         {session.translation ? <>
           <span className="eyebrow">SAMPLE TRANSLATION</span>
@@ -59,7 +63,7 @@ export function Conversation({ email }: { email: string | null }) {
         {session.active
           ? <button className="primary-button stop-button" onClick={() => session.stop()}>Stop the demonstration</button>
           : <>
-              <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} />
+              <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={language} languageAuto={myLanguage === null} peerLanguageAuto={peerAutomatic} />
               <button className="demo-button" onClick={() => void session.start(true)}>
                 {session.translation ? "Replay the demonstration" : "Try a demonstration"} <span aria-hidden="true">↗</span>
               </button>
