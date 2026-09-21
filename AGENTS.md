@@ -132,7 +132,9 @@ real failures on real devices.
 - **Playback must not depend on the microphone session.** Someone who only wants to listen hears
   without starting a microphone. This was a real bug: text arrived, sound did not, silently.
 - **Any single touch anywhere in the page arms playback.** Autoplay rules require one gesture in the
-  document; never require a *specific* button, and never require one per sentence.
+  document; never require a *specific* button, and never require one per sentence. The speaker icon
+  under the language banner is the **single** sound control: it arms playback while unarmed, then
+  mutes and unmutes. A separate prompt and a separate button existed and were merged into it.
 - A dropped status poll must never end a conversation. Only 401 / 403 / 404 are final.
 
 ### Remaining work, in agreed order

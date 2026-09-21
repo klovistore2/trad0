@@ -84,7 +84,7 @@ Deux téléphones dans la même pièce entendent tous les deux la personne qui p
 
 Le micro reste également fermé pendant la lecture d’une traduction, pour que le haut-parleur ne se fasse pas retraduire.
 
-Le son est actif par défaut. L'icône de haut-parleur, **sous le bandeau de langues**, le coupe et ne garde que les sous-titres — utile en réunion ou dans un lieu bruyant. Elle reste accessible même sans avoir démarré, puisque la lecture ne dépend pas du micro.
+Le son est actif par défaut. L'icône de haut-parleur, **sous le bandeau de langues**, est le seul contrôle du son. Tant que la lecture n'est pas armée — la règle d'autoplay des navigateurs exige un geste — l'icône pulse et affiche « Hear the translation » ; un appui l'arme. Ensuite elle coupe et rallume, pour ne garder que les sous-titres en réunion ou dans un lieu bruyant. Elle reste accessible sans avoir démarré, puisque la lecture ne dépend pas du micro.
 
 Pour tester sur un seul ordinateur, utiliser **deux profils de navigateur différents** ou une fenêtre privée : l’identité invitée est un cookie HttpOnly partagé entre les onglets d’un même profil. La session accepte exactement deux participants, y compris en cas de connexions simultanées.
 

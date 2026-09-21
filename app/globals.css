@@ -199,3 +199,5 @@ button:disabled { opacity: .5; cursor: wait; }
 .sound-icon-label { display: block; margin-top: 6px; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
 .language-picker { margin-left: 8px; border: 0; border-radius: 20px; background: var(--background); color: var(--ink); font-size: 15px; min-height: 36px; padding: 0 6px; }
 .language-tag label { cursor: pointer; }
+.sound-icon.needs-tap { border-color: var(--accent); color: var(--symbol-ink); animation: tap-hint 1.8s ease-in-out infinite; }
+@keyframes tap-hint { 50% { box-shadow: 0 0 0 8px var(--active-halo); } }

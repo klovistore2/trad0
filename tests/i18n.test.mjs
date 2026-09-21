@@ -6,7 +6,7 @@ import { translator } from '../lib/i18n/strings.ts';
 import { LANGUAGES } from '../types/session.ts';
 
 const KEYS = ['muteSound','unmuteSound','soundOn','textOnly','theirWords','connectedTitle','connectedIntro',
-  'playing','touchToHear','hearTranslation','peerOnline','peerOffline','reconnecting','connecting',
+  'playing','hearTranslation','peerOnline','peerOffline','reconnecting','connecting',
   'startTalking','joinIn','micOpen','doneSpeaking','bothClosed','theyAreSpeaking','letMeSpeak','speak',
   'myWords','whatTheyReceive','whatISaid','nothingYet','voiceTitle','voiceBody','voiceNote','voiceAccept','voiceDecline'];
 

@@ -41,10 +41,10 @@ export function SharedConversation({ id }: { id: string }) {
           voiceStatus={session.voiceStatus} received={session.received} onClose={() => setSettings(false)} />
       : <>
         <div className="language-tag"><span className="language-dot" />{languageNames[room.me.language]} ↔ {languageNames[room.peer.language]}</div>
-        <button type="button" className="sound-icon" aria-pressed={!session.soundOn}
-          aria-label={session.soundOn ? t("muteSound") : t("unmuteSound")}
-          title={session.soundOn ? t("muteSound") : t("unmuteSound")}
-          onClick={() => session.toggleSound()}>
+        <button type="button" className={`sound-icon${session.soundReady ? "" : " needs-tap"}`} aria-pressed={!session.soundOn}
+          aria-label={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
+          title={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
+          onClick={() => session.soundReady ? session.toggleSound() : void session.enableSound()}>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z" fill="currentColor" stroke="none" />
             {session.soundOn
@@ -52,12 +52,11 @@ export function SharedConversation({ id }: { id: string }) {
               : <><path d="M16 9.5l5 5" /><path d="M21 9.5l-5 5" /></>}
           </svg>
         </button>
-        <span className="sound-icon-label">{session.soundOn ? t("soundOn") : t("textOnly")}</span>
+        <span className="sound-icon-label">{!session.soundReady ? t("hearTranslation") : session.soundOn ? t("soundOn") : t("textOnly")}</span>
         <div className="translation-area">
           {session.incoming ? <><span className="eyebrow">{t("theirWords")}</span><div className="transcript" lang={room.me.language} tabIndex={0}><p>{session.incoming}</p></div></>
           : <><h1>{t("connectedTitle")}</h1><p className="intro">{t("connectedIntro")}</p></>}
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {t("playing")}</p>}
-          {!session.soundReady && session.received > 0 && <p className="quiet-note" role="status">{t("touchToHear")}</p>}
           <OwnWords original={session.translation.original} translation={session.translation.translation}
             mine={room.me.language} theirs={room.peer.language} t={t} />
         </div>
@@ -65,7 +64,6 @@ export function SharedConversation({ id }: { id: string }) {
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? t("peerOnline") : t("peerOffline")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
           {session.connectionLost && <p className="quiet-note" role="status">{t("reconnecting")}</p>}
-          {!session.soundReady && session.received > 0 && <button className="demo-button" onClick={() => void session.enableSound()}>{t("hearTranslation")}</button>}
           {!session.enabled
             ? <button className="primary-button" disabled={session.starting} onClick={() => void session.start()}>{session.starting
                 ? t("connecting")

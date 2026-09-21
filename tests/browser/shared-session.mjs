@@ -98,7 +98,10 @@ try {
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'This is a synthetic translation test.'})}));
  await b.getByText('This is a synthetic translation test.',{exact:true}).waitFor();
  await b.getByText(/Playing translation/).waitFor();
- await expect(b.getByRole('button',{name:'Hear the translation'})).toHaveCount(0);
+ // The speaker icon is the only sound control: no separate prompt, no separate button.
+ await expect(b.locator('.sound-icon')).toHaveCount(1);
+ await expect(b.locator('.sound-icon.needs-tap')).toHaveCount(0);
+ await expect(b.getByText(/Touch the screen/)).toHaveCount(0);
  // A speaker can check what the microphone understood, not only what the other person receives.
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.input_transcript.delta',delta:'Ceci est ce que j’ai réellement dit.'})}));
  await a.getByText('Mes mots',{exact:true}).click();
