@@ -30,9 +30,9 @@ Ne jamais exposer les clés permanentes ni `DATABASE_URL` dans une variable `NEX
 
 ## Essayer seul
 
-L'accueil n'ouvre aucun micro : une conversation demande deux appareils, et parler seul ne prouvait rien d'utile. Le bouton principal est donc **Parler à deux · inviter quelqu'un**.
+L'accueil n'ouvre aucun micro et ne propose plus de démonstration : une conversation demande deux appareils, et un exemple préécrit ne prouvait rien de la traduction vocale réelle. La page sert à choisir les deux langues, puis le bouton principal est **Parler à deux · inviter quelqu'un**.
 
-**Essayer une démonstration** joue un exemple préécrit, sans microphone ni appel OpenAI. **Écouter en anglais** lit ensuite ce texte avec ElevenLabs : c'est le seul moyen de vérifier la synthèse vocale sans monter une session à deux.
+Pour vérifier la synthèse vocale seule, utiliser `npm run test:tts` ; pour le circuit complet, monter une vraie session à deux profils.
 
 ## Langues de l'interface
 

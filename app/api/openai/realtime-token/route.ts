@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   // transcription is configured. The conversation screen shows them so a speaker can check what
   // was actually recognised, so this is on by default and overridable like any other model id.
   const transcriptionModel = process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL?.trim() || "gpt-realtime-whisper";
-  if (!key || !model) return json({ error: "La traduction n’est pas encore configurée. Vous pouvez essayer la démonstration." }, 503);
+  if (!key || !model) return json({ error: "La traduction n’est pas encore configurée." }, 503);
   let targetLanguage = body.targetLanguage;
   if ("sessionId" in body) {
     if (typeof body.sessionId !== "string") return json({ error: "Session invalide." }, 400);

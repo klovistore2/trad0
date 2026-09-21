@@ -68,30 +68,6 @@ test("streams subtitles and closes every media resource without post-stop errors
   assert.equal(peers[0].connectionState, "closed");
 });
 
-test("demo finishes in idle and does not leave an active interval", async () => {
-  const exports = {};
-  let tick;
-  let cleared = false;
-  const code = ts.transpileModule(readFileSync(new URL("../lib/translation/mock-provider.ts", import.meta.url), "utf8"), {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  runInNewContext(code, {
-    exports,
-    setInterval(callback) { tick = callback; return 1; },
-    clearInterval() { cleared = true; },
-  });
-  const provider = new exports.MockTranslationProvider();
-  const states = [];
-  let translation = "";
-  provider.onStatus(status => states.push(status));
-  provider.onTranslatedText(event => { translation += event.delta; });
-  await provider.connect();
-  for (let i = 0; i < 100 && !cleared; i++) tick();
-  assert.equal(cleared, true);
-  assert.deepEqual(states, ["listening", "idle"]);
-  assert.equal(translation, "Hello! It’s nice to meet you. Shall we have a coffee together?");
-});
-
  test("a language correction updates an open translation without replacing its microphone", async () => {
   const { provider, tracks, peers } = setup(null, async url => url.startsWith("/api/") ? Response.json({ value: "ephemeral" }) : new Response("answer-sdp"));
   await provider.connect({ targetLanguage: "en", microphoneEnabled: false });

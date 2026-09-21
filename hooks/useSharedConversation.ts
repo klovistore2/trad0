@@ -187,7 +187,7 @@ export function useSharedConversation(id: string, signedIn = false) {
         if (running.current) {
           recorder.current?.pause();
           translationRef.current.stop();
-          await translationRef.current.start(false, mode === "context");
+          await translationRef.current.start(mode === "context");
           syncMicrophone();
         }
         if (controller.signal.aborted) return;
@@ -361,7 +361,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       void (async () => {
         try {
           await unlockSound();
-          await translationRef.current.start(false, turns.mode === "context");
+          await translationRef.current.start(turns.mode === "context");
           syncMicrophone();
         } catch (error) {
           setMessage(error instanceof Error ? error.message : "Touchez Activer le micro pour reprendre.");
@@ -404,7 +404,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       // steal the microphone from whoever is talking.
       if (floorRef.current === null) await takeFloor();
       running.current = true; setEnabled(true); stopped.current = "running";
-      await translation.start(false, publisher.current?.mode === "context");
+      await translation.start(publisher.current?.mode === "context");
       syncMicrophone();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
     finally { setStarting(false); }

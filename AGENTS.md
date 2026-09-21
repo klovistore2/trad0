@@ -42,8 +42,9 @@ ferme la conversation pour les deux personnes et efface ses données temporaires
 restent conservées. Le libellé actuel « End session & delete voices » est donc imparfait.
 
 La création nécessite actuellement un compte pour réutiliser une voix enregistrée entre sessions.
-Ne pas présenter le parcours comme « invité ↔ invité » dès la création. L’accueil propose aussi
-une démonstration préécrite ; elle ne prouve pas qu’une traduction vocale réelle fonctionne.
+Ne pas présenter le parcours comme « invité ↔ invité » dès la création. L’accueil n’ouvre aucun micro
+et ne propose plus de démonstration préécrite : elle ne prouvait rien d’une traduction vocale réelle.
+Un visiteur sans compte n’a donc rien à essayer seul ; c’est assumé, pas un oubli.
 
 ## 2. Deux modes de traduction, indépendants par locuteur
 
