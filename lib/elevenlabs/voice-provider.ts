@@ -24,6 +24,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private ready = false;
   private failure = "";
   private voiceSource = "";
+  private latency = { request: 0, total: 0 };
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -56,6 +57,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   get contextState() { return this.ready ? "running" : "absent"; }
   get lastFailure() { return this.failure; }
   get lastVoice() { return this.voiceSource; }
+  get lastLatency() { return this.latency; }
   async testTone() {
     await this.unlock();
     await this.play(wav(0.4, 440));
@@ -82,6 +84,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     if (signal?.aborted) controller.abort();
     try {
       if (controller.signal.aborted) return;
+      const startedAt = Date.now();
       await this.unlock();
       this.onStatus("loading");
       let text = "";
@@ -97,11 +100,13 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
+      this.latency = { request: Date.now() - startedAt, total: 0 };
       const blob = await response.blob();
       if (controller.signal.aborted) return;
       if (!blob.size) { this.failure = "empty audio"; throw new Error("Aucun son reçu. Réessayez."); }
       const element = this.audio();
       await this.play(URL.createObjectURL(blob));
+      this.latency = { request: this.latency.request, total: Date.now() - startedAt };
       this.onStatus("playing");
       await new Promise<void>((resolve, reject) => {
         const settle = (error?: Error) => {

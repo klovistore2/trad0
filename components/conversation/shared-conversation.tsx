@@ -7,6 +7,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { ShareSession } from "./share-session";
 import { SettingsPanel } from "./settings-panel";
 import { VoiceIntro } from "./voice-intro";
+import { OwnWords } from "./own-words";
 
 export function SharedConversation({ id }: { id: string }) {
   const session = useSharedConversation(id);
@@ -43,7 +44,8 @@ export function SharedConversation({ id }: { id: string }) {
           : <><h1>{english ? "You’re connected." : "Vous êtes ensemble."}</h1><p className="intro">{english ? "Speak naturally. Their translated words will appear here." : "Parlez naturellement. Les mots de l’autre personne apparaîtront ici."}</p></>}
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {english ? "Playing translation · microphone paused" : "Traduction en cours · micro en pause"}</p>}
           {!session.soundReady && session.received > 0 && <p className="quiet-note" role="status">{english ? "Touch the screen once to hear the translations." : "Touchez l’écran une fois pour entendre les traductions."}</p>}
-          {session.translation.translation && <details className="original"><summary>{english ? "My translated words" : "Mes mots traduits"}</summary><p>{session.translation.translation}</p></details>}
+          <OwnWords original={session.translation.original} translation={session.translation.translation}
+            mine={room.me.language} theirs={room.peer.language} english={english} />
         </div>
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? (english ? "Connected" : "L’autre personne est connectée") : (english ? "Waiting for the other person…" : "L’autre personne est déconnectée…")}</p>

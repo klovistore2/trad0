@@ -7,6 +7,7 @@ import type { VoiceStatus } from "@/types/voice";
 export type AudioState = {
   context: string; stopped: string; failure: string; voice: string;
   range: { frames: number; median: number; range: string | null };
+  timing: { transport: number; request: number; playback: number };
   speech: number;
   queued: number; speaking: boolean; running: boolean; sound: boolean;
 };
@@ -52,6 +53,9 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
     <button className="demo-button" onClick={onTestTone}>{english ? "Play a test beep" : "Jouer un bip de test"}</button>
     <dl>
       {row("Voix entendue ici", state?.voice ?? "—")}
+      {row("Latence transport", state?.timing.transport ? `${state.timing.transport} ms` : "—")}
+      {row("Latence voix", state?.timing.playback ? `${state.timing.request} ms jusqu’au serveur · ${state.timing.playback} ms jusqu’au son` : "—")}
+      {row("Latence totale", state?.timing.playback ? `${state.timing.transport + state.timing.playback} ms` : "—")}
       {row("Mon clone", `${cloneLabels[me.voiceStatus]} · palier ${me.voiceTier}/${FINAL_TIER}`)}
       {row("Consentement donné", me.consented ? "oui" : "non")}
       {row("Parole cumulée", me.consented

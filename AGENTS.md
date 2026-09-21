@@ -57,6 +57,41 @@ real failures on real devices.
 - **Real device testing.** Nothing has run on a physical iPhone or Android, nor on a mobile network.
   Background audio on a locked iPhone is known not to work: iOS suspends the audio context.
 - `quality` is always `"unknown"`; the translation API exposes no calibrated confidence.
+- **The translation model takes no instructions, prompt or conversation context.** Verified against
+  the current guide and cookbook, which state it "does not support custom prompting". Do not plan
+  around feeding it history: any added intelligence belongs in the application. `session.audio`
+  does accept `input.transcription` (enabled, it is what produces source transcripts) and
+  `input.noise_reduction` (`near_field` / `far_field`, left off, commented in the token route).
+- **Echoed and duplicated speech, and the conversation memory that would catch it.** Known, left
+  for later: an edge case people notice by themselves. While A holds the floor, B's loudspeaker
+  plays A's translated sentence, A's open microphone picks it up, and A's session transcribes it,
+  "translates" it into the language it is already in and sends it back — an attenuating loop that
+  pollutes the transcript and burns credits. `echoCancellation` cannot help: it only knows sound
+  emitted by the same device, and B's speaker is an outside source to A's microphone. With an
+  earbud the acoustic path does not exist at all, which is one more reason the specification calls
+  the earbud a major target use case.
+
+  **Do not treat this as a microphone problem.** Closing microphones is the workaround already in
+  place, not the goal; the product owner's intent is that **no microphone ever has to be closed**.
+  The real problem is that a sentence *already seen* re-enters the pipeline, which is a question of
+  memory. The specification already asks for conversation context — recent turns plus a small
+  rolling summary — for translation quality. That same memory is what recognises a duplicate, so
+  one structure serves both purposes. Each device already knows the whole conversation: what it
+  said and what it received.
+
+  An echo always comes back in the **target** language, so it matches what the device **sent**, not
+  what it said; the mirror case, a microphone capturing the person speaking at the other device,
+  matches what it **said**. Comparing each outgoing turn against both histories catches both,
+  deterministically and for free. **With reliable de-duplication the floor becomes unnecessary**,
+  which is the goal — but build the replacement first and retire the floor only once it is proven
+  on real devices: a missed duplicate speaks a sentence twice, which is worse than a closed
+  microphone.
+
+  Cheap string comparison handles a clean echo. It cannot handle a **partial** echo, where the
+  microphone catches the tail of the translated sentence mixed into the start of the next real one;
+  there the fragment must be stripped and the rest kept. That is where a model earns its place —
+  but gate it behind the cheap detector so it only runs on a partial match, never on a normal turn.
+  The pipeline is already too slow to afford an unconditional hop.
 
 ### Invariants — do not break these
 

@@ -16,7 +16,9 @@ export async function GET(request: Request, context: RouteContext<"/api/sessions
     const { id } = await context.params; const me = await member(id);
     const cursor = new URL(request.url).searchParams.get("after") || "0";
     if (!/^\d{1,18}$/.test(cursor)) throw new HttpError(400, "Requête invalide.");
-    const events = await db()`SELECT seq::text, id, turn_id as "turnId", text, committed FROM adu_events
+    // The age is computed by the database, so measuring latency never compares two device clocks.
+    const events = await db()`SELECT seq::text, id, turn_id as "turnId", text, committed,
+      (EXTRACT(EPOCH FROM (now()-created_at))*1000)::int as "ageMs" FROM adu_events
       WHERE session_id=${id} AND sender<>${me.slot} AND seq>${cursor}::bigint ORDER BY seq LIMIT 100`;
     // The floor rides along on the existing poll: no extra query, no extra round trip.
     return json({ events, floor: me.floor_slot });

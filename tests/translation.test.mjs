@@ -43,12 +43,18 @@ test("uses translation session schema, returns only ephemeral credential and san
   const old = { ...process.env };
   process.env.OPENAI_API_KEY = "test-permanent-secret";
   process.env.OPENAI_REALTIME_TRANSLATION_MODEL = "test-configurable-model";
+  process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL = "test-transcription-model";
   process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
   try {
     globalThis.fetch = async (url, options) => {
       assert.equal(url, "https://api.openai.com/v1/realtime/translations/client_secrets");
       assert.equal(options.headers.Authorization, "Bearer test-permanent-secret");
-      assert.deepEqual(JSON.parse(options.body), { session: { model: "test-configurable-model", audio: { output: { language: "en" } } } });
+      // Input transcription must be requested, or the server never emits the source transcript
+      // the speaker checks their own words against.
+      assert.deepEqual(JSON.parse(options.body), { session: { model: "test-configurable-model", audio: {
+        input: { transcription: { model: "test-transcription-model" } },
+        output: { language: "en" },
+      } } });
       return Response.json({ value: "ephemeral", session: { private: "not forwarded" } });
     };
     assert.deepEqual(await (await POST(request())).json(), { value: "ephemeral" });
@@ -62,7 +68,7 @@ test("uses translation session schema, returns only ephemeral credential and san
     assert.equal((await POST(request())).status, 504);
   } finally {
     globalThis.fetch = previousFetch;
-    for (const name of ["OPENAI_API_KEY", "OPENAI_REALTIME_TRANSLATION_MODEL", "NEXT_PUBLIC_APP_URL"]) {
+    for (const name of ["OPENAI_API_KEY", "OPENAI_REALTIME_TRANSLATION_MODEL", "OPENAI_INPUT_TRANSCRIPTION_MODEL", "NEXT_PUBLIC_APP_URL"]) {
       if (old[name] === undefined) delete process.env[name]; else process.env[name] = old[name];
     }
   }

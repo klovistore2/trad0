@@ -62,7 +62,7 @@ Google n'accepte pas de joker : une URL de preview Vercel, qui change à chaque 
 La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. **Son activé · toucher pour le texte seul** coupe la lecture si besoin.
 4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
 
-Chaque appareil affiche principalement ce qu’il reçoit. Les paroles émises sont accessibles sous « Mes mots traduits ».
+Chaque appareil affiche principalement ce qu’il reçoit. **Mes mots** donne au locuteur une double vérification : bascule entre **ce que j’ai dit** — la transcription d’origine, telle que le micro l’a comprise — et **ce que l’autre reçoit**, la traduction envoyée. Voir seulement la traduction masque un mot mal entendu derrière une phrase plausible.
 
 L’écran de conversation ne porte que la conversation : l’état du tour de parole, un seul bouton, et la bascule du son. Tout le reste — voix, lien d’invitation, diagnostic, fin de session — est dans les **paramètres**, derrière la roue dentée en haut de l’écran.
 
@@ -131,6 +131,8 @@ La purge retire les textes expirés et les voix connues. Elle recherche aussi le
 - OpenAI : jeton éphémère via `/v1/realtime/translations/client_secrets`, puis microphone directement en WebRTC vers `/v1/realtime/translations/calls`. Aucun `response.create`, aucun assistant visible.
 - Neon : identité invitée hachée, deux places atomiques, expiration, transport de texte. Pas d’audio en base.
 - `PeerTransport` : première implémentation par requêtes courtes toutes les 500 ms, avec publications groupées et identifiants idempotents. Neon ne remplace pas Supabase Realtime ; ce compromis augmente les requêtes et la latence. Un transport push pourra remplacer cet adaptateur sans changer les fournisseurs.
+- OpenAI : la traduction se fait **dans le flux audio**, pas en deux temps. Une seule connexion WebRTC renvoie la transcription d’origine et la traduction, en continu. La piste audio traduite qu’OpenAI renvoie est volontairement ignorée : elle arrive chez celui qui parle, alors qu’il faut le son chez celui qui écoute, avec la voix du locuteur.
+- Le modèle de traduction **n’accepte ni instructions, ni prompt, ni contexte de conversation** — vérifié dans le guide et le cookbook courants, qui indiquent qu’il ne prend pas de « custom prompting ». Toute intelligence supplémentaire doit donc vivre côté application. `audio.input.noise_reduction` est documenté mais laissé désactivé, en commentaire dans la route de jeton.
 - ElevenLabs : la synthèse est **relayée par `/api/elevenlabs/speak`**, qui transmet le flux `audio/mpeg` sans jamais l’écrire ni le journaliser. Le navigateur ne contacte donc que cette origine, et la lecture se fait dans un élément `<audio>`.
 - Ce choix remplace une WebSocket ouverte du navigateur vers `api.elevenlabs.io`, que proxys, VPN et extensions bloquent couramment — panne invisible côté serveur. Il coûte environ 700 ms de latence supplémentaire et évite Web Audio, dont la sortie est coupée par l’interrupteur silencieux d’un iPhone. La latence est un chantier identifié ; une lecture qui ne démarre pas n’en est pas un.
 - Les phrases sont envoyées après ponctuation ou une pause d’environ une seconde. Les sous-titres arrivent avant l’audio.
@@ -159,4 +161,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 31 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 33 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

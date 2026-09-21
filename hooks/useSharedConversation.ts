@@ -31,6 +31,8 @@ export function useSharedConversation(id: string) {
   const cloning = useRef(false);
   // A provider that refuses to clone will refuse again: stop asking every ten seconds.
   const cloningBlocked = useRef(false);
+  // Last sentence measured end to end, so every latency change can be judged on facts.
+  const timing = useRef({ transport: 0, request: 0, playback: 0 });
   const refreshNow = useRef<() => void>(() => {});
   const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
@@ -114,6 +116,8 @@ export function useSharedConversation(id: string) {
       while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
         await voice.current?.speakStream({ sessionId: id, language: roomRef.current?.me.language || "fr", textStream: (async function* () { yield event.text + " "; })() });
+        const measured = voice.current?.lastLatency;
+        if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
       }
     } catch (error) {
       queue.current = [];
@@ -174,6 +178,7 @@ export function useSharedConversation(id: string) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
         setReceived(count => count + 1);
+        if (typeof event.ageMs === "number") timing.current = { transport: event.ageMs, request: 0, playback: 0 };
         if (sound.current) {
           // Before the first tap, hold only the latest sentence so it plays instead of a backlog.
           if (!soundReadyRef.current) queue.current = [event];
@@ -343,6 +348,7 @@ export function useSharedConversation(id: string) {
     stopped: stopped.current,
     failure: voice.current?.lastFailure || "none",
     voice: voice.current?.lastVoice || "none",
+    timing: timing.current,
     range: detector.current?.state ?? { frames: 0, median: 0, range: null },
     speech: Math.round(recorder.current?.seconds ?? 0),
     queued: queue.current.length,
