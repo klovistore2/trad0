@@ -17,6 +17,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
   const session = useSharedConversation(id, signedIn);
   const [settings, setSettings] = useState(false);
   const room = session.room;
+  const soundActive = session.soundReady && session.soundOn;
   // Each participant reads their own language: the guest was handed a phone and shares none.
   const t = translator(room?.me.language ?? "en");
   return <main className="conversation">
@@ -46,13 +47,13 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
         <LanguageMenus mine={room.me} theirs={room.peer} locale={room.me.language} disabled={session.changingLanguage}
           onMine={language => void session.setLanguage(room.me.slot, language)}
           onTheirs={language => void session.setLanguage(room.peer!.slot, language)} />
-        <button type="button" className={`sound-icon${session.soundReady ? "" : " needs-tap"}`} aria-pressed={!session.soundOn}
+        <button type="button" className={`sound-icon${session.soundReady ? "" : " needs-tap"}`} aria-pressed={!soundActive}
           aria-label={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
           title={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
           onClick={() => session.soundReady ? session.toggleSound() : void session.enableSound()}>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z" fill="currentColor" stroke="none" />
-            {session.soundOn
+            {soundActive
               ? <><path d="M15.5 9.2a4 4 0 0 1 0 5.6" /><path d="M18 6.7a7.5 7.5 0 0 1 0 10.6" /></>
               : <><path d="M16 9.5l5 5" /><path d="M21 9.5l-5 5" /></>}
           </svg>

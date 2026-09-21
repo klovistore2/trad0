@@ -121,9 +121,23 @@ try {
  await a.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
  await a.getByText('Votre micro est ouvert — parlez').waitFor();
  await a.waitForFunction(()=>window.testMicrophone.enabled===true);
- // A listener who never started a microphone session hears anyway: any touch arms playback,
- // and nothing specific has to be pressed.
- await b.locator('.translation-area').click();
+ // The icon starts closed until playback is actually armed. A single press must enable
+ // listening, even when the pointer is held long enough for asynchronous arming to finish.
+ const speaker=b.locator('.sound-icon');
+ await expect(speaker).toHaveAttribute('aria-label','Hear the translation');
+ await expect(speaker).toHaveAttribute('aria-pressed','true');
+ await expect(speaker.locator('path[d="M16 9.5l5 5"]')).toHaveCount(1);
+ const speakerBounds=await speaker.boundingBox();assert.ok(speakerBounds);
+ await b.mouse.move(speakerBounds.x+speakerBounds.width/2,speakerBounds.y+speakerBounds.height/2);
+ await b.mouse.down();
+ // Reproduce the pointerdown → async unlock → click ordering behind the double-tap bug.
+ await b.waitForTimeout(200);
+ await expect(speaker).toHaveAttribute('aria-label','Hear the translation');
+ await b.mouse.up();
+ await expect(speaker).toHaveAttribute('aria-label','Mute the sound');
+ await expect(speaker).toHaveAttribute('aria-pressed','false');
+ await expect(speaker.locator('path[d="M16 9.5l5 5"]')).toHaveCount(0);
+ // A listener who never started a microphone session hears the translated track.
  await a.waitForFunction(()=>window.testAudioPeers?.some(p=>p.connectionState==='connected'));
  await b.waitForFunction(()=>window.testAudioPeers?.some(p=>p.connectionState==='connected'));
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'This is a synthetic translation test.'})}));
@@ -256,6 +270,8 @@ try {
  await b.waitForURL(`**/session/${sessionId}`);
  await b.getByRole('button',{name:'Use my voice'}).click();
  await expect(b.getByRole('dialog')).toHaveCount(0);
+ // A gesture elsewhere still arms playback; the speaker button is never mandatory.
+ await expect(b.getByRole('button',{name:'Mute the sound'})).toBeVisible();
  await expect.poll(async()=>{
   const rows=await neon(process.env.DATABASE_URL)`SELECT user_id,consent_at IS NOT NULL AS consented FROM adu_participants WHERE session_id=${sessionId} AND slot=1`;
   return rows[0];

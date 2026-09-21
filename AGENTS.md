@@ -153,7 +153,10 @@ et certaines nouvelles chaînes ne sont pas traduites partout. Paramètres et di
 - La lecture reçue suspend aussi le micro local. Cette protection ne supprime pas l’écho entre deux appareils.
 - Écouter **ne dépend jamais du démarrage du micro**. Le premier contact ou appui clavier dans la page
   arme la lecture. Ne pas imposer un bouton particulier ni un geste par phrase.
-- L’icône haut-parleur est l’unique commande de son : armer, puis couper/rétablir.
+- L’icône haut-parleur est l’unique commande de son : elle apparaît barrée tant que la lecture
+  n’est pas armée ou que le son est coupé. Le premier appui active l’écoute ; les suivants coupent
+  ou rétablissent le son. Sur ce bouton, laisser le clic gérer l’activation : l’armement global au
+  `pointerdown`/`keydown` ne doit pas activer puis couper le son au cours du même geste.
 - Le passage en arrière-plan arrête le micro ; le retour tente de reprendre. Le verrouillage d’un téléphone
   n’est pas une garantie de continuité audio.
 - Une panne temporaire de scrutation n’est pas une fin de session. Seuls 401/403/404 sont définitifs

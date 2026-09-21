@@ -332,7 +332,10 @@ export function useSharedConversation(id: string, signedIn = false) {
     // touch anywhere arms playback, so a listener has nothing to press to simply hear.
     // Arming is not one-shot: if the system suspends audio later, the next touch re-arms it.
     let armed = false;
-    const armSound = () => {
+    const armSound = (event: Event) => {
+      // This button handles its own click. Arming on pointerdown/keydown would let
+      // its subsequent click see "ready" and mute the sound in the same gesture.
+      if (event.target instanceof Element && event.target.closest(".sound-icon")) return;
       document.removeEventListener("pointerdown", armSound);
       document.removeEventListener("keydown", armSound);
       armed = false;
@@ -381,7 +384,11 @@ export function useSharedConversation(id: string, signedIn = false) {
   }
   async function enableSound() {
     setMessage("");
-    try { await unlockSound(); void playQueue(); }
+    try {
+      await unlockSound();
+      sound.current = true; setSoundOn(true); directAudio.current?.setMuted(false);
+      void playQueue();
+    }
     catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
   }
   async function start() {
