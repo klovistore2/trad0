@@ -215,7 +215,16 @@ try {
  await b.locator('#my-language').selectOption('en');
  await expect(b.locator('#my-language')).toHaveValue('en');
  // Mode 2 works for a guest who has not consented, while A stays in mode 1.
- let llmCalls=0;
+ let llmCalls=0, toneCalls=0, expressiveSpeech;
+ await b.route('**/api/audio/tone',async route=>{
+  toneCalls++;
+  assert.ok(route.request().postDataBuffer().length>11000,'real worklet supplies a WAV excerpt');
+  await route.fulfill({json:{tone:'happy',strength:'medium',status:'estimated',analysisMs:15,model:'gpt-audio-mini'}});
+ });
+ await a.route('**/api/elevenlabs/speak',async route=>{
+  expressiveSpeech=route.request().postDataJSON().speech;
+  await route.fulfill({contentType:'audio/wav',body:clip,headers:{'X-TTS-Model':'eleven_v3','X-TTS-Headers-Ms':'18'}});
+ });
  await b.route('**/api/translate',async route=>{
   const body=route.request().postDataJSON();llmCalls++;
   assert.equal(body.text,'Can we go there tomorrow?');
@@ -224,15 +233,27 @@ try {
   await route.fulfill({json:{text:'Peut-on y aller demain ?',targetLanguage:'fr',model:'test-fast-llm',contextTurns:body.context.length,translationMs:42}});
  });
  await b.getByRole('button',{name:'Settings'}).click();
+ await expect(b.getByLabel('Estimate my vocal tone')).not.toBeChecked();
+ await b.getByLabel('ElevenLabs model',{exact:true}).selectOption('eleven_v3');
+ await b.getByLabel('Estimate my vocal tone').check();
+ await b.getByLabel('Maximum extra wait after translation').selectOption('1000');
  await b.locator('#translation-mode').selectOption('context');
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
  await b.getByRole('button',{name:'Back to the conversation'}).click();
  await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');
  await expect(a.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await b.waitForTimeout(1200); // Accumulate a real bounded PCM sample from the fake microphone.
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'conversation.item.input_audio_transcription.delta',delta:'Can we go there tomorrow?'})}));
  await a.getByText('Peut-on y aller demain ?', {exact:true}).waitFor();
  await a.getByText(/Traduction en cours/).waitFor();
  assert.equal(llmCalls,1);
+ assert.equal(toneCalls,1);
+ assert.equal(expressiveSpeech.options.ttsModel,'eleven_v3');
+ assert.equal(expressiveSpeech.tone.tone,'happy');
+ await b.getByRole('button',{name:'Settings'}).click();
+ await expect(b.getByLabel('ElevenLabs model',{exact:true})).toHaveValue('eleven_v3');
+ await b.getByLabel('Estimate my vocal tone').uncheck();
+ await b.getByRole('button',{name:'Back to the conversation'}).click();
  assert.equal(await a.evaluate(()=>window.testRecordings),0);
  assert.equal(await b.evaluate(()=>window.testRecordings),0);
  // Handing the floor back leaves both microphones closed, the resting state of a session.
@@ -279,7 +300,7 @@ try {
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'End session & delete voices'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, voice consent and withdrawal, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, real PCM tone capture, per-speaker TTS options, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(process.env.DATABASE_URL) {

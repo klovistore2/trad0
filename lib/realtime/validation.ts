@@ -1,10 +1,12 @@
 import { isLanguage } from "@/types/session";
 import { isMode } from "@/lib/translation/modes";
+import { isSpeechMetadata } from "@/lib/audio/speech-options";
 import type { PeerEvent } from "@/types/session";
 const uuid = (value: unknown) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 export function isPeerEvent(value: unknown): value is PeerEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
+  if (event.speech !== undefined && !isSpeechMetadata(event.speech)) return false;
   if (event.kind !== undefined && event.kind !== "original" && event.kind !== "translation") return false;
   if (event.mode !== undefined && !isMode(event.mode)) return false;
   if (event.original !== undefined && (typeof event.original !== "string" || event.original.length > 4000)) return false;

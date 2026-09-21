@@ -17,7 +17,7 @@ L’objectif à terme est une conversation avec presque aucun geste, sans devoir
 **Ce n’est pas encore le fonctionnement actuel** : un tour de parole explicite protège aujourd’hui
 contre la captation croisée. Construire et valider son remplacement avant de le retirer.
 
-Ce document décrit le dépôt au **21 septembre 2026**. Il remplace l’ancien cahier des charges et ses
+Ce document décrit le dépôt au **22 septembre 2026**. Il remplace l’ancien cahier des charges et ses
 jalons contradictoires. Distinguer ce qui est implémenté, ce qui est testé et ce qui reste une cible.
 Mettre ce fichier à jour lorsqu’une décision d’architecture ou un comportement important change.
 
@@ -106,6 +106,48 @@ La liaison navigateur → ElevenLabs par WebSocket a été abandonnée après un
 alors que Node pouvait se connecter. Conserver le relais HTTP tant qu’un remplacement n’est pas
 validé avec proxys, VPN et extensions. L’élément média est aussi un choix de compatibilité mobile ;
 les analyseurs Web Audio ne sont pas la sortie de lecture.
+
+### Expérimentation de la synthèse et du ton (22 septembre 2026)
+
+Les paramètres proposent, pour **mes paroles sortantes en mode 2**, un modèle ElevenLabs
+(`auto`, `eleven_flash_v2_5`, `eleven_v3`, `eleven_v3_conversational`), l'analyse du ton activable,
+le modèle audio OpenAI (`gpt-audio-mini`, `gpt-audio`) et l'attente supplémentaire maximale après
+traduction (0, 250 ou 1000 ms). Valeurs initiales : auto, ton désactivé, Mini, 250 ms.
+Les choix sont conservés sur cet appareil dans `localStorage`, pas sur le compte. Chaque phrase
+fige ses options dans les métadonnées de l'événement ; l'autre appareil les transmet à la synthèse.
+Le mode 1 ignore ces options. Aucun changement de schéma Neon n'est nécessaire.
+
+Flash ne documente pas le thaï ni les tags expressifs. Le serveur impose donc v3 Conversational
+pour le thaï ou l'option émotion si le modèle demandé n'est pas déjà v3. Un choix explicite de v3
+reste v3. Le modèle réellement utilisé et la raison du remplacement apparaissent dans les diagnostics.
+Le relais HTTP existant et le téléchargement complet avant lecture sont conservés.
+
+L'analyse est distincte du clonage et fonctionne aussi pour un invité sans compte. Son activation
+explicite autorise les courts extraits nécessaires à cette fonctionnalité ; elle ne consent jamais
+au clonage. `ToneCapture` réutilise le micro existant via un AudioWorklet silencieux, uniquement
+lorsque ce locuteur a la parole en mode 2. Mémoire bornée aux huit dernières secondes en PCM mono
+16 kHz, remise à zéro après chaque phrase et à l'arrêt. Aucun fichier audio persistant.
+À la clôture du segment textuel, `/api/audio/tone` reçoit un WAV de 0,35 à 8 secondes et lance une
+analyse OpenAI en parallèle du LLM. L'analyse ne modifie ni le prompt ni le texte traduit.
+
+Deux estimations au plus sont en attente par navigateur. Après traduction, attendre au maximum
+le budget choisi, puis abandonner l'estimation tardive et continuer sans tag. Résultats ambigus,
+erreurs, capture indisponible et surcharge restent sans tag. Les réponses sont validées dans une
+énumération fermée ; seuls les tags construits côté serveur sont ajoutés. Les crochets fournis dans
+le texte deviennent du texte ordinaire. `strength` décrit l'intensité, pas une probabilité calibrée.
+Le modèle audio utilise Chat Completions avec sortie texte, `store: false`, sans JSON Schema strict
+(non pris en charge par ces modèles audio). La route authentifie la session et borne le corps à 300 ko.
+
+Les diagnostics dans la roue dentée montrent estimation, modèle, délai de la requête d'analyse,
+attente ajoutée après LLM, modèle TTS réellement utilisé, délai jusqu'aux en-têtes ElevenLabs et délai
+client jusqu'au démarrage de lecture. Les en-têtes ne mesurent pas le premier son audible.
+
+Limites : découpage audio lié à l'arrivée des transcriptions, sans alignement acoustique mot à mot ;
+la fin d'une phrase longue est privilégiée par le tampon borné. Précision émotionnelle, stabilité sur
+phrases courtes, clones et toutes les langues restent à évaluer. AudioWorklet/iPhone non validé.
+Une analyse trop lente peut donc être souvent ignorée avec le budget initial de 250 ms.
+Grok et Replicate ne sont pas intégrés : ajouter un fournisseur exige un adaptateur et des tests,
+pas simplement changer une variable. Le catalogue partagé est `lib/audio/speech-options.ts`.
 
 ### Bascule et mémoire
 
@@ -254,6 +296,7 @@ le même identifiant ; l’unicité de l’identifiant empêche leur double inse
 | `GET /api/auth/[...nextauth]`, `POST /api/auth/[...nextauth]` | Auth.js et Google |
 | `POST /api/openai/realtime-token`, `POST /api/openai/transcription-token` | Jetons éphémères des deux circuits |
 | `POST /api/translate` | Traduction textuelle avec contexte |
+| `POST /api/audio/tone` | Estimation facultative de l’expression vocale depuis un court WAV |
 | `POST /api/elevenlabs/speak` | Relais de synthèse vocale |
 | `POST /api/voice/consent`, `POST /api/voice/clone` | Consentement et création/affinage de voix |
 | `POST /api/voice/prefer`, `DELETE /api/voice` | Utilisation du clone, suppression ou réinitialisation |
@@ -264,7 +307,8 @@ le même identifiant ; l’unicité de l’identifiant empêche leur double inse
 - Les clés OpenAI/ElevenLabs, secrets Auth.js et `DATABASE_URL` restent côté serveur. Les jetons OpenAI
   exposés au navigateur sont éphémères. Ne jamais afficher les secrets dans les logs ou les tests.
 - Aucun audio n’est écrit sur disque ou en base par l’application. Les échantillons consentis passent
-  par la mémoire navigateur et serveur vers ElevenLabs. Les fournisseurs ont leurs propres règles
+  par la mémoire navigateur et serveur vers ElevenLabs. Les courts extraits de ton activé passent vers OpenAI, sans stockage applicatif.
+  Les fournisseurs ont leurs propres règles
   de conservation : ne pas présenter l’audio comme ne quittant jamais le navigateur.
 - Les événements contiennent du texte et des métadonnées ; la table de signalisation contient du SDP,
   jamais de son. Effacer ces données à la fermeture ou à la purge.
@@ -288,7 +332,7 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `OPENAI_INPUT_TRANSCRIPTION_MODEL` | Transcription des deux circuits ; défaut `gpt-realtime-whisper` |
 | `OPENAI_TEXT_TRANSLATION_MODEL` | LLM du mode 2 ; défaut `gpt-4.1-mini`, compatible Chat Completions et JSON structuré |
 | `OPENAI_LANGUAGE_DETECTION_MODEL` | Classification initiale ; défaut `gpt-4.1-nano` |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_TTS_MODEL` | Synthèse et clonage ; modèle TTS de l’exemple : `eleven_flash_v2_5` |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_TTS_MODEL` | Synthèse et clonage ; défaut de synthèse : `eleven_flash_v2_5`, surcharge par phrase dans les paramètres ; v3 requis pour thaï/ton |
 | `ELEVENLABS_FALLBACK_VOICE_ID`, `ELEVENLABS_VOICE_LOW`, `ELEVENLABS_VOICE_HIGH` | Choix facultatifs de voix standard |
 | `DATABASE_URL` | Neon |
 | `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js et Google ; URI de retour OAuth à configurer pour chaque origine |
@@ -391,6 +435,14 @@ et parcours Chromium à deux profils réussis. Deux vérifications OpenAI réell
 d’un jeton de transcription et une courte traduction synthétique en thaï (HTTP 200). Elles ne valident
 pas une conversation vocale complète. Cette réécriture documentaire ne constitue pas un nouveau test
 appareil ou fournisseur.
+
+Validation du 22 septembre 2026 pour les options vocales : **70 tests unitaires**, lint, TypeScript,
+build Webpack isolé et parcours Chromium à deux profils, incluant la capture PCM réelle avec
+fournisseurs simulés. Appels réels sur une seule courte phrase thaïe synthétique : HTTP 200 pour
+v3 Conversational (premier octet ~563 ms, téléchargement ~938 ms), v3 (~776 / 1481 ms), puis
+GPT Audio Mini (réponse textuelle de ton valide, ~2415 ms, audio synthétique MP3). Ces appels
+ne prouvent ni la qualité du thaï à l'écoute, ni la fidélité émotionnelle, ni la qualité d'un clone.
+Les chiffres sont des observations uniques, pas un benchmark ni une mesure navigateur complète.
 
 ## Consigne technique gérée par Next.js
 

@@ -2,6 +2,7 @@ import { member } from "@/lib/session/auth";
 import { db } from "@/lib/neon/db";
 import { elevenHeaders, fallbackVoice } from "@/lib/elevenlabs/server";
 import { checkOrigin, failure, HttpError, readJson } from "@/lib/server/http";
+import { DEFAULT_SPEECH_OPTIONS, expressiveText, isSpeechMetadata, resolveTtsModel } from "@/lib/audio/speech-options";
 
 export const maxDuration = 30;
 
@@ -11,6 +12,8 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request);
     const body = await readJson(request);
+    if (body.speech !== undefined && !isSpeechMetadata(body.speech)) throw new HttpError(400, "Invalid speech options.");
+    const speech = isSpeechMetadata(body.speech) ? body.speech : undefined;
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text || text.length > 4000) throw new HttpError(400, "Texte invalide.");
     const language = typeof body.language === "string" && /^[a-z]{2}$/.test(body.language) ? body.language : undefined;
@@ -26,13 +29,14 @@ export async function POST(request: Request) {
       // The speaker's own range, so the receiver hears a fitting voice before any clone exists.
       if (rows[0].voice_range === "low" || rows[0].voice_range === "high") range = rows[0].voice_range;
     }
-    const model = process.env.ELEVENLABS_TTS_MODEL?.trim();
-    if (!model) throw new HttpError(503, "Le modèle vocal n’est pas configuré.");
+    const configured = process.env.ELEVENLABS_TTS_MODEL?.trim() || "eleven_flash_v2_5";
+    const { model, reason } = resolveTtsModel(speech?.options ?? DEFAULT_SPEECH_OPTIONS, language, configured);
     const voice = voiceId || await fallbackVoice(range);
+    const started = performance.now();
     const upstream = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream?output_format=mp3_22050_32`, {
       method: "POST",
       headers: { ...elevenHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ text, model_id: model, ...(language ? { language_code: language } : {}) }),
+      body: JSON.stringify({ text: expressiveText(text, model, speech), model_id: model, ...(language ? { language_code: language } : {}) }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!upstream.ok || !upstream.body) throw new HttpError(502, "La voix est indisponible. Le texte reste accessible.");
@@ -41,6 +45,8 @@ export async function POST(request: Request) {
       "Content-Type": "audio/mpeg", "Cache-Control": "no-store",
       // Development aid: lets the page show which voice was actually used.
       "X-Voice-Source": voiceId ? "clone" : `standard-${range ?? "neutral"}`,
+      "X-TTS-Model": model, "X-TTS-Fallback": reason,
+      "X-TTS-Headers-Ms": String(Math.round(performance.now() - started)),
     } });
   } catch (error) { return failure(error); }
 }

@@ -7,9 +7,16 @@ import { ShareSession } from "./share-session";
 import { AudioDiagnostics, type AudioState } from "./audio-diagnostics";
 import type { Participant } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
+import type { SpeechOptions } from "@/lib/audio/speech-options";
+import { PipelineDiagnostics, type PipelineState } from "./pipeline-diagnostics";
+import type { SharedSession } from "@/types/session";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose }: {
+export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose, speechOptions, onSpeechOptions, room, readPipelineState }: {
+  speechOptions: SpeechOptions;
+  onSpeechOptions: (options: SpeechOptions) => void;
+  room: SharedSession;
+  readPipelineState: () => PipelineState;
   id: string;
   me: Participant;
   peer: Participant;
@@ -40,6 +47,35 @@ export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, 
         <option value="context">Mode 2 · translation with context + ElevenLabs</option>
       </select>
       <p>Changes apply between sentences. Mode 2 works with a standard voice, without an account or voice cloning.</p>
+    </div>
+    <div className="settings-group speech-experiments">
+      <h2>Speech experiments · mode 2</h2>
+      <p>These settings control the voice the other person hears when you speak. Saved on this device; applied to new sentences.</p>
+      <label htmlFor="speech-model">ElevenLabs model</label>
+      <select id="speech-model" className="language-picker" value={speechOptions.ttsModel} onChange={event => onSpeechOptions({ ...speechOptions, ttsModel: event.target.value as SpeechOptions["ttsModel"] })}>
+        <option value="auto">Automatic · v3 for Thai or emotion</option>
+        <option value="eleven_flash_v2_5">Flash v2.5 · fastest</option>
+        <option value="eleven_v3_conversational">v3 Conversational · expressive, realtime</option>
+        <option value="eleven_v3">v3 · expressive</option>
+      </select>
+      {(peer.language === "th" || speechOptions.emotion) && <p>Thai and emotion tags require v3. Flash will be replaced by v3 Conversational for those sentences.</p>}
+      <label className="tone-toggle"><input type="checkbox" checked={speechOptions.emotion} onChange={event => onSpeechOptions({ ...speechOptions, emotion: event.target.checked })} /> Estimate my vocal tone</label>
+      <p>When enabled in mode 2, short microphone excerpts are sent to OpenAI to estimate vocal delivery, separately from cloning. The app keeps audio only in memory. Ambiguous or late results use no emotion tag.</p>
+      {speechOptions.emotion && <>
+        <label htmlFor="tone-model">Audio analysis model</label>
+        <select id="tone-model" className="language-picker" value={speechOptions.toneModel} onChange={event => onSpeechOptions({ ...speechOptions, toneModel: event.target.value as SpeechOptions["toneModel"] })}>
+          <option value="gpt-audio-mini">OpenAI · GPT Audio Mini</option>
+          <option value="gpt-audio">OpenAI · GPT Audio</option>
+        </select>
+        <label htmlFor="tone-wait">Maximum extra wait after translation</label>
+        <select id="tone-wait" className="language-picker" value={speechOptions.toneWaitMs} onChange={event => onSpeechOptions({ ...speechOptions, toneWaitMs: Number(event.target.value) })}>
+          <option value={0}>0 ms · only use results already ready</option>
+          <option value={250}>250 ms</option>
+          <option value={1000}>1 second · compare tone more often</option>
+        </select>
+      </>}
+      {me.activeMode !== "context" && <p>These options apply in mode 2. Select “Mode 2” above to compare them.</p>}
+      <PipelineDiagnostics room={room} read={readPipelineState} />
     </div>
     <div className="settings-group">
       <h2>{"My voice"}</h2>

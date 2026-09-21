@@ -10,11 +10,22 @@ import { SpeechClock } from "@/lib/audio/speech-clock";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
 import { VoiceRangeDetector } from "@/lib/audio/voice-range";
 import { SpeechRecorder } from "@/lib/audio/speech-recorder";
+import { ToneCapture } from "@/lib/audio/tone-capture";
+import { startToneAnalysis } from "@/lib/audio/tone-analysis";
+import { DEFAULT_SPEECH_OPTIONS, isSpeechOptions, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
 import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
 export function useSharedConversation(id: string, signedIn = false) {
+  const [speechOptions, updateSpeechOptions] = useState<SpeechOptions>(() => {
+    try { const saved = JSON.parse(localStorage.getItem("trad0-speech-options") || "null"); return isSpeechOptions(saved) ? saved : DEFAULT_SPEECH_OPTIONS; }
+    catch { return DEFAULT_SPEECH_OPTIONS; }
+  });
+  const speechOptionsRef = useRef(speechOptions);
+  const toneCapture = useRef<ToneCapture | null>(null);
+  const toneControllers = useRef(new Set<AbortController>());
+  const incomingSpeech = useRef<SpeechMetadata | null>(null);
   const [room, setRoom] = useState<SharedSession | null>(null);
   const [message, setMessage] = useState("");
   const [incoming, setIncoming] = useState("");
@@ -120,6 +131,7 @@ export function useSharedConversation(id: string, signedIn = false) {
     const open = micShouldBeOn();
     translationRef.current.setMicrophoneEnabled(open);
     if (!open) {
+      toneCapture.current?.stop();
       // End of a turn: pause the capture, then see whether a tier has been reached.
       speechClock.current.pause();
       recorder.current?.pause();
@@ -130,6 +142,8 @@ export function useSharedConversation(id: string, signedIn = false) {
     const stream = translationRef.current.getStream?.();
     if (!stream) return;
     detector.current?.listen(stream);
+    if (speechOptionsRef.current.emotion && publisher.current?.mode === "context" && !document.hidden) toneCapture.current?.listen(stream);
+    else toneCapture.current?.stop();
     const me = roomRef.current?.me;
     if (me?.hasAccount && me.consented && me.voiceTier < FINAL_TIER) recorder.current?.listen(stream);
     else recorder.current?.pause();
@@ -144,7 +158,8 @@ export function useSharedConversation(id: string, signedIn = false) {
     try {
       while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
-        await voice.current?.speakStream({ sessionId: id, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
+        incomingSpeech.current = event.speech ?? null;
+        await voice.current?.speakStream({ sessionId: id, speech: event.speech, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
         const measured = voice.current?.lastLatency;
         if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
       }
@@ -175,15 +190,33 @@ export function useSharedConversation(id: string, signedIn = false) {
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout>;
     const peer = new NeonPeerTransport(setMessage);
+    toneCapture.current = new ToneCapture();
+    const toneRequests = toneControllers.current;
     transport.current = peer;
     const turns = new ConversationPipeline({
       sessionId: id, speaker: () => roomRef.current?.me.slot ?? 0,
       languages: () => ({ sourceLanguage: roomRef.current?.me.language ?? "en", targetLanguage: roomRef.current?.peer?.language ?? "en" }),
       send: event => peer.send(event), onTranslation: text => setContextTranslation(previous => (previous + " " + text).trim().slice(-12_000)),
       onError: setMessage, canSwitch: () => !directAudio.current?.isSendingAudio(),
+      prepareSpeech: signal => {
+        const options = { ...speechOptionsRef.current };
+        const audio = toneCapture.current?.take() ?? null;
+        // Bound concurrent estimates even when the translation queue grows.
+        const busy = toneRequests.size >= 2;
+        const request = new AbortController();
+        if (!busy) toneRequests.add(request);
+        const job = startToneAnalysis(id, options, busy ? null : audio, AbortSignal.any([signal, request.signal]));
+        const cancel = () => { request.abort(); job.cancel(); toneRequests.delete(request); };
+        return { options, job: { cancel, finish: async wait => {
+          const result = await job.finish(wait); cancel();
+          if (busy && options.emotion) result.tone.status = "busy";
+          return result;
+        } } };
+      },
       switchMode: async mode => {
         if (controller.signal.aborted) return;
         clearTimeout(sourceCommitTimer.current);
+        toneCapture.current?.stop();
         if (running.current) {
           recorder.current?.pause();
           translationRef.current.stop();
@@ -258,6 +291,7 @@ export function useSharedConversation(id: string, signedIn = false) {
             setMessage(data.error || "La conversation est terminée.");
             stopped.current = "session ended";
             running.current = false; setEnabled(false); player.stop(); directAudio.current?.dispose(); turns.dispose(); translationRef.current.stop();
+            toneCapture.current?.stop();
             return;
           }
           throw new Error(data.error);
@@ -356,7 +390,7 @@ export function useSharedConversation(id: string, signedIn = false) {
     // Leaving the page tears the microphone down for privacy, but the session stays active:
     // a receiving phone whose screen went dark must still speak when it comes back.
     const visibility = () => {
-      if (document.hidden) { queue.current = []; player.stop(); turns.flush(); return; }
+      if (document.hidden) { queue.current = []; player.stop(); turns.flush(); toneCapture.current?.stop(); return; }
       if (!running.current || controller.signal.aborted) return;
       void (async () => {
         try {
@@ -373,6 +407,8 @@ export function useSharedConversation(id: string, signedIn = false) {
       controller.abort(); clearTimeout(refreshTimer); clearTimeout(sourceCommitTimer.current); directAudio.current?.dispose(); directAudio.current = null; document.removeEventListener("visibilitychange", visibility);
       document.removeEventListener("pointerdown", armSound); document.removeEventListener("keydown", armSound);
       unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose(); detector.current?.stop(); detector.current = null; recorder.current?.stop(); recorder.current = null;
+      toneCapture.current?.stop(); toneCapture.current = null;
+      for (const request of toneRequests) request.abort(); toneRequests.clear();
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
@@ -412,6 +448,18 @@ export function useSharedConversation(id: string, signedIn = false) {
   function stop() {
     running.current = false; setEnabled(false); stopped.current = "paused by you"; queue.current = [];
     publisher.current?.flush(); translation.stop(); voice.current?.stop();
+    toneCapture.current?.stop();
+  }
+  function setSpeechOptions(next: SpeechOptions) {
+    if (!isSpeechOptions(next)) return;
+    publisher.current?.flush();
+    speechOptionsRef.current = next; updateSpeechOptions(next);
+    try { localStorage.setItem("trad0-speech-options", JSON.stringify(next)); } catch {}
+    if (!next.emotion || next.toneModel !== speechOptions.toneModel) {
+      for (const request of toneControllers.current) request.abort();
+      toneCapture.current?.stop();
+    }
+    syncMicrophone();
   }
   async function takeFloor() {
     if (claiming || floorRef.current === roomRef.current?.me.slot) return;
@@ -509,8 +557,10 @@ export function useSharedConversation(id: string, signedIn = false) {
     switching: publisher.current?.switching ?? false, directAudio: directAudio.current?.status ?? "waiting",
     reason: modeReason.current, contextTurns: publisher.current?.memory.recent().length ?? 0,
     timing: publisher.current?.timing ?? null, receivedTiming: timing.current,
+    speechOptions: speechOptionsRef.current, outgoingSpeech: publisher.current?.speech ?? null, incomingSpeech: incomingSpeech.current,
+    synthesis: voice.current?.lastSynthesis ?? null, audioLatency: voice.current?.lastLatency ?? null,
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { activeMode, setMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { speechOptions, setSpeechOptions, activeMode, setMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

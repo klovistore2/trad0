@@ -2,6 +2,8 @@ import { TurnPublisher } from "@/lib/realtime/turn-publisher";
 import { ConversationMemory } from "./memory";
 import type { ConversationMode } from "./modes";
 import type { Language, PeerEvent } from "@/types/session";
+import type { SpeechOptions, SpeechMetadata } from "@/lib/audio/speech-options";
+import type { ToneJob } from "@/lib/audio/tone-analysis";
 
 export type PipelineTiming = { waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
 export class ConversationPipeline {
@@ -10,6 +12,7 @@ export class ConversationPipeline {
   desired: ConversationMode = "direct";
   switching = false;
   timing: PipelineTiming | null = null;
+  speech: SpeechMetadata | null = null;
   private source: TurnPublisher;
   private translated: TurnPublisher;
   private queue = Promise.resolve();
@@ -21,6 +24,7 @@ export class ConversationPipeline {
     sessionId: string; speaker: () => number; languages: () => { sourceLanguage: Language; targetLanguage: Language };
     send: (event: PeerEvent) => Promise<void>; switchMode: (mode: ConversationMode) => Promise<void>;
     canSwitch?: () => boolean; onTranslation: (text: string) => void; onError: (message: string) => void;
+    prepareSpeech?: (signal: AbortSignal) => { options: SpeechOptions; job: ToneJob };
   }) {
     this.source = new TurnPublisher(event => { if (event.committed) this.commitSource(event); });
     this.translated = new TurnPublisher(event => {
@@ -46,6 +50,8 @@ export class ConversationPipeline {
       void this.options.send({ ...event, kind: "original", mode: "direct", ...language });
       return;
     }
+    // Capture and start the audio estimate now, alongside (never before) translation.
+    const speech = this.options.prepareSpeech?.(this.controller.signal);
     this.pending++;
     this.queue = this.queue.then(async () => {
       if (this.controller.signal.aborted) return;
@@ -61,14 +67,17 @@ export class ConversationPipeline {
       const actualLanguage = { ...language, targetLanguage: data.targetLanguage as Language };
       this.memory.add(event.turnId, { speaker: this.options.speaker(), original, translation: data.text, ...actualLanguage });
       this.options.onTranslation(data.text);
+      const speechMetadata = speech ? { options: speech.options, ...await speech.job.finish(speech.options.toneWaitMs) } : undefined;
+      if (this.controller.signal.aborted) return;
+      this.speech = speechMetadata ?? null;
       const publishStarted = performance.now();
       const timing = { waitMs, translationMs: data.translationMs, contextTurns: data.contextTurns, model: data.model, publishMs: 0 };
-      await this.options.send({ ...event, text: data.text, original, kind: "translation", mode: "context", ...actualLanguage, timing });
+      await this.options.send({ ...event, text: data.text, original, kind: "translation", mode: "context", ...actualLanguage, timing, speech: speechMetadata });
       this.timing = { ...timing, publishMs: Math.round(performance.now() - publishStarted) };
     }).catch(error => {
       if (!this.controller.signal.aborted) this.memory.add(event.turnId, { speaker: this.options.speaker(), original, ...language });
       if (!this.controller.signal.aborted) this.options.onError(error instanceof Error ? error.message : "Translation failed.");
-    }).finally(() => { this.pending--; this.scheduleBoundary(); });
+    }).finally(() => { speech?.job.cancel(); this.pending--; this.scheduleBoundary(); });
   }
   receive(event: PeerEvent, speaker: number) {
     if (!event.committed || !event.sourceLanguage || !event.targetLanguage) return;

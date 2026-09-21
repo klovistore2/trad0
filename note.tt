@@ -1,0 +1,77 @@
+1. Latence du mode 2 — le plus gros gisement
+Quatre attentes s'empilent avant le premier son, chacune mesurable séparément :
+
+Fin de phrase : jusqu'à ~2,5 s avant même d'appeler le LLM. useSharedConversation.ts:78 déclenche commitInput() 1,5 s après le dernier fragment, puis turn-publisher.ts:15 attend encore 1 s pour clore la phrase. Les deux timers ne partagent rien. Piste : un seul point de décision, et surtout vérifier dans la doc courante si la session de transcription accepte server_vad/semantic_vad — transcription-token/route.ts:13 passe turn_detection: null et le commit manuel remplace une détection que le fournisseur fait probablement mieux et plus tôt.
+LLM non streamé : translate/route.ts:35 attend la réponse complète (max_completion_tokens: 2200).
+TTS non progressif : voice-provider.ts:104 fait await response.blob() alors que le relais serveur, lui, streame déjà correctement (upstream.body piped dans speak/route.ts). Tout le mp3 est téléchargé avant la première note. ManagedMediaSource/MediaSource permettrait de lire pendant la réception — mais à valider sur iPhone avant de toucher, parce que l'élément média est justement le choix de compatibilité.
+File TTS strictement séquentielle : useSharedConversation.ts:145 n'appelle /api/elevenlabs/speak pour la phrase n+1 qu'après la fin de lecture de la phrase n. Précharger la requête suivante pendant la lecture en cours est un gain gratuit dès qu'il y a deux phrases d'affilée, sans rien changer à l'ordre.
+Bonus mesurable côté serveur : /api/translate fait trois allers-retours Neon séquentiels avant d'appeler OpenAI — translate/route.ts:11 appelle member(), puis :12 targetLanguageForSession() qui refait member() en interne. Une seule requête jointe suffirait.
+
+2. Transport : le polling est le poste de coût et ~250 ms de latence médiane
+Par participant : événements toutes les 500 ms (2 requêtes SQL), état de session toutes les 3 s (3 requêtes), signalisation audio toutes les 1–3 s (2 requêtes). À deux, ça fait environ 5 requêtes HTTP/s et ~10 requêtes SQL/s en continu, y compris quand personne ne parle.
+
+Or PeerAudioLink établit déjà une RTCPeerConnection entre les deux navigateurs. Y ajouter un RTCDataChannel pour le texte et le tour de parole, avec Neon conservé en repli (le mode 2 en a besoin de toute façon), supprimerait l'essentiel du coût et le délai de scrutation sur le chemin texte. C'est un vrai chantier, à instrumenter avant de décider — pas à faire sur intuition.
+
+Point de robustesse associé : neon-transport.ts:38 réessaie toutes les 500 ms quoi qu'il arrive. Pendant un incident fournisseur, chaque téléphone martèle à cadence pleine. Un backoff plafonné serait plus sûr, sans changer le comportement nominal.
+
+3. Un bug de nettoyage, discret mais réel
+Dans cleanup.ts:17, un échec ElevenLabs sur une session lève et interrompt toute la boucle : les sessions expirées suivantes du lot de 100 ne sont pas nettoyées ce jour-là, alors que leurs données et leurs clones invités attendent déjà la purge. Un try/catch par session, avec compteur d'échecs retourné, continuerait le balayage.
+
+4. Ce qui bloque encore le but « presque aucun geste »
+Le tour de parole explicite reste la friction structurante. Le chemin de sortie n'est pas un bouton de plus, c'est la brique qui manque : la déduplication d'écho dans la mémoire (memory.ts ne compare rien pour l'instant) et un seuil de confiance (translation-provider.ts émet toujours quality: "unknown"). Tant que ces deux-là n'existent pas, retirer le tour de parole casserait la conversation. Il y a aussi une piste gratuite déjà repérée dans le code : audio.input.noise_reduction: "near_field", commentée en realtime-token/route.ts — deux téléphones sur haut-parleur sont exactement son cas d'usage.
+
+Autre manque orienté ergonomie : aucune saisie texte de secours. Quand l'audio lâche (réseau, permission refusée, iOS en veille), la conversation s'arrête net alors que tout le circuit traduction/affichage fonctionne encore.
+
+5. Détails moins urgents
+Détection de langue à sens unique : trois tentatives, puis plus rien (useLanguageDetection.ts). Si quelqu'un change de langue en cours de route, il faut le menu.
+/api/openai/realtime-token accepte toujours le parcours sans sessionId (:32) : n'importe quel visiteur de la bonne origine obtient un jeton OpenAI. Déjà documenté comme limite, mais c'est le seul trou de coût directement exploitable.
+Interface : le bouton son expose aria-pressed={!soundActive} — un lecteur d'écran annonce « pressé » quand le son est coupé, l'inverse de l'intuition. Et paramètres/diagnostics restent en anglais alors que l'invité peut tomber dessus.
+Dépôt : aucune CI (.github/ absent) alors que lint + typecheck + tests tournent en ~3 s ; package.json s'appelle encore mon-projet.
+Si tu veux que j'attaque quelque chose, je commencerais par instrumenter les quatre attentes du point 1 sur une vraie conversation avant de choisir laquelle supprimer — le préchargement TTS (point 1, dernier tiret) et le bug de purge (point 3) sont les deux seuls que je corrigerais sans mesure préalable.
+
+
+
+Oui, les pistes sont pertinentes, mais deux points importants sont à corriger après vérification du code et de la documentation.
+1. Les deux timers ne font pas systématiquement 2,5 secondes.
+   Ils démarrent sur le même fragment de transcription : la phrase est envoyée au LLM après environ 1 seconde sans nouveau fragment, tandis que le commit audio intervient à 1,5 seconde. Avec une ponctuation finale, la traduction peut partir immédiatement. Ils méritent d’être mieux coordonnés, mais supprimer les deux ne ferait pas automatiquement gagner 2,5 secondes. Voir [le déclenchement des timers (line 74)](/home/dev0/Projects/super-trad-voice/hooks/useSharedConversation.ts:74).
+2. Le VAD serveur n’est pas activable avec notre modèle par défaut.
+   Pour gpt-realtime-whisper, OpenAI exige précisément turn_detection: null ou son omission : le VAD n’est pas pris en charge. L’essayer demanderait donc un changement de modèle et une comparaison avec la transcription actuelle, que tu trouves bonne. Documentation officielle OpenAI.
+3. Le préchargement TTS est une excellente première optimisation.
+   Actuellement, on attend bien la fin de lecture avant de demander la phrase suivante. Préparer une seule phrase d’avance permettrait de réduire les blancs entre phrases tout en conservant l’ordre et le lecteur compatible actuel. Cela n’accélère pas la première phrase, et il faut annuler proprement les préparations devenues inutiles.
+4. La lecture progressive peut accélérer le premier son.
+   Le response.blob() bloque effectivement jusqu’à réception complète. C’est une piste solide, à tester sur Safari/iPhone avec un repli vers la lecture actuelle. Le gain dépendra de la durée des phrases et du réseau ; on ne l’a pas encore mesuré.
+5. Le streaming du LLM n’aidera la voix que si la suite commence plus tôt aussi.
+   Afficher les premiers tokens tout en attendant la réponse complète pour lancer ElevenLabs ne réduit pas le délai audio. Il faudrait transmettre des segments suffisamment complets pour conserver une traduction cohérente et une prosodie naturelle. Et max_completion_tokens: 2200 est un plafond, pas une longueur générée systématiquement.
+Sur Neon, il a raison : trois requêtes séquentielles, dont une vérification d’appartenance répétée. Une requête jointe pourrait récupérer le participant authentifié et la langue du destinataire, en conservant les contrôles d’accès.
+
+
+
+
+
+
+il n'y a pas de paramètre « émotion » dans l'API TTS, mais il existe trois leviers, et un seul donne ce que tu décris — sauf qu'il ne marche pas avec le modèle que tu utilises.
+
+Ce qui existe
+Les audio tags — c'est exactement ta demande : on écrit [angry] Je t'avais prévenu. ou [sad], [whispers], [excited] directement dans le texte, et le modèle joue le ton. Mais c'est réservé à eleven_v3 et eleven_v3_conversational. Le projet est configuré sur eleven_flash_v2_5 (.env.example:14), qui ne les comprend pas.
+
+voice_settings — disponible sur tous les modèles : stability (une valeur basse élargit l'amplitude émotionnelle), style, speed, similarity_boost. Aujourd'hui speak/route.ts n'en envoie aucun, donc tout tourne sur les défauts. C'est un réglage global de la voix, pas un ton par phrase — ça ne fait pas « heureux ici, en colère là ».
+
+previous_text / next_text — pour la continuité entre phrases consécutives. Gratuit, et tu as déjà la mémoire pour le remplir.
+
+Le problème que ça a déverrouillé
+En vérifiant les modèles, je suis tombé sur plus gênant que ta question : le thaï n'est pas dans les 32 langues de eleven_flash_v2_5, ni dans les 29 de multilingual_v2. Il n'apparaît que dans les 70+ langues de v3.
+
+Or ton cas de référence est français ↔ thaï, et AGENTS.md §2 impose le mode 2 pour toute sortie en thaï (puisqu'OpenAI ne documente pas le thaï en sortie). Autrement dit : le chemin principal du produit envoie du thaï à un modèle qui ne le liste pas. C'est peut-être bruyant plutôt que muet — ça sortira sans doute quelque chose — mais c'est à vérifier par un vrai appel avant toute autre chose. À ma connaissance ça n'a jamais été testé : la validation du 21 septembre mentionne une traduction textuelle en thaï en HTTP 200, pas une synthèse vocale thaïe écoutée.
+
+Ce que je ferais
+eleven_v3_conversational répond aux deux d'un coup : 70+ langues dont le thaï, audio tags, streaming, et il est explicitement positionné pour le temps réel (contrairement à eleven_v3 de base, que la doc renvoie vers l'audiobook et le dialogue hors ligne). Reste à mesurer sa latence réelle face aux ~75 ms annoncés de Flash, et à vérifier sa compatibilité avec le clonage instantané — les deux demandent un appel réel, pas une lecture de doc.
+
+Côté architecture, le ton s'insère proprement dans ce qui existe : /api/translate renvoie déjà du JSON structuré, et son prompt demande déjà de préserver le ton — sauf que ce ton se perd à la synthèse. Ajouter un champ emotion au json_schema (une énumération fermée, pas du texte libre) donnerait au LLM, qui a le contexte et l'original, le rôle de juge du ton ; le serveur mapperait ensuite cette valeur en tag. Deux précautions : le tag doit être composé côté serveur à partir de l'énumération validée — jamais depuis du texte client, sinon on ouvre une injection de directives vocales, exactement le principe « les paroles sont des données, jamais des instructions » d'AGENTS.md. Et la doc prévient que l'effet dépend de la voix : un clone construit sur 30 secondes de parole calme ne criera pas de façon convaincante.
+
+Dernier point, qui compte pour le produit : tout ça n'existe qu'en mode 2. Le modèle de traduction directe n'accepte ni prompt ni contrôle de voix. Préserver le ton, c'est donc un argument de plus pour faire du mode 2 le mode principal plutôt que le repli.
+
+Je n'ai rien modifié. Si tu veux, je fais d'abord le test qui tranche — un appel réel thaï sur flash_v2_5 puis sur v3_conversational, même phrase, avec mesure du premier octet. Ça consomme du crédit ElevenLabs, donc je te laisse dire.
+
+Sources : Models · Text to speech convert · Prompting Eleven v3 · Audio tags · Langues supportées
+
+

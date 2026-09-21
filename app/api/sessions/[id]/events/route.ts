@@ -7,7 +7,7 @@ export async function POST(request: Request, context: RouteContext<"/api/session
     checkOrigin(request); const { id } = await context.params; const me = await member(id);
     const event = await readJson(request);
     if (!isPeerEvent(event)) throw new HttpError(400, "Message invalide.");
-    const metadata = JSON.stringify({ kind: event.kind, original: event.original, mode: event.mode, sourceLanguage: event.sourceLanguage, targetLanguage: event.targetLanguage, timing: event.timing });
+    const metadata = JSON.stringify({ kind: event.kind, original: event.original, mode: event.mode, sourceLanguage: event.sourceLanguage, targetLanguage: event.targetLanguage, timing: event.timing, speech: event.speech });
     await db()`INSERT INTO adu_events(id,session_id,sender,turn_id,text,committed,metadata) VALUES(${event.id},${id},${me.slot},${event.turnId},${event.text},${event.committed},${metadata}::jsonb) ON CONFLICT(id) DO NOTHING`;
     return json({ ok: true });
   } catch (error) { return failure(error); }

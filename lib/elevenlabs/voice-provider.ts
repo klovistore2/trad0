@@ -25,6 +25,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private failure = "";
   private voiceSource = "";
   private latency = { request: 0, total: 0 };
+  private synthesis = { model: "", fallback: "", headersMs: 0 };
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -58,6 +59,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   get lastFailure() { return this.failure; }
   get lastVoice() { return this.voiceSource; }
   get lastLatency() { return this.latency; }
+  get lastSynthesis() { return this.synthesis; }
   async testTone() {
     await this.unlock();
     await this.play(wav(0.4, 440));
@@ -75,7 +77,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     this.element = undefined;
   }
 
-  async speakStream({ textStream, language, sessionId, signal }: Parameters<VoiceProvider["speakStream"]>[0]) {
+  async speakStream({ textStream, language, sessionId, signal, speech }: Parameters<VoiceProvider["speakStream"]>[0]) {
     this.stop();
     const controller = new AbortController();
     this.active = controller;
@@ -85,6 +87,8 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     try {
       if (controller.signal.aborted) return;
       const startedAt = Date.now();
+      this.latency = { request: 0, total: 0 };
+      this.synthesis = { model: "", fallback: "", headersMs: 0 };
       await this.unlock();
       this.onStatus("loading");
       let text = "";
@@ -92,7 +96,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (!text.trim() || controller.signal.aborted) return;
       const response = await fetch("/api/elevenlabs/speak", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, text, language }), signal: controller.signal,
+        body: JSON.stringify({ sessionId, text, language, speech }), signal: controller.signal,
       });
       if (!response.ok) {
         const detail = await response.json().catch(() => ({}));
@@ -100,6 +104,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
+      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", fallback: response.headers.get("x-tts-fallback") || "", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0 };
       this.latency = { request: Date.now() - startedAt, total: 0 };
       const blob = await response.blob();
       if (controller.signal.aborted) return;
