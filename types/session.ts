@@ -27,5 +27,3 @@ export const languageNames: Record<Language, string> = {
   de: "Deutsch", ja: "日本語", ko: "한국어", zh: "中文", ru: "Русский", hi: "हिन्दी",
   id: "Bahasa Indonesia", vi: "Tiếng Việt",
 };
-// Thai is not among the documented output languages: a translation into it may not work.
-export const UNVERIFIED_OUTPUT: readonly Language[] = ["th"];

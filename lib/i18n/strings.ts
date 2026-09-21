@@ -7,7 +7,7 @@ const en = {
   keepVoiceTitle: "Keep your voice", keepVoiceBody: "Want to hear your own voice in translation? Sign in with Google, then choose whether to create your voice.", keepVoiceAction: "Sign in to keep my voice", notNow: "Not now",
   iSpeak: "I speak", theySpeak: "They speak", autoLanguage: "Auto",
   detectOnSpeech: "Detected when you speak", languageDetected: "Detected · change if needed",
-  chooseLanguage: "Choose the language", untestedLanguage: "untested",
+  chooseLanguage: "Choose the language",
   muteSound: "Mute the sound",
   unmuteSound: "Turn the sound on",
   soundOn: "Sound on",
@@ -47,7 +47,7 @@ export type StringKey = keyof typeof en;
 const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>> = {
   fr: {
     keepVoiceTitle: "Gardez votre voix", keepVoiceBody: "Envie de traduire avec votre propre voix ? Connectez-vous avec Google, puis choisissez de créer votre voix.", keepVoiceAction: "Me connecter pour garder ma voix", notNow: "Pas maintenant",
-    iSpeak: "Je parle", theySpeak: "L’autre parle", autoLanguage: "Auto", detectOnSpeech: "Détection à la prise de parole", languageDetected: "Détectée · modifiable", chooseLanguage: "Choisissez la langue", untestedLanguage: "à tester",
+    iSpeak: "Je parle", theySpeak: "L’autre parle", autoLanguage: "Auto", detectOnSpeech: "Détection à la prise de parole", languageDetected: "Détectée · modifiable", chooseLanguage: "Choisissez la langue",
     muteSound: "Couper le son", unmuteSound: "Activer le son", soundOn: "Son activé", textOnly: "Texte seul",
     theirWords: "SES MOTS, DANS VOTRE LANGUE", connectedTitle: "Vous êtes ensemble.",
     connectedIntro: "Parlez naturellement. Les mots de l’autre personne apparaîtront ici.",
@@ -66,7 +66,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
   },
   th: {
     keepVoiceTitle: "เก็บเสียงของคุณ", keepVoiceBody: "ต้องการใช้เสียงของคุณในการแปลไหม? เข้าสู่ระบบด้วย Google แล้วเลือกว่าจะสร้างเสียงของคุณหรือไม่", keepVoiceAction: "เข้าสู่ระบบเพื่อเก็บเสียงของฉัน", notNow: "ยังไม่ใช่ตอนนี้",
-    iSpeak: "ฉันพูด", theySpeak: "อีกฝ่ายพูด", autoLanguage: "อัตโนมัติ", detectOnSpeech: "ตรวจจับเมื่อพูด", languageDetected: "ตรวจพบแล้ว · เปลี่ยนได้", chooseLanguage: "เลือกภาษา", untestedLanguage: "ยังไม่ทดสอบ",
+    iSpeak: "ฉันพูด", theySpeak: "อีกฝ่ายพูด", autoLanguage: "อัตโนมัติ", detectOnSpeech: "ตรวจจับเมื่อพูด", languageDetected: "ตรวจพบแล้ว · เปลี่ยนได้", chooseLanguage: "เลือกภาษา",
     muteSound: "ปิดเสียง", unmuteSound: "เปิดเสียง", soundOn: "เปิดเสียงอยู่", textOnly: "ข้อความเท่านั้น",
     theirWords: "คำพูดของอีกฝ่าย ในภาษาของคุณ", connectedTitle: "คุณเชื่อมต่อแล้ว",
     connectedIntro: "พูดได้ตามปกติ คำแปลของอีกฝ่ายจะปรากฏที่นี่",
@@ -83,7 +83,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "ใช้เสียงของฉัน", voiceDecline: "ยังก่อน — ใช้เสียงมาตรฐาน",
   },
   es: {
-    iSpeak: "Yo hablo", theySpeak: "La otra persona habla", autoLanguage: "Auto", detectOnSpeech: "Se detecta al hablar", languageDetected: "Detectado · se puede cambiar", chooseLanguage: "Elige el idioma", untestedLanguage: "sin probar",
+    iSpeak: "Yo hablo", theySpeak: "La otra persona habla", autoLanguage: "Auto", detectOnSpeech: "Se detecta al hablar", languageDetected: "Detectado · se puede cambiar", chooseLanguage: "Elige el idioma",
     muteSound: "Silenciar el sonido", unmuteSound: "Activar el sonido", soundOn: "Sonido activado", textOnly: "Solo texto",
     theirWords: "SUS PALABRAS, EN TU IDIOMA", connectedTitle: "Estáis conectados.",
     connectedIntro: "Habla con naturalidad. Las palabras traducidas aparecerán aquí.",
@@ -101,7 +101,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Usar mi voz", voiceDecline: "Ahora no — mantener una voz estándar",
   },
   pt: {
-    iSpeak: "Eu falo", theySpeak: "A outra pessoa fala", autoLanguage: "Auto", detectOnSpeech: "Detetado ao falar", languageDetected: "Detetado · pode alterar", chooseLanguage: "Escolha o idioma", untestedLanguage: "não testado",
+    iSpeak: "Eu falo", theySpeak: "A outra pessoa fala", autoLanguage: "Auto", detectOnSpeech: "Detetado ao falar", languageDetected: "Detetado · pode alterar", chooseLanguage: "Escolha o idioma",
     muteSound: "Desligar o som", unmuteSound: "Ligar o som", soundOn: "Som ligado", textOnly: "Apenas texto",
     theirWords: "AS PALAVRAS DELE, NA SUA LÍNGUA", connectedTitle: "Estão ligados.",
     connectedIntro: "Fale naturalmente. As palavras traduzidas aparecerão aqui.",
@@ -119,7 +119,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Usar a minha voz", voiceDecline: "Agora não — manter uma voz padrão",
   },
   it: {
-    iSpeak: "Io parlo", theySpeak: "L’altra persona parla", autoLanguage: "Auto", detectOnSpeech: "Rilevata quando parli", languageDetected: "Rilevata · modificabile", chooseLanguage: "Scegli la lingua", untestedLanguage: "non testata",
+    iSpeak: "Io parlo", theySpeak: "L’altra persona parla", autoLanguage: "Auto", detectOnSpeech: "Rilevata quando parli", languageDetected: "Rilevata · modificabile", chooseLanguage: "Scegli la lingua",
     muteSound: "Disattivare l’audio", unmuteSound: "Attivare l’audio", soundOn: "Audio attivo", textOnly: "Solo testo",
     theirWords: "LE SUE PAROLE, NELLA TUA LINGUA", connectedTitle: "Siete collegati.",
     connectedIntro: "Parla con naturalezza. Le parole tradotte appariranno qui.",
@@ -137,7 +137,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Usare la mia voce", voiceDecline: "Non ora — mantenere una voce standard",
   },
   de: {
-    iSpeak: "Ich spreche", theySpeak: "Andere Person spricht", autoLanguage: "Auto", detectOnSpeech: "Erkennung beim Sprechen", languageDetected: "Erkannt · änderbar", chooseLanguage: "Sprache wählen", untestedLanguage: "ungetestet",
+    iSpeak: "Ich spreche", theySpeak: "Andere Person spricht", autoLanguage: "Auto", detectOnSpeech: "Erkennung beim Sprechen", languageDetected: "Erkannt · änderbar", chooseLanguage: "Sprache wählen",
     muteSound: "Ton ausschalten", unmuteSound: "Ton einschalten", soundOn: "Ton an", textOnly: "Nur Text",
     theirWords: "IHRE WORTE, IN DEINER SPRACHE", connectedTitle: "Ihr seid verbunden.",
     connectedIntro: "Sprich ganz normal. Die übersetzten Worte erscheinen hier.",
@@ -155,7 +155,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Meine Stimme verwenden", voiceDecline: "Jetzt nicht — Standardstimme behalten",
   },
   ja: {
-    iSpeak: "自分の言語", theySpeak: "相手の言語", autoLanguage: "自動", detectOnSpeech: "話すと検出します", languageDetected: "検出済み・変更可能", chooseLanguage: "言語を選択", untestedLanguage: "未検証",
+    iSpeak: "自分の言語", theySpeak: "相手の言語", autoLanguage: "自動", detectOnSpeech: "話すと検出します", languageDetected: "検出済み・変更可能", chooseLanguage: "言語を選択",
     muteSound: "音を消す", unmuteSound: "音を出す", soundOn: "音声オン", textOnly: "テキストのみ",
     theirWords: "相手の言葉を、あなたの言語で", connectedTitle: "つながりました。",
     connectedIntro: "自然に話してください。相手の訳がここに表示されます。",
@@ -173,7 +173,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "自分の声を使う", voiceDecline: "今はしない — 標準の声のまま",
   },
   ko: {
-    iSpeak: "내 언어", theySpeak: "상대방 언어", autoLanguage: "자동", detectOnSpeech: "말하면 감지합니다", languageDetected: "감지됨 · 변경 가능", chooseLanguage: "언어 선택", untestedLanguage: "미검증",
+    iSpeak: "내 언어", theySpeak: "상대방 언어", autoLanguage: "자동", detectOnSpeech: "말하면 감지합니다", languageDetected: "감지됨 · 변경 가능", chooseLanguage: "언어 선택",
     muteSound: "소리 끄기", unmuteSound: "소리 켜기", soundOn: "소리 켜짐", textOnly: "텍스트만",
     theirWords: "상대의 말을, 당신의 언어로", connectedTitle: "연결되었습니다.",
     connectedIntro: "자연스럽게 말하세요. 상대의 번역이 여기에 나타납니다.",
@@ -191,7 +191,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "내 목소리 사용", voiceDecline: "지금은 아니요 — 기본 목소리 유지",
   },
   zh: {
-    iSpeak: "我说", theySpeak: "对方说", autoLanguage: "自动", detectOnSpeech: "说话时检测", languageDetected: "已检测 · 可修改", chooseLanguage: "选择语言", untestedLanguage: "未经测试",
+    iSpeak: "我说", theySpeak: "对方说", autoLanguage: "自动", detectOnSpeech: "说话时检测", languageDetected: "已检测 · 可修改", chooseLanguage: "选择语言",
     muteSound: "静音", unmuteSound: "打开声音", soundOn: "声音已开", textOnly: "仅文字",
     theirWords: "对方的话，用你的语言", connectedTitle: "已连接。",
     connectedIntro: "自然地说话。对方的译文会出现在这里。",
@@ -209,7 +209,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "使用我的声音", voiceDecline: "暂时不用 — 保留标准声音",
   },
   vi: {
-    iSpeak: "Tôi nói", theySpeak: "Người kia nói", autoLanguage: "Tự động", detectOnSpeech: "Phát hiện khi nói", languageDetected: "Đã phát hiện · có thể đổi", chooseLanguage: "Chọn ngôn ngữ", untestedLanguage: "chưa kiểm thử",
+    iSpeak: "Tôi nói", theySpeak: "Người kia nói", autoLanguage: "Tự động", detectOnSpeech: "Phát hiện khi nói", languageDetected: "Đã phát hiện · có thể đổi", chooseLanguage: "Chọn ngôn ngữ",
     muteSound: "Tắt tiếng", unmuteSound: "Bật tiếng", soundOn: "Đã bật tiếng", textOnly: "Chỉ văn bản",
     theirWords: "LỜI CỦA HỌ, BẰNG NGÔN NGỮ CỦA BẠN", connectedTitle: "Hai bạn đã kết nối.",
     connectedIntro: "Cứ nói tự nhiên. Lời dịch sẽ hiện ở đây.",
@@ -227,7 +227,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Dùng giọng của tôi", voiceDecline: "Chưa cần — giữ giọng mặc định",
   },
   id: {
-    iSpeak: "Saya berbicara", theySpeak: "Lawan bicara", autoLanguage: "Otomatis", detectOnSpeech: "Terdeteksi saat berbicara", languageDetected: "Terdeteksi · dapat diubah", chooseLanguage: "Pilih bahasa", untestedLanguage: "belum diuji",
+    iSpeak: "Saya berbicara", theySpeak: "Lawan bicara", autoLanguage: "Otomatis", detectOnSpeech: "Terdeteksi saat berbicara", languageDetected: "Terdeteksi · dapat diubah", chooseLanguage: "Pilih bahasa",
     muteSound: "Matikan suara", unmuteSound: "Nyalakan suara", soundOn: "Suara aktif", textOnly: "Hanya teks",
     theirWords: "KATA MEREKA, DALAM BAHASAMU", connectedTitle: "Kalian terhubung.",
     connectedIntro: "Bicaralah seperti biasa. Terjemahannya akan muncul di sini.",
@@ -245,7 +245,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Gunakan suara saya", voiceDecline: "Nanti saja — pakai suara standar",
   },
   ru: {
-    iSpeak: "Я говорю", theySpeak: "Собеседник говорит", autoLanguage: "Авто", detectOnSpeech: "Определяется при речи", languageDetected: "Определён · можно изменить", chooseLanguage: "Выберите язык", untestedLanguage: "не проверен",
+    iSpeak: "Я говорю", theySpeak: "Собеседник говорит", autoLanguage: "Авто", detectOnSpeech: "Определяется при речи", languageDetected: "Определён · можно изменить", chooseLanguage: "Выберите язык",
     muteSound: "Выключить звук", unmuteSound: "Включить звук", soundOn: "Звук включён", textOnly: "Только текст",
     theirWords: "ЕГО СЛОВА, НА ВАШЕМ ЯЗЫКЕ", connectedTitle: "Вы на связи.",
     connectedIntro: "Говорите свободно. Перевод появится здесь.",
@@ -263,7 +263,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Использовать мой голос", voiceDecline: "Не сейчас — обычный голос",
   },
   hi: {
-    iSpeak: "मैं बोलता हूँ", theySpeak: "वे बोलते हैं", autoLanguage: "स्वचालित", detectOnSpeech: "बोलने पर पहचान होगी", languageDetected: "पहचानी गई · बदल सकते हैं", chooseLanguage: "भाषा चुनें", untestedLanguage: "अपरिक्षित",
+    iSpeak: "मैं बोलता हूँ", theySpeak: "वे बोलते हैं", autoLanguage: "स्वचालित", detectOnSpeech: "बोलने पर पहचान होगी", languageDetected: "पहचानी गई · बदल सकते हैं", chooseLanguage: "भाषा चुनें",
     muteSound: "आवाज़ बंद करें", unmuteSound: "आवाज़ चालू करें", soundOn: "आवाज़ चालू", textOnly: "केवल टेक्स्ट",
     theirWords: "उनकी बात, आपकी भाषा में", connectedTitle: "आप जुड़ गए हैं।",
     connectedIntro: "सहज होकर बोलिए। अनुवाद यहाँ दिखाई देगा।",

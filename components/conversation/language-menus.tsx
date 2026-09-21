@@ -1,5 +1,5 @@
 "use client";
-import { LANGUAGES, UNVERIFIED_OUTPUT, languageNames, type Language } from "@/types/session";
+import { LANGUAGES, languageNames, type Language } from "@/types/session";
 import { translator } from "@/lib/i18n/strings";
 
 type Choice = { language: Language; languageAuto: boolean; languageDetected?: boolean; languageAttempts?: number };
@@ -17,13 +17,14 @@ export function LanguageMenus({ mine, theirs, locale = "en", disabled = false, o
         <select id={id} className="language-picker" disabled={disabled}
           value={choice.languageAuto ? "auto" : choice.language}
           onChange={event => change(event.target.value as Language | "auto")}>
-          <option value="auto">{t("autoLanguage")} · {languageNames[choice.language]}{UNVERIFIED_OUTPUT.includes(choice.language) ? ` · ${t("untestedLanguage")}` : ""}</option>
-          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>
-            {languageNames[code]}{UNVERIFIED_OUTPUT.includes(code) ? ` · ${t("untestedLanguage")}` : ""}
-          </option>)}
+          {/* Auto is a mode, not a language: naming one beside it passed a mere suggestion off
+              as a detection. The detected result belongs to the hint below, once it exists. */}
+          <option value="auto">{t("autoLanguage")}</option>
+          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
         </select>
         {choice.languageAuto && <span className="language-hint" role="status">
-          {choice.languageDetected ? t("languageDetected") : (choice.languageAttempts ?? 0) >= 3 ? t("chooseLanguage") : t("detectOnSpeech")}
+          {choice.languageDetected ? `${languageNames[choice.language]} · ${t("languageDetected")}`
+            : (choice.languageAttempts ?? 0) >= 3 ? t("chooseLanguage") : t("detectOnSpeech")}
         </span>}
       </div>)}
   </div>;
