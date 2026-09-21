@@ -12,6 +12,6 @@ export function GoogleSignIn() {
       <path fill="currentColor" d="M3.9 10.6a5.4 5.4 0 0 1 0-3.4V4.9H.9a9 9 0 0 0 0 8.1l3-2.4Z" />
       <path fill="currentColor" d="M9 3.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 .9 4.9l3 2.3C4.6 5.1 6.6 3.6 9 3.6Z" />
     </svg>
-    {busy ? "Redirection…" : "Continuer avec Google"}
+    {busy ? "Redirecting…" : "Continue with Google"}
   </button>;
 }

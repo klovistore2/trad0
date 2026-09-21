@@ -56,18 +56,20 @@ try {
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${accountId},${accountEmail},'google')`;
  const anonymous=await client();await anonymous.goto('/');
  // The home page opens no microphone, and without an account it offers signing in, not creating.
- await expect(anonymous.getByRole('button',{name:'Commencer à parler'})).toHaveCount(0);
+ await expect(anonymous.getByRole('button',{name:'Start talking'})).toHaveCount(0);
  // The other person's language is chosen before the conversation is created.
- const picker=anonymous.getByLabel('L’autre personne parle');
- await expect(picker).toHaveValue('en');
- await expect(picker.locator('option')).toContainText(['Français','English','ไทย · à tester']);
- await anonymous.getByRole('link',{name:/Se connecter/}).click();
- await anonymous.getByRole('button',{name:'Continuer avec Google'}).waitFor();
- await expect(anonymous.getByRole('button',{name:/mot de passe|adresse e-mail/i})).toHaveCount(0);
+ const picker=anonymous.getByLabel('They speak');
+ await expect(picker).toHaveValue('th');
+ await expect(picker.locator('option')).toContainText(['Français','English','ไทย · untested']);
+ await anonymous.getByRole('link',{name:/Sign in/}).click();
+ await anonymous.getByRole('button',{name:'Continue with Google'}).waitFor();
+ await expect(anonymous.getByRole('button',{name:/password|e-mail address/i})).toHaveCount(0);
 
  const a=await client({id:accountId,email:accountEmail});await a.goto('/');
  await a.getByText(accountEmail).waitFor();
- await a.getByRole('button',{name:/Parler à deux/}).click();
+ // English keeps the rest of this flow readable; the picker itself is checked above.
+ await a.getByLabel('They speak').selectOption('en');
+ await a.getByRole('button',{name:/Talk to someone/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
  // The voice choice is asked once, on arrival. Declining keeps a standard voice.
  await a.getByRole('button',{name:/Pas maintenant/}).click();
@@ -148,16 +150,16 @@ try {
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.screenshot({path:'/tmp/a-deux-conversation.png',fullPage:true});
  // The conversation screen carries none of this: settings hold voice, invite, diagnostics and closing.
- await expect(a.getByText('Utiliser ma voix',{exact:true})).toBeHidden();
- await expect(a.getByRole('button',{name:'Terminer la session et supprimer les voix'})).toBeHidden();
+ await expect(a.getByText('Use my voice',{exact:true})).toBeHidden();
+ await expect(a.getByRole('button',{name:'End session & delete voices'})).toBeHidden();
  // Consent is a single tap and is recorded server side; cloning then follows speech on its own.
- await a.getByRole('button',{name:'Paramètres'}).click();
- await a.getByRole('heading',{name:'Paramètres'}).waitFor();
- await a.getByText('Utiliser ma voix',{exact:true}).click();
- await a.getByRole('button',{name:/J’accepte/}).click();
- await a.locator('.voice-consent').getByText(/Parole captée/).waitFor();
- await a.getByRole('button',{name:'Ne plus utiliser ma voix'}).click();
- await a.getByRole('button',{name:/J’accepte/}).waitFor();
+ await a.getByRole('button',{name:'Settings'}).click();
+ await a.getByRole('heading',{name:'Settings'}).waitFor();
+ await a.getByText('Use my voice',{exact:true}).click();
+ await a.getByRole('button',{name:/I agree/}).click();
+ await a.locator('.voice-consent').getByText(/Speech captured/).waitFor();
+ await a.getByRole('button',{name:'Stop using my voice'}).click();
+ await a.getByRole('button',{name:/I agree/}).waitFor();
  await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
  await a.getByRole('button',{name:'Changer le thème clair ou sombre'}).click();
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});
@@ -167,7 +169,7 @@ try {
   const consent=await neon(process.env.DATABASE_URL)`SELECT slot, consent_at IS NOT NULL AS consented FROM adu_participants WHERE session_id=${sessionId} ORDER BY slot`;
   assert.deepEqual(consent.map(row=>row.consented),[false,true]);
  }
- await a.getByRole('button',{name:'Terminer la session et supprimer les voix'}).click();
+ await a.getByRole('button',{name:'End session & delete voices'}).click();
  await a.waitForURL(baseURL+'/');
  console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, voice consent and withdrawal, theme, session closure.');
 } finally {

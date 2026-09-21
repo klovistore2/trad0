@@ -1,6 +1,6 @@
-# À deux
+# Trad0
 
-Traduction face à face, sans compte, dans le navigateur. Français → anglais pour les essais actuels ; le deuxième participant traduit en sens inverse. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
+Traduction face à face dans le navigateur, sans compte pour l'invité. Français → anglais pour les essais actuels ; le deuxième participant traduit en sens inverse. Next.js App Router, React, TypeScript strict, OpenAI Realtime Translation, Neon et ElevenLabs.
 
 ## Démarrer
 
@@ -30,6 +30,14 @@ L'accueil n'ouvre aucun micro : une conversation demande deux appareils, et parl
 
 **Essayer une démonstration** joue un exemple préécrit, sans microphone ni appel OpenAI. **Écouter en anglais** lit ensuite ce texte avec ElevenLabs : c'est le seul moyen de vérifier la synthèse vocale sans monter une session à deux.
 
+## Langues de l'interface
+
+L'application est en **anglais par défaut**. L'écran de conversation, lui, s'affiche dans **la langue de chaque participant** : celui qui reçoit le lien lit l'interface dans la langue choisie pour lui, sans rien configurer.
+
+Les chaînes vivent dans [`lib/i18n/strings.ts`](lib/i18n/strings.ts). L'anglais est la base ; une clé manquante retombe dessus, donc une langue peut être ajoutée partiellement. Les treize autres langues y sont traduites, **mais non relues** — un libellé approximatif dans une application de traduction se remarque, à vérifier avant d'ouvrir à de vrais utilisateurs.
+
+Les paramètres et le diagnostic restent en anglais seul : ils s'adressent à qui exploite l'application, pas à la personne à qui l'on tend un téléphone.
+
 ## Compte
 
 Créer une conversation demande un compte ; **rejoindre n'en demande jamais**. La personne que vous invitez scanne le QR et parle, sans rien créer.
@@ -53,11 +61,11 @@ https://votre-domaine/api/auth/callback/google
 
 Google n'accepte pas de joker : une URL de preview Vercel, qui change à chaque déploiement, ne peut pas être autorisée. Utiliser un domaine stable. Si l'écran de consentement est en mode test, s'ajouter comme utilisateur autorisé.
 
-## À deux
+## Trad0
 
 1. Se connecter, puis cliquer **Parler à deux · inviter quelqu’un**.
 2. Scanner le QR ou ouvrir le lien sur le second appareil.
-3. Chaque participant touche **Commencer à parler** / **Start talking**. Micro, son et prise de parole s’activent dans le même geste — un seul appui suffit pour parler.
+3. Chaque participant touche **Start talking** — affiché dans sa propre langue. Micro, son et prise de parole s’activent dans le même geste — un seul appui suffit pour parler.
 
 La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. L'icône de haut-parleur sous le bandeau de langues coupe la lecture si besoin.
 4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
@@ -106,9 +114,9 @@ Deux paliers : un premier clone vers **30 secondes** de parole, une version affi
 
 L'échantillon vit uniquement dans la mémoire du navigateur, n'est jamais écrit dans Neon ni sur le disque de l'application, et part directement chez ElevenLabs au moment du clonage. Si le flux micro est recréé — retour d'arrière-plan, reprise — le conteneur en cours ne peut pas être prolongé : il est conservé entier comme segment et le clonage envoie plusieurs fichiers de la même voix.
 
-**Voix clonée utilisée · toucher pour la voix standard** bascule entre les deux **sans rien supprimer** : le modèle reste enregistré et revient d'un appui. Utile pour comparer les deux voix en conditions réelles.
+**Cloned voice in use · tap for the standard voice** bascule entre les deux **sans rien supprimer** : le modèle reste enregistré et revient d'un appui. Utile pour comparer les deux voix en conditions réelles.
 
-**Ne plus utiliser ma voix** retire le consentement et supprime le clone. **Terminer la session et supprimer les voix**, au bas des paramètres, ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
+**Stop using my voice** retire le consentement et supprime le clone. **End session & delete voices**, au bas des paramètres, ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
 
 Si ElevenLabs exige une vérification, la voix standard reste utilisée.
 
@@ -163,4 +171,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 35 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 38 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

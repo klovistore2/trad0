@@ -8,20 +8,20 @@ export default async function AccountPage() {
   if (await auth()) redirect("/");
   return <main className="conversation">
     <header className="topbar">
-      <Link className="wordmark" href="/" aria-label="À deux, accueil">à deux<span className="brand-dot">.</span></Link>
-      <div className="topbar-actions"><span className="edition">COMPTE</span><ThemeToggle /></div>
+      <Link className="wordmark" href="/" aria-label="Trad0, home">Trad0<span className="brand-dot">.</span></Link>
+      <div className="topbar-actions"><span className="edition">ACCOUNT</span><ThemeToggle /></div>
     </header>
     <section className="conversation-body">
       <div className="account">
-        <h1>Garder votre voix.</h1>
-        <p className="intro">Un compte sert à une seule chose : conserver votre voix d’une conversation à l’autre, au lieu de la recréer à chaque fois. La personne que vous invitez n’a jamais besoin d’en créer un.</p>
+        <h1>Keep your voice.</h1>
+        <p className="intro">An account does one thing: it keeps your voice from one conversation to the next, instead of rebuilding it every time. The person you invite never needs one.</p>
         <div className="account-methods">
           {googleEnabled
             ? <GoogleSignIn />
-            : <p className="error-message" role="alert">La connexion Google n’est pas configurée sur ce déploiement. Renseignez AUTH_GOOGLE_ID et AUTH_GOOGLE_SECRET, puis redéployez.</p>}
+            : <p className="error-message" role="alert">Google sign-in is not configured on this deployment. Set AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET, then redeploy.</p>}
         </div>
       </div>
     </section>
-    <footer><span className="footer-mark" aria-hidden="true">↔</span><p>Juste vous deux.<br /><span>Votre invité reste anonyme.</span></p></footer>
+    <footer><span className="footer-mark" aria-hidden="true">↔</span><p>Just the two of you.<br /><span>Your guest stays anonymous.</span></p></footer>
   </main>;
 }

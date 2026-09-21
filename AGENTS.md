@@ -31,6 +31,11 @@ real failures on real devices.
 - **Accounts (Auth.js, Google only, users in Neon)** for the person creating a conversation, so
   their voice clone is reused instead of rebuilt every session. `adu_voice_profiles` holds one
   saved voice per account, outside the session tables the purge wipes.
+- **Interface languages.** The site is English by default; the conversation screen renders in
+  **each participant's own language**, so the guest reads it without configuring anything.
+  Strings live in `lib/i18n/strings.ts`, English is the base and a missing key falls back to it.
+  The other thirteen languages are translated but **unreviewed**. Settings and diagnostics are
+  English only on purpose: they address whoever runs the app, not the guest.
 - **Settings panel** behind a gear in the top bar. The conversation screen carries only the floor
   state, one button and the sound toggle; voice, invite, diagnostics and session closing live in
   settings. The browser flow asserts that none of them leak back onto the conversation screen.

@@ -20,12 +20,11 @@ const cloneLabels: Record<Participant["voiceStatus"], string> = {
 };
 
 // Development panel: shows where cloning stands and which voice is actually speaking.
-export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, english, me, peer }: {
+export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, me, peer }: {
   read: () => AudioState;
   onTestTone: () => void;
   voiceStatus: VoiceStatus;
   received: number;
-  english: boolean;
   me: Participant;
   peer: Participant;
 }) {
@@ -38,8 +37,8 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [open, read]);
-  const yes = english ? "yes" : "oui";
-  const no = english ? "no" : "non";
+  const yes = "yes";
+  const no = "no";
   const detected = state?.range;
   const rangeLabel = detected?.range
     ? `${detected.range === "low" ? "grave" : "aigu"} · ${detected.median} Hz`
@@ -49,8 +48,8 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
   const nextTier = VOICE_TIERS.find(step => step.tier > me.voiceTier);
   const row = (label: string, value: string | number) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>;
   return <details className="audio-diagnostics" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{english ? "Voice & sound diagnostics" : "Diagnostic voix et son"}</summary>
-    <button className="demo-button" onClick={onTestTone}>{english ? "Play a test beep" : "Jouer un bip de test"}</button>
+    <summary>{"Voice & sound diagnostics"}</summary>
+    <button className="demo-button" onClick={onTestTone}>{"Play a test beep"}</button>
     <dl>
       {row("Voix entendue ici", state?.voice ?? "—")}
       {row("Latence transport", state?.timing.transport ? `${state.timing.transport} ms` : "—")}
@@ -72,8 +71,6 @@ export function AudioDiagnostics({ read, onTestTone, voiceStatus, received, engl
       {row("Dernier changement", state?.stopped ?? "—")}
       {row("Dernier échec audio", state?.failure ?? "—")}
     </dl>
-    <p>{english
-      ? "« Voix entendue ici » reports what the other participant's words were spoken with: clone, or a standard voice matched to their detected range."
-      : "« Voix entendue ici » indique avec quoi les mots de l’autre personne ont été prononcés : son clone, ou une voix standard choisie selon le registre détecté chez elle."}</p>
+    <p>{"« Voix entendue ici » reports what the other participant's words were spoken with: clone, or a standard voice matched to their detected range."}</p>
   </details>;
 }
