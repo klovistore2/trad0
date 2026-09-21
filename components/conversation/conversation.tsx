@@ -5,22 +5,22 @@ import Link from "next/link";
 import { StartSharedSession } from "./start-shared-session";
 import { ThemeToggle } from "./theme-toggle";
 import { AccountStatus } from "@/components/account/account-status";
-import { languageNames, type Language } from "@/types/session";
+import { LANGUAGES, languageNames, type Language } from "@/types/session";
 
-import { LanguageMenus } from "./language-menus";
+import { translator } from "@/lib/i18n/strings";
 import { browserLanguage } from "@/lib/translation/language";
 const subscribeLocale = () => () => {};
 const getLocale = () => browserLanguage(navigator.languages);
 const serverLocale = () => "en" as const;
 
 // The home page never opens a microphone: a conversation needs two devices, and a scripted
-// preview proved nothing about real speech. Choose the two languages, then invite someone.
+// preview proved nothing about real speech. Choose the other person's language, then invite them.
 export function Conversation({ email }: { email: string | null }) {
   const locale = useSyncExternalStore(subscribeLocale, getLocale, serverLocale);
-  const [myLanguage, setMyLanguage] = useState<Language | null>(null);
-  const language = myLanguage ?? locale;
-  const [peerAutomatic, setPeerAutomatic] = useState(true);
-  const [peerLanguage, setPeerLanguage] = useState<Language>("th");
+  const t = translator("en");
+  // Only the destination is chosen here: asking for your own language before anyone has spoken
+  // was a guess the transcription makes better. It stays on Auto until the conversation starts.
+  const [peerLanguage, setPeerLanguage] = useState<Language>("en");
 
   return <main className="conversation">
     <header className="topbar">
@@ -29,18 +29,23 @@ export function Conversation({ email }: { email: string | null }) {
     </header>
 
     <section className="conversation-body" aria-label="Start a conversation">
-      <LanguageMenus mine={{ language, languageAuto: myLanguage === null }}
-        theirs={{ language: peerLanguage, languageAuto: peerAutomatic }}
-        onMine={value => setMyLanguage(value === "auto" ? null : value)}
-        onTheirs={value => { setPeerAutomatic(value === "auto"); if (value !== "auto") setPeerLanguage(value); }} />
+      <div className="language-menus">
+        <div className="language-choice">
+          <label htmlFor="peer-language">{t("theySpeak")}</label>
+          <select id="peer-language" className="language-picker" value={peerLanguage}
+            onChange={event => setPeerLanguage(event.target.value as Language)}>
+            {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
+          </select>
+        </div>
+      </div>
       <div className="translation-area">
         <div className="voice-symbol" aria-hidden="true"><span /><span /><span /><span /><span /></div>
         <h1>A conversation.<br /><em>No barrier.</em></h1>
         <p className="intro">Two phones, two languages. You speak, the other person reads the translation and hears it — in your voice.</p>
       </div>
       <div className="controls">
-        <p className="session-status" role="status"><span className="status-dot" />{languageNames[language]} ↔ {languageNames[peerLanguage]}</p>
-        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={language} languageAuto={myLanguage === null} peerLanguageAuto={peerAutomatic} />
+        <p className="session-status" role="status"><span className="status-dot" />{t("autoLanguage")} ↔ {languageNames[peerLanguage]}</p>
+        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={locale} languageAuto peerLanguageAuto={false} />
         {email && <AccountStatus email={email} />}
       </div>
     </section>

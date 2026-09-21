@@ -15,10 +15,10 @@ export function LanguageMenus({ mine, theirs, locale = "en", disabled = false, o
       <div className="language-choice" key={id}>
         <label htmlFor={id}>{label}</label>
         <select id={id} className="language-picker" disabled={disabled}
-          value={choice.languageAuto ? "auto" : choice.language}
+          value={choice.languageAuto && !choice.languageDetected ? "auto" : choice.language}
           onChange={event => change(event.target.value as Language | "auto")}>
-          {/* Auto is a mode, not a language: naming one beside it passed a mere suggestion off
-              as a detection. The detected result belongs to the hint below, once it exists. */}
+          {/* Auto stays selected only while nothing has been heard: once the transcription
+              names a language, the menu shows it, and the hint says it came from detection. */}
           <option value="auto">{t("autoLanguage")}</option>
           {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
         </select>

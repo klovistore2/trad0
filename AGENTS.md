@@ -28,7 +28,9 @@ Cas de référence : français ↔ thaï et anglais ↔ thaï ; la logique de tr
 Haut-parleur ou écouteur facultatif, avec le routage audio normal du navigateur et du système.
 
 1. Le créateur se connecte avec **Google uniquement**, puis crée une conversation depuis l’accueil.
-2. Les deux menus de langue proposent Auto et une correction manuelle. L’accueil n’ouvre aucun micro.
+2. L’accueil ne demande que la langue de destination, anglais par défaut, sans Auto : la langue du
+   créateur reste Auto jusqu’à ses premières paroles. Les deux menus complets, avec Auto et correction
+   manuelle, apparaissent dans la conversation. L’accueil n’ouvre aucun micro.
 3. Le créateur partage le QR ou le lien `/join/[code]` ; le code correspond à l’UUID de la session.
 4. L’invité rejoint sans compte. Un troisième participant est refusé.
 5. Démarrer demande le micro et prend la parole si elle est libre. Si l’autre parle déjà, démarrer
@@ -179,7 +181,8 @@ navigateur n’est qu’une suggestion initiale pour le créateur ; l’invité 
 La détection analyse jusqu’à 600 caractères, après suffisamment de lettres, en parallèle de la traduction.
 Budget serveur : trois tentatives par participant et session, espacées d’au moins dix secondes.
 
-Chaque personne peut corriger les deux menus. Une correction désactive Auto pour le participant concerné ;
+Tant que rien n’a été entendu, le menu affiche Auto ; dès la détection, il affiche la langue
+détectée et l’indication précise qu’elle vient de la détection. Chaque personne peut corriger les deux menus. Une correction désactive Auto pour le participant concerné ;
 une révision empêche une détection déjà en cours de l’écraser. Revenir à Auto utilise de nouvelles paroles,
 sans remettre à zéro le budget des tentatives. En mode direct, `session.update` change la langue cible
 sans remplacer le micro, sauf si le changement exige aussi une bascule de circuit.
