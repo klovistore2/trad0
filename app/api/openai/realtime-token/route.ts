@@ -1,3 +1,5 @@
+import { isLanguage } from "@/types/session";
+
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "no-store" };
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
@@ -16,7 +18,7 @@ export async function POST(request: Request) {
   if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Requête invalide." }, 415);
   let body: unknown;
   try { body = await request.json(); } catch { return json({ error: "Requête invalide." }, 400); }
-  if (!body || typeof body !== "object" || !("targetLanguage" in body) || typeof body.targetLanguage !== "string" || !["th", "fr", "en"].includes(body.targetLanguage)) {
+  if (!body || typeof body !== "object" || !("targetLanguage" in body) || !isLanguage(body.targetLanguage)) {
     return json({ error: "Cette langue n’est pas disponible." }, 400);
   }
   const key = process.env.OPENAI_API_KEY?.trim();

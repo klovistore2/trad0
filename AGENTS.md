@@ -45,12 +45,22 @@ real failures on real devices.
 | "Do NOT design the core audio pipeline around a long-running Vercel serverless request" | The relay above is a serverless request | A sentence-length relay lasts about 1.5 s, `maxDuration` 30. Accepted knowingly: playback that never starts is worse than playback that is slower. |
 | Both participants speak freely | Explicit floor; nobody holds it by default | Two phones in one room both hear whoever speaks. Worse, a microphone open on the wrong side captures the person speaking at the *other* device and returns their own words to them as if the other person had said them. A microphone is now only ever opened by a deliberate tap. |
 | "No mandatory account. A first conversation must work as guest ↔ guest" | The **creator** signs in; the invited person never does | A guest clone is thrown away with its session, so every conversation rebuilt one and burned provider credits and voice slots. The scan-and-talk promise is preserved for the person being invited, which is the half that matters for a stranger. The cost is real and deliberate: the creator no longer reaches a first conversation without an account. |
-| Detect the speaker's language automatically | Creator is hardcoded `fr`, joiner `en` | Deferred by the product owner until the ergonomics are settled. `th` exists in `Language` but is unreachable from the UI. |
+| Detect the speaker's language automatically | The creator **picks** the other person's language on the home page; their own stays `fr` | Detection is still not implemented. The picker was added to make the limitation below testable. |
 
 ### Not built
 
 - **Milestone 6**, text input fallback.
-- **Language selection or detection.** French ↔ Thai, the primary target use case, is not reachable.
+- **Automatic language detection.** The other person's language is now chosen from a picker on the
+  home page and carried on `adu_sessions.peer_language`; the creator's own language is still `fr`.
+- **French → Thai, the project's primary use case, is probably impossible with this model.**
+  `gpt-realtime-translate` documents **13 output languages** — Spanish, Portuguese, French,
+  Japanese, Russian, Chinese, German, Korean, Hindi, Indonesian, Vietnamese, Italian, English —
+  and **Thai is not among them**. Thai appears only in the 70+ *input* languages, so Thai → French
+  should work while French → Thai should not. Creating a session with `language: "th"` is accepted
+  by the API, so the restriction is not enforced at session creation and proves nothing; only real
+  speech will show what comes out. Thai is therefore kept selectable and marked "à tester" in the
+  picker. If it is confirmed impossible, that direction needs a different pipeline — realtime
+  transcription, a text translation, then TTS — which is slower and is a separate design.
 - **Manual correction of the detected vocal range.** The specification requires every detected
   value to be correctable; this one is not yet. Fix this before any non-developer uses the app.
 - **Push transport.** Still 500 ms polling.

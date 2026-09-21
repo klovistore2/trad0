@@ -1,24 +1,26 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useTranslationSession } from "@/hooks/useTranslationSession";
 import { StartSharedSession } from "./start-shared-session";
 import { TranslationAudio } from "./translation-audio";
 import { ThemeToggle } from "./theme-toggle";
+import { LANGUAGES, UNVERIFIED_OUTPUT, languageNames, type Language } from "@/types/session";
 import { AccountStatus } from "@/components/account/account-status";
 
 // The home page never opens a microphone: a conversation needs two devices, and the only
 // thing to try alone is the scripted demonstration.
 export function Conversation({ email }: { email: string | null }) {
   const session = useTranslationSession();
+  const [peerLanguage, setPeerLanguage] = useState<Language>("en");
   const transcript = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const node = transcript.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [session.translation]);
   const status = session.active ? "Démonstration · aucun micro utilisé"
-    : session.message ? "Un instant…" : "Français → English";
+    : session.message ? "Un instant…" : `Français → ${languageNames[peerLanguage]}`;
 
   return <main className="conversation">
     <header className="topbar">
@@ -27,7 +29,16 @@ export function Conversation({ email }: { email: string | null }) {
     </header>
 
     <section className="conversation-body" aria-label="Traduction en direct">
-      <div className="language-tag"><span className="language-dot" /> L’autre personne parle <span lang="en">English</span></div>
+      <div className="language-tag">
+        <span className="language-dot" />
+        <label htmlFor="peer-language">L’autre personne parle</label>
+        <select id="peer-language" className="language-picker" value={peerLanguage} lang={peerLanguage}
+          onChange={event => setPeerLanguage(event.target.value as Language)}>
+          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>
+            {languageNames[code]}{UNVERIFIED_OUTPUT.includes(code) ? " · à tester" : ""}
+          </option>)}
+        </select>
+      </div>
       <div className={`translation-area ${session.translation ? "has-translation" : ""}`}>
         {session.translation ? <>
           <span className="eyebrow">EXEMPLE DE TRADUCTION</span>
@@ -48,7 +59,7 @@ export function Conversation({ email }: { email: string | null }) {
         {session.active
           ? <button className="primary-button stop-button" onClick={() => session.stop()}>Arrêter la démonstration</button>
           : <>
-              <StartSharedSession signedIn={!!email} />
+              <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} />
               <button className="demo-button" onClick={() => void session.start(true)}>
                 {session.translation ? "Rejouer la démonstration" : "Essayer une démonstration"} <span aria-hidden="true">↗</span>
               </button>

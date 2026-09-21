@@ -4,13 +4,13 @@ import { db } from "@/lib/neon/db";
 import { guestHash, member, validId } from "./auth";
 import { HttpError } from "@/lib/server/http";
 import { saveProfileRange } from "@/lib/voice/profile";
-import type { Participant, SharedSession } from "@/types/session";
+import type { Language, Participant, SharedSession } from "@/types/session";
 
 // Only the creator has an account: their slot carries it so a saved voice can be reused.
-export async function createSession(userId: string) {
+export async function createSession(userId: string, peerLanguage: Language) {
   const sql = db(); const hash = await guestHash(true); const id = randomUUID();
   await sql.transaction([
-    sql`INSERT INTO adu_sessions(id) VALUES(${id})`,
+    sql`INSERT INTO adu_sessions(id,peer_language) VALUES(${id},${peerLanguage})`,
     // A saved voice is carried into the session, so no clone and no credit is spent again.
     sql`INSERT INTO adu_participants(session_id,slot,guest_hash,language,user_id,voice_id,voice_status,voice_tier,voice_range,consent_at,use_clone)
       SELECT ${id},0,${hash},'fr',${userId}, v.provider_voice_id, COALESCE(v.voice_status,'none'),
@@ -23,8 +23,9 @@ export async function joinSession(id: string) {
   if (!validId(id)) throw new HttpError(404, "Le lien n’est pas valide.");
   const sql = db(); const hash = await guestHash(true);
   // Slot 1 has a unique primary key: concurrent third joiners cannot take a seat.
+  // The joiner speaks whatever the creator chose when the conversation was made.
   await sql`INSERT INTO adu_participants(session_id,slot,guest_hash,language)
-    SELECT id,1,${hash},'en' FROM adu_sessions
+    SELECT id,1,${hash},peer_language FROM adu_sessions
     WHERE id=${id} AND closed=false AND expires_at>now()
       AND NOT EXISTS(SELECT 1 FROM adu_participants WHERE session_id=${id} AND guest_hash=${hash})
     ON CONFLICT DO NOTHING`;
@@ -60,5 +61,5 @@ export async function targetLanguageForSession(id: string) {
   const me = await member(id);
   const rows = await db()`SELECT language FROM adu_participants WHERE session_id=${id} AND slot<>${me.slot}`;
   if (!rows[0]) throw new HttpError(409, "Attendez que l’autre personne rejoigne la conversation.");
-  return rows[0].language as string;
+  return rows[0].language as Language;
 }

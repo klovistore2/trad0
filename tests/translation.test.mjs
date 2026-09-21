@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseTranslationMessage } from "../lib/openai/events.ts";
-import { POST } from "../app/api/openai/realtime-token/route.ts";
+import { createLoader } from "./load-ts.mjs";
+
+// Loaded through the alias-aware loader: the route imports "@/types/session", which plain
+// Node resolution cannot follow.
+const { POST } = createLoader()("app/api/openai/realtime-token/route.ts");
 
 const request = (body = { targetLanguage: "en" }, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/openai/realtime-token", {
   method: "POST", headers: { origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -86,5 +90,33 @@ test("invalid app URL returns a controlled error without requesting credentials"
   } finally {
     if (oldUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
     else process.env.NEXT_PUBLIC_APP_URL = oldUrl;
+  }
+});
+
+test("only documented languages reach the provider", async () => {
+  const previousFetch = globalThis.fetch;
+  const old = { ...process.env };
+  process.env.OPENAI_API_KEY = "test-permanent-secret";
+  process.env.OPENAI_REALTIME_TRANSLATION_MODEL = "test-configurable-model";
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  let asked;
+  try {
+    globalThis.fetch = async (url, options) => {
+      asked = JSON.parse(options.body).session.audio.output.language;
+      return Response.json({ value: "ephemeral" });
+    };
+    for (const code of ["ja", "es", "th"]) {
+      assert.equal((await POST(request({ targetLanguage: code }))).status, 200, code);
+      assert.equal(asked, code);
+    }
+    // An unknown code must be refused here rather than sent on and failing later.
+    for (const code of ["xx", "", "english", 42, null]) {
+      assert.equal((await POST(request({ targetLanguage: code }))).status, 400, String(code));
+    }
+  } finally {
+    globalThis.fetch = previousFetch;
+    for (const name of ["OPENAI_API_KEY", "OPENAI_REALTIME_TRANSLATION_MODEL", "NEXT_PUBLIC_APP_URL"]) {
+      if (old[name] === undefined) delete process.env[name]; else process.env[name] = old[name];
+    }
   }
 });

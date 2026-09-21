@@ -9,7 +9,10 @@ const files = (await readdir(directory)).filter(name => name.endsWith('.sql')).s
 const statements = [];
 for (const name of files) {
   const migration = await readFile(new URL(name, directory), 'utf8');
-  statements.push(...migration.split(';').map(s => s.trim()).filter(Boolean));
+  // Line comments are stripped before splitting: a semicolon inside one used to cut a
+  // statement in half and fail with a syntax error pointing at the comment's own words.
+  const withoutComments = migration.replace(/--[^\n]*/g, '');
+  statements.push(...withoutComments.split(';').map(s => s.trim()).filter(Boolean));
 }
 // Every migration is additive and idempotent, so replaying the whole set is safe.
 await sql.transaction(statements.map(s => sql.query(s)));

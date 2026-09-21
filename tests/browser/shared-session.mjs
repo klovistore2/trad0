@@ -57,6 +57,10 @@ try {
  const anonymous=await client();await anonymous.goto('/');
  // The home page opens no microphone, and without an account it offers signing in, not creating.
  await expect(anonymous.getByRole('button',{name:'Commencer à parler'})).toHaveCount(0);
+ // The other person's language is chosen before the conversation is created.
+ const picker=anonymous.getByLabel('L’autre personne parle');
+ await expect(picker).toHaveValue('en');
+ await expect(picker.locator('option')).toContainText(['Français','English','ไทย · à tester']);
  await anonymous.getByRole('link',{name:/Se connecter/}).click();
  await anonymous.getByRole('button',{name:'Continuer avec Google'}).waitFor();
  await expect(anonymous.getByRole('button',{name:/mot de passe|adresse e-mail/i})).toHaveCount(0);
