@@ -81,6 +81,8 @@ try {
  await expect(c.locator('.error-message')).toContainText(/terminée|inaccessible/);
  // A single tap starts the conversation and claims the free floor: no second press to speak.
  await a.getByRole('button',{name:'Commencer à parler'}).click();
+ // Intent is expressed: the button must never fall back to offering "Parler" while connecting.
+ await expect(a.getByRole('button',{name:'Parler',exact:true})).toHaveCount(0);
  await a.waitForFunction(()=>window.testChannel?.onmessage && window.testMicrophone?.readyState==='live');
  await a.getByText('Votre micro est ouvert — parlez').waitFor();
  await a.waitForFunction(()=>window.testMicrophone.enabled===true);
@@ -123,10 +125,11 @@ try {
  await b.getByRole('button',{name:'Let me speak'}).waitFor();
  await b.unroute(statusPoll);
  await expect(b.getByText('Reconnecting…')).toBeHidden();
- // Muting playback keeps the subtitles and stops the audio.
- await b.getByRole('button',{name:/Sound on/}).click();
- await b.getByRole('button',{name:/Text only/}).click();
- await b.getByRole('button',{name:/Sound on/}).waitFor();
+ // Muting is one visible control under the language banner, not a line of text at the bottom.
+ await b.getByRole('button',{name:'Mute the sound'}).click();
+ await b.getByText('Text only',{exact:true}).waitFor();
+ await b.getByRole('button',{name:'Turn the sound on'}).click();
+ await b.getByRole('button',{name:'Mute the sound'}).waitFor();
  // Taking the floor swaps the microphones both ways.
  await b.getByRole('button',{name:'Let me speak'}).click();
  await b.waitForFunction(()=>window.testMicrophone.enabled===true);
@@ -139,6 +142,7 @@ try {
  await b.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.getByText('Les deux micros sont fermés').waitFor();
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
+ await a.screenshot({path:'/tmp/a-deux-conversation.png',fullPage:true});
  // The conversation screen carries none of this: settings hold voice, invite, diagnostics and closing.
  await expect(a.getByText('Utiliser ma voix',{exact:true})).toBeHidden();
  await expect(a.getByRole('button',{name:'Terminer la session et supprimer les voix'})).toBeHidden();

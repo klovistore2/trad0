@@ -39,6 +39,20 @@ export function SharedConversation({ id }: { id: string }) {
           onClose={() => setSettings(false)} />
       : <>
         <div className="language-tag"><span className="language-dot" />{languageNames[room.me.language]} ↔ {languageNames[room.peer.language]}</div>
+        <button type="button" className="sound-icon" aria-pressed={!session.soundOn}
+          aria-label={session.soundOn ? (english ? "Mute the sound" : "Couper le son") : (english ? "Turn the sound on" : "Activer le son")}
+          title={session.soundOn ? (english ? "Mute the sound" : "Couper le son") : (english ? "Turn the sound on" : "Activer le son")}
+          onClick={() => session.toggleSound()}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4Z" fill="currentColor" stroke="none" />
+            {session.soundOn
+              ? <><path d="M15.5 9.2a4 4 0 0 1 0 5.6" /><path d="M18 6.7a7.5 7.5 0 0 1 0 10.6" /></>
+              : <><path d="M16 9.5l5 5" /><path d="M21 9.5l-5 5" /></>}
+          </svg>
+        </button>
+        <span className="sound-icon-label">{session.soundOn
+          ? (english ? "Sound on" : "Son activé")
+          : (english ? "Text only" : "Texte seul")}</span>
         <div className="translation-area">
           {session.incoming ? <><span className="eyebrow">{english ? "THEIR WORDS, IN YOUR LANGUAGE" : "SES MOTS, DANS VOTRE LANGUE"}</span><div className="transcript" lang={room.me.language} tabIndex={0}><p>{session.incoming}</p></div></>
           : <><h1>{english ? "You’re connected." : "Vous êtes ensemble."}</h1><p className="intro">{english ? "Speak naturally. Their translated words will appear here." : "Parlez naturellement. Les mots de l’autre personne apparaîtront ici."}</p></>}
@@ -53,9 +67,11 @@ export function SharedConversation({ id }: { id: string }) {
           {session.connectionLost && <p className="quiet-note" role="status">{english ? "Reconnecting…" : "Reconnexion…"}</p>}
           {!session.soundReady && session.received > 0 && <button className="demo-button" onClick={() => void session.enableSound()}>{english ? "Hear the translation" : "Entendre la traduction"}</button>}
           {!session.enabled
-            ? <button className="primary-button" onClick={() => void session.start()}>{session.floorFree
-                ? (english ? "Start talking" : "Commencer à parler")
-                : (english ? "Join in · they are speaking" : "Rejoindre · l’autre personne parle")}</button>
+            ? <button className="primary-button" disabled={session.starting} onClick={() => void session.start()}>{session.starting
+                ? (english ? "Connecting…" : "Connexion…")
+                : session.floorFree
+                  ? (english ? "Start talking" : "Commencer à parler")
+                  : (english ? "Join in · they are speaking" : "Rejoindre · l’autre personne parle")}</button>
             : session.hasFloor
               ? <>
                   <p className="floor-state live" role="status"><span className="status-dot active" />{english ? "Your microphone is open — speak" : "Votre micro est ouvert — parlez"}</p>
@@ -69,9 +85,6 @@ export function SharedConversation({ id }: { id: string }) {
                     ? (english ? "Speak" : "Parler")
                     : (english ? "Let me speak" : "À moi de parler")}</button>
                 </>}
-          {session.enabled && <button className="demo-button sound-toggle" aria-pressed={session.soundOn} onClick={() => session.toggleSound()}>
-            {session.soundOn ? (english ? "Sound on · tap for text only" : "Son activé · toucher pour le texte seul") : (english ? "Text only · tap for sound" : "Texte seul · toucher pour le son")}
-          </button>}
         </div>
       </>}
     </section>

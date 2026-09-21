@@ -192,3 +192,8 @@ button:disabled { opacity: .5; cursor: wait; }
 .own-words-switch { display: flex; gap: 6px; justify-content: center; margin: 4px 0 2px; }
 .own-words-switch button { margin: 0; min-height: 36px; padding: 0 10px; border-radius: 30px; }
 .own-words-switch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+
+.sound-icon { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; margin-top: 16px; border: 1px solid var(--surface-border); border-radius: 50%; background: var(--surface); color: var(--ink); }
+.sound-icon:hover { background: var(--stop-hover); }
+.sound-icon[aria-pressed="true"] { color: var(--error); border-color: var(--error); }
+.sound-icon-label { display: block; margin-top: 6px; font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }

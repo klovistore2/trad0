@@ -59,7 +59,7 @@ Google n'accepte pas de joker : une URL de preview Vercel, qui change à chaque 
 2. Scanner le QR ou ouvrir le lien sur le second appareil.
 3. Chaque participant touche **Commencer à parler** / **Start talking**. Micro, son et prise de parole s’activent dans le même geste — un seul appui suffit pour parler.
 
-La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. **Son activé · toucher pour le texte seul** coupe la lecture si besoin.
+La lecture ne dépend pas du micro. Quelqu’un qui veut seulement écouter entend par défaut : le premier contact avec l’écran, **n’importe où dans la page**, arme la lecture. Les navigateurs interdisent tout son sans une interaction dans le document ; c’est la seule contrainte, et aucun bouton particulier n’a à être touché. L'icône de haut-parleur sous le bandeau de langues coupe la lecture si besoin.
 4. Le créateur parle français : l’autre lit et entend l’anglais. La réponse en anglais apparaît et se lit en français chez le créateur.
 
 Chaque appareil affiche principalement ce qu’il reçoit. **Mes mots** donne au locuteur une double vérification : bascule entre **ce que j’ai dit** — la transcription d’origine, telle que le micro l’a comprise — et **ce que l’autre reçoit**, la traduction envoyée. Voir seulement la traduction masque un mot mal entendu derrière une phrase plausible.
@@ -76,7 +76,7 @@ Deux téléphones dans la même pièce entendent tous les deux la personne qui p
 
 Le micro reste également fermé pendant la lecture d’une traduction, pour que le haut-parleur ne se fasse pas retraduire.
 
-Le son est actif par défaut. **Son activé · toucher pour le texte seul** coupe la lecture et ne garde que les sous-titres, utile en réunion ou dans un lieu bruyant.
+Le son est actif par défaut. L'icône de haut-parleur, **sous le bandeau de langues**, le coupe et ne garde que les sous-titres — utile en réunion ou dans un lieu bruyant. Elle reste accessible même sans avoir démarré, puisque la lecture ne dépend pas du micro.
 
 Pour tester sur un seul ordinateur, utiliser **deux profils de navigateur différents** ou une fenêtre privée : l’identité invitée est un cookie HttpOnly partagé entre les onglets d’un même profil. La session accepte exactement deux participants, y compris en cas de connexions simultanées.
 

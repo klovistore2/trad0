@@ -20,6 +20,7 @@ export function useSharedConversation(id: string) {
   const [floor, setFloor] = useState<number | null>(null);
   const floorKnown = useRef(false);
   const [claiming, setClaiming] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [received, setReceived] = useState(0);
   const [speechSeconds, setSpeechSeconds] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
@@ -284,18 +285,22 @@ export function useSharedConversation(id: string) {
     catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
   }
   async function start() {
-    if (running.current) return;
+    if (running.current || starting) return;
     setMessage("");
+    // Starting is its own state: intent is expressed, so the button must never fall back to
+    // offering "Speak" while the floor is claimed and WebRTC negotiates, which takes seconds.
+    setStarting(true);
     try {
       // Same gesture unlocks playback: the browser has no separate sound permission to ask for.
       await unlockSound();
+      // Claiming only a free floor keeps the guarantee that a second person starting up cannot
+      // steal the microphone from whoever is talking.
+      if (floorRef.current === null) await takeFloor();
       running.current = true; setEnabled(true); stopped.current = "running";
       await translation.start();
-      // One tap should be enough to speak. Claiming only a free floor keeps the guarantee that
-      // a second person starting up cannot steal the microphone from whoever is talking.
-      if (floorRef.current === null) await takeFloor();
-      else syncMicrophone();
+      syncMicrophone();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
+    finally { setStarting(false); }
   }
   function stop() {
     running.current = false; setEnabled(false); stopped.current = "paused by you"; queue.current = [];
@@ -370,5 +375,5 @@ export function useSharedConversation(id: string) {
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }
