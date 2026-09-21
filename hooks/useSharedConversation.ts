@@ -338,6 +338,18 @@ export function useSharedConversation(id: string) {
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
   }, [id]);
+  async function setUseClone(useClone: boolean) {
+    setMessage("");
+    try {
+      const response = await fetch("/api/voice/prefer", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id, useClone }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      refreshNow.current();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
+  }
   async function playTestTone() {
     setMessage("");
     try { await voice.current?.testTone(); soundReadyRef.current = true; setSoundReady(true); }
@@ -358,5 +370,5 @@ export function useSharedConversation(id: string) {
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, received, speechSeconds, connectionLost, soundReady, translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

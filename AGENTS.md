@@ -138,9 +138,21 @@ real failures on real devices.
    cookie Auth.js issues (`authjs.session-token`, encoded with `AUTH_SECRET`), so nothing exists in
    the application purely for tests.
 
-4. **Latency.** Roughly 2.5 s after a sentence ends, plus the 700 ms the relay added. Levers, by
-   value: stream text to the speech route instead of waiting for a committed sentence; pre-open the
-   connection; replace 500 ms polling with push; lower the commit fallback from 1000 ms.
+4. **Latency — measured, and most of the guesses were wrong.** The diagnostics panel now reports
+   transport, voice and total for the last sentence; the event age is computed by PostgreSQL so no
+   two device clocks are ever compared. What measurement established:
+   - **Sentence commit costs nothing.** 20 of 20 recent turns closed on punctuation, not on the
+     1000 ms silence timer. Lowering that timer buys zero and only risks splitting sentences.
+   - **ElevenLabs is not the bottleneck.** Warm HTTP is ~140 ms to first byte and ~260 ms complete
+     for a full sentence. An earlier 1366 ms reading was a cold-connection artefact — first call of
+     the process, paying DNS and TLS — and it was mistaken for generation time.
+   - **A server-side WebSocket to ElevenLabs would gain nothing.** Measured head to head, warm HTTP
+     matches or beats it. This was planned as the biggest lever and cancelled by measurement.
+   - **A cloned voice is not slower than a standard one** (140 ms vs 160 ms to first byte).
+   What is left, and still unmeasured in production: the 500 ms poll wait, and whether Vercel pays
+   a cold connection to ElevenLabs on each invocation — which would reproduce that 1366 ms in
+   production and make connection reuse, not protocol, the real lever. Get the numbers from a
+   deployed conversation before building anything.
 
 ### Verification
 
@@ -903,6 +915,7 @@ POST   /api/openai/realtime-token         ephemeral OpenAI credential
 POST   /api/elevenlabs/speak              relay speech as audio/mpeg (replaces the token route)
 POST   /api/voice/consent                 record consent once per session, gates every tier
 POST   /api/voice/clone                   create or replace a clone at a given tier
+POST   /api/voice/prefer                  use the saved clone or the standard voice, without deleting
 DELETE /api/voice                         delete one's own clone
 GET    /api/cleanup                       scheduled purge, guarded by CRON_SECRET
 ```

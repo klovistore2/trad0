@@ -6,13 +6,14 @@ import type { Participant } from "@/types/session";
 
 // Consent is given once, then the clone improves on its own from the conversation.
 // Nothing is recorded before this button is pressed.
-export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRefresh }: {
+export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRefresh, onUseClone }: {
   sessionId: string;
   me: Participant;
   seconds: number;
   english: boolean;
   onConsent: () => void;
   onRefresh: () => void;
+  onUseClone: (useClone: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -62,9 +63,16 @@ export function VoiceConsent({ sessionId, me, seconds, english, onConsent, onRef
           <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(false)}>
             {english ? "Stop using my voice" : "Ne plus utiliser ma voix"}
           </button>
-          {me.voiceTier > 0 && <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(true)}>
-            {english ? "Rebuild my voice from scratch" : "Recréer ma voix depuis zéro"}
-          </button>}
+          {me.voiceTier > 0 && <>
+            <button className="demo-button" aria-pressed={me.useClone} onClick={() => onUseClone(!me.useClone)}>
+              {me.useClone
+                ? (english ? "Cloned voice in use · tap for the standard voice" : "Voix clonée utilisée · toucher pour la voix standard")
+                : (english ? "Standard voice in use · tap for my cloned voice" : "Voix standard utilisée · toucher pour ma voix clonée")}
+            </button>
+            <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(true)}>
+              {english ? "Rebuild my voice from scratch" : "Recréer ma voix depuis zéro"}
+            </button>
+          </>}
         </>}
     {message && <p role="alert">{message}</p>}
   </details>;

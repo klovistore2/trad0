@@ -106,6 +106,8 @@ Deux paliers : un premier clone vers **30 secondes** de parole, une version affi
 
 L'échantillon vit uniquement dans la mémoire du navigateur, n'est jamais écrit dans Neon ni sur le disque de l'application, et part directement chez ElevenLabs au moment du clonage. Si le flux micro est recréé — retour d'arrière-plan, reprise — le conteneur en cours ne peut pas être prolongé : il est conservé entier comme segment et le clonage envoie plusieurs fichiers de la même voix.
 
+**Voix clonée utilisée · toucher pour la voix standard** bascule entre les deux **sans rien supprimer** : le modèle reste enregistré et revient d'un appui. Utile pour comparer les deux voix en conditions réelles.
+
 **Ne plus utiliser ma voix** retire le consentement et supprime le clone. **Terminer la session et supprimer les voix**, au bas des paramètres, ferme la session pour les deux participants et supprime leurs clones. Une fermeture d'onglet n'équivaut pas à cette action : les sessions expirent au bout d'une heure et la purge prend le relais.
 
 Si ElevenLabs exige une vérification, la voix standard reste utilisée.
@@ -161,4 +163,4 @@ Le test navigateur utilise un serveur déjà lancé, Chromium installé avec `np
 
 Sources : [OpenAI Realtime Translation](https://developers.openai.com/api/docs/guides/realtime-translation), [ElevenLabs streaming](https://elevenlabs.io/docs/api-reference/text-to-speech/v-1-text-to-speech-voice-id-stream), [clonage instantané](https://elevenlabs.io/docs/api-reference/voices/ivc/create), documentation du pilote Neon installé. Consultées le 19 septembre 2026.
 
-Validation effectuée : build de production, lint, TypeScript, 33 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.
+Validation effectuée : build de production, lint, TypeScript, 34 tests automatiques, test Neon réel et parcours Chromium à deux navigateurs réussis. Un test ElevenLabs réel sur une phrase synthétique a reçu son premier fragment audio en environ 950 ms ; cette mesure ponctuelle n’est pas une garantie de latence de conversation.

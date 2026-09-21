@@ -41,6 +41,11 @@ export async function clearProfileVoice(userId: string, keepConsent: boolean) {
     consent_at=CASE WHEN ${keepConsent} THEN consent_at ELSE NULL END, updated_at=now() WHERE user_id=${userId}`;
 }
 
+export async function setProfileUseClone(userId: string, useClone: boolean) {
+  await db()`INSERT INTO adu_voice_profiles(user_id,use_clone,updated_at) VALUES(${userId},${useClone},now())
+    ON CONFLICT (user_id) DO UPDATE SET use_clone=EXCLUDED.use_clone, updated_at=now()`;
+}
+
 export async function userIdForParticipant(sessionId: string, slot: number) {
   const rows = await db()`SELECT user_id FROM adu_participants WHERE session_id=${sessionId} AND slot=${slot}`;
   return (rows[0]?.user_id as string | null) ?? null;

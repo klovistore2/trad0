@@ -28,7 +28,7 @@ test('relayed speech uses the other participant’s ready clone, never a client 
     '@/lib/session/auth': {member: async id => {assert.equal(id,'session');return {slot:0};}},
     '@/lib/neon/db': {db: () => async (strings,...values) => {
       assert.match(strings.join('?'),/slot<>/); assert.deepEqual(values,['session',0]);
-      return [{voice_id:'peer-clone',voice_status:'ready'}];
+      return [{voice_id:'peer-clone',voice_status:'ready',use_clone:true}];
     }},
   });
   try {
@@ -68,7 +68,7 @@ test('a standard voice is matched to the speaker’s detected range, never to a 
   const speak = async voiceRange => {
     const load = createLoader({
       '@/lib/session/auth': {member: async () => ({slot:0})},
-      '@/lib/neon/db': {db: () => async () => [{voice_id:null,voice_status:'none',voice_range:voiceRange}]},
+      '@/lib/neon/db': {db: () => async () => [{voice_id:null,voice_status:'none',voice_range:voiceRange,use_clone:true}]},
     });
     return load('app/api/elevenlabs/speak/route.ts').POST(request({sessionId:'session',text:'Bonjour'}));
   };
@@ -256,4 +256,35 @@ test('the purge leaves account voices alone and only sweeps session scoped ones'
     assert.match(participantQuery,/user_id IS NULL/,'saved voices must be excluded from the purge');
     assert.deepEqual(deleted,['orphan'],'only the session scoped orphan is removed');
   } finally { globalThis.fetch=oldFetch; }
+});
+
+test('a speaker who turns their clone off is spoken with the standard voice, and keeps the model', async () => {
+  const env = {NEXT_PUBLIC_APP_URL:origin, ELEVENLABS_TTS_MODEL:'test-model', ELEVENLABS_API_KEY:'test-key'};
+  const previous = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));
+  const cleared = ['ELEVENLABS_FALLBACK_VOICE_ID','ELEVENLABS_VOICE_LOW','ELEVENLABS_VOICE_HIGH'];
+  const clearedBefore = Object.fromEntries(cleared.map(key => [key, process.env[key]]));
+  for (const key of cleared) delete process.env[key];
+  Object.assign(process.env, env);
+  const originalFetch = globalThis.fetch;
+  let spoken;
+  globalThis.fetch = async url => {
+    if (String(url).includes('/v2/voices')) return new Response(JSON.stringify({voices:[{voice_id:'male-voice',labels:{gender:'male'}}]}),{status:200,headers:{'content-type':'application/json'}});
+    spoken = String(url);
+    return new Response(new Uint8Array([0,1]), {status:200});
+  };
+  const load = createLoader({
+    '@/lib/session/auth': {member: async () => ({slot:0})},
+    // The clone is still stored; only its use is switched off.
+    '@/lib/neon/db': {db: () => async () => [{voice_id:'peer-clone',voice_status:'ready',voice_range:'low',use_clone:false}]},
+  });
+  try {
+    const response = await load('app/api/elevenlabs/speak/route.ts').POST(request({sessionId:'session',text:'Bonjour'}));
+    assert.equal(response.status,200);
+    assert.doesNotMatch(spoken,/peer-clone/,'the clone must not be used when switched off');
+    assert.match(spoken,/\/male-voice\/stream/,'the standard voice for their range takes over');
+    assert.equal(response.headers.get('x-voice-source'),'standard-low');
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key,value] of Object.entries({...previous,...clearedBefore})) {if(value===undefined)delete process.env[key];else process.env[key]=value;}
+  }
 });

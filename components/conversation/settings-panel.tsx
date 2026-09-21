@@ -8,7 +8,7 @@ import type { Participant } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, english, me, peer, speechSeconds, onConsent, onRefresh, readAudioState, onTestTone, voiceStatus, received, onClose }: {
+export function SettingsPanel({ id, english, me, peer, speechSeconds, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose }: {
   id: string;
   english: boolean;
   me: Participant;
@@ -16,6 +16,7 @@ export function SettingsPanel({ id, english, me, peer, speechSeconds, onConsent,
   speechSeconds: number;
   onConsent: () => void;
   onRefresh: () => void;
+  onUseClone: (useClone: boolean) => void;
   readAudioState: () => AudioState;
   onTestTone: () => void;
   voiceStatus: VoiceStatus;
@@ -31,7 +32,7 @@ export function SettingsPanel({ id, english, me, peer, speechSeconds, onConsent,
 
     <div className="settings-group">
       <h2>{english ? "My voice" : "Ma voix"}</h2>
-      <VoiceConsent sessionId={id} me={me} seconds={speechSeconds} english={english} onConsent={onConsent} onRefresh={onRefresh} />
+      <VoiceConsent sessionId={id} me={me} seconds={speechSeconds} english={english} onConsent={onConsent} onRefresh={onRefresh} onUseClone={onUseClone} />
     </div>
 
     <div className="settings-group">

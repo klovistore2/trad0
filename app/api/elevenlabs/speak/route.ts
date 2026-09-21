@@ -19,10 +19,10 @@ export async function POST(request: Request) {
     if (body.sessionId !== undefined) {
       if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
       const me = await member(body.sessionId);
-      const rows = await db()`SELECT voice_id, voice_status, voice_range FROM adu_participants WHERE session_id=${body.sessionId} AND slot<>${me.slot}`;
+      const rows = await db()`SELECT voice_id, voice_status, voice_range, use_clone FROM adu_participants WHERE session_id=${body.sessionId} AND slot<>${me.slot}`;
       if (!rows[0]) throw new HttpError(409, "L’autre personne n’a pas encore rejoint.");
       // The receiver hears the other participant's voice; a client supplied ID is never accepted.
-      if (rows[0].voice_status === "ready") voiceId = rows[0].voice_id;
+      if (rows[0].voice_status === "ready" && rows[0].use_clone) voiceId = rows[0].voice_id;
       // The speaker's own range, so the receiver hears a fitting voice before any clone exists.
       if (rows[0].voice_range === "low" || rows[0].voice_range === "high") range = rows[0].voice_range;
     }
