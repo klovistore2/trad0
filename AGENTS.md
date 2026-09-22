@@ -169,7 +169,10 @@ fenêtre qui arrive pendant une analyse est ignorée, la suivante suit de près.
 la traduction, donc une analyse terminée entre-temps profite déjà à la phrase. Résultats ambigus,
 erreurs et capture indisponible laissent le ton précédent valide ou le neutre. Les réponses sont validées dans une
 énumération fermée ; seuls les tags construits côté serveur sont ajoutés. Les crochets fournis dans
-le texte deviennent du texte ordinaire. `strength` décrit l'intensité, pas une probabilité calibrée.
+le texte deviennent du texte ordinaire. Une phrase qui porte un tag de ton est synthétisée avec
+`voice_settings.stability = 0` (« Creative » de v3, le plus expressif, avec un risque
+d'hallucination) ; les autres phrases n'envoient aucun réglage et gardent le défaut de la voix.
+Le menu DEV affiche la stabilité reçue. Rendu à valider à l'écoute, clone et voix standard. `strength` décrit l'intensité, pas une probabilité calibrée.
 Le modèle audio utilise Chat Completions avec sortie texte, `store: false`, sans JSON Schema strict
 (non pris en charge par ces modèles audio). La route authentifie la session et borne le corps à 300 ko.
 

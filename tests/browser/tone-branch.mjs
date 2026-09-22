@@ -9,7 +9,7 @@ import { neon } from '@neondatabase/serverless';
 createRequire(import.meta.url)('@next/env').loadEnvConfig(process.cwd());
 const baseURL = process.env.TEST_BASE_URL || 'http://localhost:3100';
 const browser = await chromium.launch({ headless:true, args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
-const contexts=[];let sessionId;let accountEmail;let guestEmail;
+const contexts=[];let sessionId;let accountEmail;let speakerEmail;
 const errors=[];
 // A real, short WAV so the audio element can actually decode, play and fire 'ended'.
 function wavClip(seconds=1.5, frequency=440, rate=8000) {
@@ -100,7 +100,11 @@ try {
  assert.equal(created.status(),200);sessionId=(await created.json()).id;
  await a.goto(`/session/${sessionId}`);
  await a.getByRole('button',{name:'Pas maintenant'}).click();
- const b=await client();await b.goto(`/join/${sessionId}`);
+ // Tone analysis is an account feature: the speaking phone signs in, as a guest would.
+ speakerEmail=`tone-speaker-${Date.now()}@example.test`;const speakerId=randomUUID();
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${speakerId},${speakerEmail},'google')`;
+ const b=await client({id:speakerId,email:speakerEmail});await b.goto(`/join/${sessionId}`);
+ await b.getByRole('button',{name:'Not now'}).click();
  await b.getByRole('button',{name:'Start talking'}).waitFor();
  // No personal audio or clone: a standard voice produces an in-memory test fixture.
  const fixture=await a.request.post('/api/elevenlabs/speak',{headers:{origin:baseURL},data:{sessionId,language:'en',text:'I told you to leave it alone. Why did you do that again?',speech:{options:{emotion:true},tone:{tone:'angry',strength:'high',status:'estimated',model:'gpt-audio-mini',analysisMs:0},extraWaitMs:0}}});
@@ -155,4 +159,5 @@ try {
  const sql=neon(process.env.DATABASE_URL);
  if(sessionId)await sql`DELETE FROM adu_sessions WHERE id=${sessionId}`;
  if(accountEmail)await sql`DELETE FROM adu_users WHERE email=${accountEmail}`;
+ if(speakerEmail)await sql`DELETE FROM adu_users WHERE email=${speakerEmail}`;
 }

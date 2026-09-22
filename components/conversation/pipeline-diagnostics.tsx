@@ -9,7 +9,7 @@ export type PipelineState = {
   reason: string; contextTurns: number; timing: PipelineTiming | null;
   receivedTiming: { transport: number; request: number; playback: number };
   speechOptions: SpeechOptions; outgoingSpeech: SpeechMetadata | null; incomingSpeech: SpeechMetadata | null;
-  synthesis: { model: string; headersMs: number } | null;
+  synthesis: { model: string; stability: string; headersMs: number } | null;
   audioLatency: { request: number; total: number } | null;
 };
 const toneLabel = (speech: SpeechMetadata | null | undefined) => speech ? `${speech.tone.status} · ${speech.tone.tone} · ${speech.tone.strength} · ${speech.tone.model}` : "—";
@@ -33,6 +33,7 @@ export function PipelineDiagnostics({ room, read, children }: { room: SharedSess
       <dt>My last tone request</dt><dd>{state?.outgoingSpeech?.tone.status === "estimated" ? `${state.outgoingSpeech.tone.analysisMs} ms` : "—"}</dd>
       <dt>Incoming tone</dt><dd>{toneLabel(state?.incomingSpeech)}</dd>
       <dt>Incoming actual ElevenLabs model</dt><dd>{state?.synthesis?.model || "—"}</dd>
+      <dt>Incoming stability</dt><dd>{state?.synthesis?.stability === "0" ? "0 · creative (tone tag)" : state?.synthesis?.stability || "—"}</dd>
       <dt>ElevenLabs response headers (server)</dt><dd>{state?.synthesis?.headersMs ?? "—"} ms</dd>
       <dt>Incoming speech request → playback started</dt><dd>{state?.audioLatency?.total || "—"} ms</dd>
       <dt>My clone</dt><dd>{room.me.hasAccount ? room.me.consented ? `${room.me.voiceStatus} · tier ${room.me.voiceTier}` : "Awaiting consent" : "Account required"}</dd>

@@ -25,7 +25,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private failure = "";
   private voiceSource = "";
   private latency = { request: 0, total: 0 };
-  private synthesis = { model: "", headersMs: 0 };
+  private synthesis = { model: "", stability: "", headersMs: 0 };
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -88,7 +88,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (controller.signal.aborted) return;
       const startedAt = Date.now();
       this.latency = { request: 0, total: 0 };
-      this.synthesis = { model: "", headersMs: 0 };
+      this.synthesis = { model: "", stability: "", headersMs: 0 };
       await this.unlock();
       this.onStatus("loading");
       let text = "";
@@ -104,7 +104,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
-      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0 };
+      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0 };
       this.latency = { request: Date.now() - startedAt, total: 0 };
       const blob = await response.blob();
       if (controller.signal.aborted) return;

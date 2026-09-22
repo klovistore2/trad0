@@ -141,11 +141,17 @@ test('speech relay uses validated tone tags and a model the browser cannot choos
   assert.equal(response.status,200);assert.equal(response.headers.get('X-TTS-Model'),'eleven_v3_conversational');
   assert.equal(payload.text,'[happily] shouts สวัสดี');assert.equal(payload.language_code,'th');
   assert.equal(payload.model_id,'eleven_v3_conversational');
+  assert.equal(payload.voice_settings.stability,0,'a tagged sentence uses the expressive setting');
+  assert.equal(response.headers.get('X-TTS-Stability'),'0');
   // A browser that names a model is ignored rather than obeyed: the ID never comes from the body.
   const injected=await route.POST(request({sessionId:'room',text:'Hello',speech:{...speech,options:{...speech.options,ttsModel:'arbitrary'}}}));
   assert.equal(injected.status,200);assert.equal(payload.model_id,'eleven_v3_conversational');
+
   assert.equal(injected.headers.get('X-TTS-Model'),'eleven_v3_conversational');
-  assert.equal(calls,2);
+  const plain=await route.POST(request({sessionId:'room',text:'Hello',speech:{...speech,tone:{...result,strength:'low'}}}));
+  assert.equal(payload.text,'Hello');assert.equal(payload.voice_settings,undefined,'an untagged sentence keeps the voice default');
+  assert.equal(plain.headers.get('X-TTS-Stability'),'default');
+  assert.equal(calls,3);
  }finally{
   globalThis.fetch=originalFetch;
   if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;

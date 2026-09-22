@@ -48,3 +48,12 @@ export function expressiveText(text: string, model: string, speech?: SpeechMetad
   const tag = tags[tone.tone];
   return tag ? `[${tag}] ${clean}` : clean;
 }
+// Eleven v3 stability: 0 is "Creative", the most expressive setting and the one that follows
+// tone tags best, but it can hallucinate. Only a sentence that carries a tone tag takes that risk;
+// every other sentence keeps the voice's default.
+export const EXPRESSIVE_STABILITY = 0;
+export function speechRequest(text: string, model: string, speech?: SpeechMetadata) {
+  const spoken = expressiveText(text, model, speech);
+  // Literal brackets are stripped from the text, so a leading one can only be our own tag.
+  return { text: spoken, stability: spoken.startsWith("[") ? EXPRESSIVE_STABILITY : undefined };
+}

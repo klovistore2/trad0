@@ -2,7 +2,7 @@ import { member } from "@/lib/session/auth";
 import { db } from "@/lib/neon/db";
 import { elevenHeaders, fallbackVoice } from "@/lib/elevenlabs/server";
 import { checkOrigin, failure, HttpError, readJson } from "@/lib/server/http";
-import { expressiveText, isSpeechMetadata, TTS_MODEL } from "@/lib/audio/speech-options";
+import { isSpeechMetadata, speechRequest, TTS_MODEL } from "@/lib/audio/speech-options";
 
 export const maxDuration = 30;
 
@@ -33,11 +33,13 @@ export async function POST(request: Request) {
     // tags, so there is nothing left to resolve per language or per speaker.
     const model = TTS_MODEL;
     const voice = voiceId || await fallbackVoice(range);
+    const spoken = speechRequest(text, model, speech);
     const started = performance.now();
     const upstream = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream?output_format=mp3_22050_32`, {
       method: "POST",
       headers: { ...elevenHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify({ text: expressiveText(text, model, speech), model_id: model, ...(language ? { language_code: language } : {}) }),
+      body: JSON.stringify({ text: spoken.text, model_id: model, ...(language ? { language_code: language } : {}),
+        ...(spoken.stability === undefined ? {} : { voice_settings: { stability: spoken.stability } }) }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!upstream.ok || !upstream.body) throw new HttpError(502, "La voix est indisponible. Le texte reste accessible.");
@@ -47,6 +49,7 @@ export async function POST(request: Request) {
       // Development aid: lets the page show which voice was actually used.
       "X-Voice-Source": voiceId ? "clone" : `standard-${range ?? "neutral"}`,
       "X-TTS-Model": model,
+      "X-TTS-Stability": spoken.stability === undefined ? "default" : String(spoken.stability),
       "X-TTS-Headers-Ms": String(Math.round(performance.now() - started)),
     } });
   } catch (error) { return failure(error); }
