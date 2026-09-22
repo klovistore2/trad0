@@ -3,7 +3,7 @@ import type { PipelineTiming } from "@/lib/translation/conversation-pipeline";
 import type { SpeechMetadata } from "@/lib/audio/speech-options";
 // The output languages gpt-realtime-translate documents, plus Thai. Thai is documented as an
 // input language only: it is offered so the limitation can be checked, not because it is proven.
-export const LANGUAGES = ["fr", "en", "th", "es", "pt", "it", "de", "ja", "ko", "zh", "ru", "hi", "id", "vi"] as const;
+export const LANGUAGES = ["fr", "en", "th", "es", "pt", "it", "de", "nl", "ja", "ko", "zh", "ru", "hi", "id", "vi"] as const;
 export type Language = (typeof LANGUAGES)[number];
 export const isLanguage = (value: unknown): value is Language =>
   typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
@@ -24,6 +24,6 @@ export interface PeerTransport {
 }
 export const languageNames: Record<Language, string> = {
   fr: "Français", en: "English", th: "ไทย", es: "Español", pt: "Português", it: "Italiano",
-  de: "Deutsch", ja: "日本語", ko: "한국어", zh: "中文", ru: "Русский", hi: "हिन्दी",
+  de: "Deutsch", nl: "Nederlands", ja: "日本語", ko: "한국어", zh: "中文", ru: "Русский", hi: "हिन्दी",
   id: "Bahasa Indonesia", vi: "Tiếng Việt",
 };

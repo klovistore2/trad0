@@ -173,8 +173,8 @@ Il n’y a ni résumé roulant, ni recherche vectorielle, ni détection des éch
 
 ### Langues
 
-Quatorze langues sont sélectionnables : `fr`, `en`, `th`, `es`, `pt`, `it`, `de`, `ja`, `ko`, `zh`,
-`ru`, `hi`, `id`, `vi`. Cette liste n’est pas une garantie de qualité équivalente pour tous les fournisseurs.
+Quinze langues sont sélectionnables : `fr`, `en`, `th`, `es`, `pt`, `it`, `de`, `nl`, `ja`, `ko`,
+`zh`, `ru`, `hi`, `id`, `vi`. Cette liste n’est pas une garantie de qualité équivalente pour tous les fournisseurs.
 
 Auto reconnaît la langue **réellement parlée à partir de la transcription source**. La langue du
 navigateur n’est qu’une suggestion initiale pour le créateur ; l’invité part du choix préparé à l’accueil.
@@ -271,6 +271,8 @@ Déploiement prévu sur Vercel ; pas de serveur applicatif audio permanent à ma
 | `lib/audio/` | Registre vocal, compteur de parole et enregistreur |
 | `lib/session/`, `lib/voice/`, `lib/auth/` | Identité, données de session, profils et nettoyage |
 | `components/conversation/` | Conversation, réglages, consentement, invitations et diagnostics |
+| `components/site/`, `app/about`, `app/faq` | Pages de présentation et FAQ publiques, en anglais, sans micro |
+| `app/[lang]/` | Mêmes pages sous le préfixe de langue (`/fr`, `/fr/about`, `/es/faq`), `/en/...` redirigé |
 | `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `011_conversation_modes.sql` |
 
 Conserver les interfaces `TranslationProvider`, `VoiceProvider` et `PeerTransport` : les événements
@@ -309,6 +311,13 @@ le même identifiant ; l’unicité de l’identifiant empêche leur double inse
 | `POST /api/voice/consent`, `POST /api/voice/clone` | Consentement et création/affinage de voix |
 | `POST /api/voice/prefer`, `DELETE /api/voice` | Utilisation du clone, suppression ou réinitialisation |
 | `GET /api/cleanup` | Purge protégée par `CRON_SECRET` |
+
+Pages publiques et fichiers de référencement : `/` et `/[lang]` (accueil), `/about`, `/faq` et
+leurs variantes `/[lang]/about` et `/[lang]/faq`, dont le texte reste anglais : leur `canonical`
+pointe donc vers la version sans préfixe. Également `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` et `/llms.txt`. Tous sont générés au build
+à partir de `NEXT_PUBLIC_APP_URL` : sans cette variable au moment du build, les adresses absolues
+pointent sur localhost. `robots.txt` n’exclut aucun agent ni robot d’IA ; seules les adresses
+privées (`/api/`, `/session/`, `/join/`) sont retirées de l’exploration.
 
 ### Confidentialité et nettoyage : règles à préserver
 

@@ -11,6 +11,7 @@ import { type Language } from "@/types/session";
 import { translator } from "@/lib/i18n/strings";
 import { languageLabel, languageOptions } from "@/lib/i18n/language-names";
 import { homePath } from "@/lib/i18n/home-metadata";
+import { pagePath } from "@/lib/i18n/page-metadata";
 import { browserLanguage } from "@/lib/translation/language";
 const subscribeLocale = () => () => {};
 const getLocale = () => browserLanguage(navigator.languages);
@@ -32,7 +33,14 @@ export function Conversation({ email, pageLanguage }: { email: string | null; pa
   return <main className="conversation" lang={pageLanguage}>
     <header className="topbar">
       <Link className="wordmark" href="/" aria-label="Trad0, home">Trad0<span className="brand-dot">.</span></Link>
-      <div className="topbar-actions"><ThemeToggle /></div>
+      <div className="topbar-actions">
+        {/* The two pages a visitor reads before talking; both are in English for now. */}
+        <nav className="site-nav" aria-label="Pages">
+          <Link href={pagePath("about", pageLanguage)}>About</Link>
+          <Link href={pagePath("faq", pageLanguage)}>FAQ</Link>
+        </nav>
+        <ThemeToggle />
+      </div>
     </header>
 
     <section className="conversation-body" aria-label="Start a conversation">
@@ -45,6 +53,7 @@ export function Conversation({ email, pageLanguage }: { email: string | null; pa
       </label>
       <div className="translation-area">
         <div className="voice-symbol" aria-hidden="true"><span /><span /><span /><span /><span /></div>
+        <p className="eyebrow home-eyebrow">{t("homeEyebrow")}</p>
         <h1>{t("homeTitle")}<br /><em>{t("homeTitleEm")}</em></h1>
         <p className="intro">{t("homeIntro")}</p>
       </div>
