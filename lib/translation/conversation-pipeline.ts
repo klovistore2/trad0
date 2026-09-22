@@ -100,6 +100,8 @@ export class ConversationPipeline {
     this.switching = true;
     const next = this.desired;
     const previous = this.mode;
+    // Mode 1 produces no tone estimate, so a stale mode 2 reading must not linger in diagnostics.
+    if (next === "direct") this.speech = null;
     this.mode = next;
     try {
       await this.options.switchMode(next);
