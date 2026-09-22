@@ -66,9 +66,9 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {t("playing")}</p>}
           <OwnWords original={session.translation.original} translation={session.translation.translation}
             mine={room.me.language} theirs={room.peer.language} t={t} />
+          {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState} />}
         </div>
         {!room.me.hasAccount && <GuestVoiceOffer id={id} seconds={session.spokenSeconds} t={t} />}
-        {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState} />}
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? t("peerOnline") : t("peerOffline")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
