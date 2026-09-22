@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSharedConversation } from "@/hooks/useSharedConversation";
 import { languageLabel } from "@/lib/i18n/language-names";
 import { translator } from "@/lib/i18n/strings";
@@ -31,6 +31,14 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
     return () => clearTimeout(timer);
   }, [session.ended, router, home]);
   const away = !room?.peer?.online;
+  // The sentence being read, or the latest one when nothing is: large, with the one before it for
+  // context and every newer sentence still waiting to be read below it.
+  const lines = session.incoming;
+  const focus = session.speakingTurn ?? lines.at(-1)?.turnId;
+  const focusIndex = lines.findIndex(line => line.turnId === focus);
+  const visible = lines.slice(Math.max(0, Math.min(focusIndex - 1, lines.length - 3)));
+  const focusLine = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { focusLine.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [focus]);
   return <main className="conversation">
     {room?.me.hasAccount && <VoiceIntro consented={room.me.consented} t={t} onAccept={session.giveConsent} />}
     <header className="topbar">
@@ -72,7 +80,11 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
         </button>
         <span className="sound-icon-label">{!session.soundReady ? t("hearTranslation") : session.soundOn ? t("soundOn") : t("textOnly")}</span>
         <div className="translation-area">
-          {session.incoming ? <><span className="eyebrow">{t("theirWords")}</span><div className="transcript" lang={room.me.language} tabIndex={0}><p>{session.incoming}</p></div></>
+          {lines.length ? <><span className="eyebrow">{t("theirWords")}</span><div className="transcript" lang={room.me.language} tabIndex={0}>
+            {visible.map(line => line.turnId === focus
+              ? <p key={line.turnId} ref={focusLine} className="current">{line.text}</p>
+              : <p key={line.turnId}>{line.text}</p>)}
+          </div></>
           : <><h1>{t("connectedTitle")}</h1><p className="intro">{t("connectedIntro")}</p></>}
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {t("playing")}</p>}
           <OwnWords original={session.translation.original} translation={session.translation.translation}

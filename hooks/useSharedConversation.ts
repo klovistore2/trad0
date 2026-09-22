@@ -31,7 +31,10 @@ export function useSharedConversation(id: string, signedIn = false) {
   const [room, setRoom] = useState<SharedSession | null>(null);
   const [ended, setEnded] = useState(false);
   const [message, setMessage] = useState("");
-  const [incoming, setIncoming] = useState("");
+  // Recent sentences from the other person, oldest first. The voice reads them in order and can
+  // lag behind when they talk fast, so the one being read must stay on screen with the newer ones.
+  const [incoming, setIncoming] = useState<{ turnId: string; text: string }[]>([]);
+  const [speakingTurn, setSpeakingTurn] = useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [enabled, setEnabled] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
@@ -174,6 +177,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
         incomingSpeech.current = event.speech ?? null;
+        setSpeakingTurn(event.turnId);
         try {
           await voice.current?.speakStream({ sessionId: id, speech: event.speech, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
         } catch (error) {
@@ -189,7 +193,7 @@ export function useSharedConversation(id: string, signedIn = false) {
         if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
       }
     } finally {
-      speaking.current = false;
+      speaking.current = false; setSpeakingTurn(null);
       directAudio.current?.setIncomingEnabled(roomRef.current?.peer?.activeMode !== "context");
       syncMicrophone();
     }
@@ -266,7 +270,12 @@ export function useSharedConversation(id: string, signedIn = false) {
       if (controller.signal.aborted) return;
       turns.receive(event, roomRef.current?.peer?.slot ?? 1);
       if (event.kind === "original") return;
-      setIncoming(event.text);
+      setIncoming(lines => {
+        const line = { turnId: event.turnId, text: event.text };
+        // Streaming subtitles grow the same sentence; a new turn starts a new line.
+        const next = lines.at(-1)?.turnId === event.turnId ? [...lines.slice(0, -1), line] : [...lines, line];
+        return next.slice(-20);
+      });
       if (event.committed && !committed.has(event.turnId)) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
@@ -571,5 +580,5 @@ export function useSharedConversation(id: string, signedIn = false) {
   }), [activeSpeechOptions]);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { ended, speechOptions, setSpeechOptions, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { ended, speechOptions, setSpeechOptions, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, speakingTurn, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

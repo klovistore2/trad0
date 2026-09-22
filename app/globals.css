@@ -107,7 +107,8 @@ h1 em { font-weight: 400; color: var(--heading-accent); }
 .home-eyebrow { margin: 0 0 18px; font-size: 11px; letter-spacing: 2.4px; text-transform: uppercase; color: var(--heading-accent); }
 .eyebrow { font-size: 10px; letter-spacing: 2px; color: var(--muted); margin-bottom: 24px; }
 .transcript { width: 100%; max-width: 680px; max-height: 38svh; overflow-y: auto; overflow-wrap: anywhere; padding: 8px; }
-.transcript p { margin: 0; font-size: clamp(30px, 4.2vw, 46px); line-height: 1.65; }
+.transcript p { margin: 0 0 8px; font-size: clamp(18px, 2.4vw, 24px); line-height: 1.5; color: var(--muted); }
+.transcript p.current { font-size: clamp(30px, 4.2vw, 46px); line-height: 1.65; color: var(--ink); }
 .original { max-width: 560px; margin-top: 20px; color: var(--muted); font-size: 14px; }
 .original summary { cursor: pointer; padding: 12px; font-size: 12px; }
 .original p { line-height: 1.7; max-height: 130px; overflow: auto; }
