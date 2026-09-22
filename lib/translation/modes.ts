@@ -1,4 +1,10 @@
-import type { Participant } from "@/types/session";
+import type { Participant, Language } from "@/types/session";
+// Output languages of the direct translation model, distinct from its input languages.
+export const DIRECT_OUTPUT_LANGUAGES: readonly Language[] = ["en", "fr", "es", "pt", "ja", "ru", "zh", "de", "ko", "hi", "id", "vi", "it"];
+export const supportsDirectOutput = (language: string) => (DIRECT_OUTPUT_LANGUAGES as readonly string[]).includes(language);
+export function modeForLanguage(preference: ConversationMode, language: string | undefined, directUnavailable = false): ConversationMode {
+  return preference === "direct" && (directUnavailable || (language !== undefined && !supportsDirectOutput(language))) ? "context" : preference;
+}
 export type ConversationMode = "direct" | "context";
 export type ModePreference = "auto" | ConversationMode;
 export const isMode = (value: unknown): value is ConversationMode => value === "direct" || value === "context";

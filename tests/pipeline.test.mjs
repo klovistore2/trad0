@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { createLoader } from './load-ts.mjs';
 const load=createLoader();
 const {ConversationPipeline}=load('lib/translation/conversation-pipeline.ts');
@@ -7,6 +8,16 @@ const {desiredMode}=load('lib/translation/modes.ts');
 const {SpeechClock}=load('lib/audio/speech-clock.ts');
 const {accountReturnTo}=load('lib/auth/return-to.ts');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('replayed database language constraints accept every selectable language',()=>{
+ const {LANGUAGES}=load('types/session.ts');
+ for(const file of ['009_languages.sql','012_dutch_language.sql']) {
+  const sql=readFileSync(new URL(`../migrations/${file}`,import.meta.url),'utf8');
+  const constraint=sql.match(/CHECK\s*\(language IN\s*\(([^)]+)\)/)?.[1];
+  assert.ok(constraint,`${file}: language constraint is present`);
+  const languages=Array.from(constraint.matchAll(/'([^']+)'/g),match=>match[1]);
+  assert.deepEqual(languages.sort(),[...LANGUAGES].sort(),`${file}: keep app and database languages aligned`);
+ }
+});
 function pipeline(overrides={}) {
  const sent=[], switched=[], errors=[];
  const instance=new ConversationPipeline({sessionId:'room',speaker:()=>0,languages:()=>({sourceLanguage:'fr',targetLanguage:'en'}),send:async event=>{sent.push(event);},switchMode:async mode=>{switched.push(mode);},onTranslation:()=>{},onError:error=>errors.push(error),...overrides});
@@ -78,4 +89,16 @@ test('mode switch waits for translated audio to finish, then keeps direct transl
   audible=false;t.mock.timers.tick(1800);await tick();assert.deepEqual(app.switched,['context']);
   assert.deepEqual(app.instance.memory.recentTranslations(),[{speaker:0,text:'Hello.',language:'en'}]);
  }finally{app.instance.dispose();}
+});
+
+
+test('direct output capability is separate from app languages and preserves Italian',()=>{
+ const {supportsDirectOutput,modeForLanguage}=load('lib/translation/modes.ts');
+ for(const language of ['nl','th']) {
+  assert.equal(supportsDirectOutput(language),false);
+  assert.equal(modeForLanguage('direct',language),'context');
+ }
+ for(const language of ['it','en','fr'])assert.equal(modeForLanguage('direct',language),'direct');
+ assert.equal(modeForLanguage('context','it'),'context');
+ assert.equal(modeForLanguage('direct','it',true),'context');
 });

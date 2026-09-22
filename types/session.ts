@@ -1,8 +1,8 @@
 import type { ConversationMode, ModePreference } from "@/lib/translation/modes";
 import type { PipelineTiming } from "@/lib/translation/conversation-pipeline";
 import type { SpeechMetadata } from "@/lib/audio/speech-options";
-// The output languages gpt-realtime-translate documents, plus Thai. Thai is documented as an
-// input language only: it is offered so the limitation can be checked, not because it is proven.
+// App languages; direct translation has a smaller output catalogue (see translation/modes).
+// Thai and Dutch use contextual translation followed by ElevenLabs.
 export const LANGUAGES = ["fr", "en", "th", "es", "pt", "it", "de", "nl", "ja", "ko", "zh", "ru", "hi", "id", "vi"] as const;
 export type Language = (typeof LANGUAGES)[number];
 export const isLanguage = (value: unknown): value is Language =>

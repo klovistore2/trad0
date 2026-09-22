@@ -7,7 +7,7 @@ import type { SessionStatus, TranslationProvider } from "@/types/translation";
 type State = { status: SessionStatus; translation: string; original: string; message: string };
 const initialState: State = { status: "idle", translation: "", original: "", message: "" };
 
-export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void; onOriginal?: (delta: string) => void; onAudio?: (track: MediaStreamTrack | null) => void; shouldEnableMicrophone?: () => boolean } = {}) {
+export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void; onOriginal?: (delta: string) => void; onAudio?: (track: MediaStreamTrack | null) => void; onFailure?: () => void; shouldEnableMicrophone?: () => boolean } = {}) {
   const callbacks = useRef(options);
   useEffect(() => { callbacks.current = options; }, [options]);
   const [state, setState] = useState(initialState);
@@ -51,6 +51,7 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
         void current.disconnect();
       }
       setState(previous => ({ ...previous, status, message }));
+      if (status.endsWith("error") || status === "microphone_denied") callbacks.current.onFailure?.();
     });
     current.onTranslatedAudio?.(track => { if (provider.current === current) callbacks.current.onAudio?.(track); });
     current.onOriginalTranscript(event => {

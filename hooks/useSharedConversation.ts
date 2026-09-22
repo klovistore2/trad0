@@ -4,7 +4,7 @@ import { useTranslationSession } from "./useTranslationSession";
 import { useLanguageDetection } from "./useLanguageDetection";
 import { NeonPeerTransport } from "@/lib/realtime/neon-transport";
 import { ConversationPipeline } from "@/lib/translation/conversation-pipeline";
-import { desiredMode, type ConversationMode, type ModePreference } from "@/lib/translation/modes";
+import { desiredMode, modeForLanguage, supportsDirectOutput, type ConversationMode, type ModePreference } from "@/lib/translation/modes";
 import { PeerAudioLink } from "@/lib/realtime/audio-link";
 import { SpeechClock } from "@/lib/audio/speech-clock";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
@@ -89,6 +89,12 @@ export function useSharedConversation(id: string, signedIn = false) {
       sourceCommitTimer.current = setTimeout(() => translationRef.current.commitInput(), 1500);
     },
     onAudio: track => { void directAudio.current?.setTrack(track); },
+    onFailure: () => {
+      // The provider has already closed its microphone. Reflect that in the controls,
+      // so the next tap can really reconnect, including after a language correction.
+      running.current = false; setEnabled(false); setStarting(false); stopped.current = "paused by you";
+      publisher.current?.flush(); recorder.current?.pause(); toneCapture.current?.stop();
+    },
     shouldEnableMicrophone: micShouldBeOn,
   });
   const translationRef = useRef(translation);
@@ -300,16 +306,19 @@ export function useSharedConversation(id: string, signedIn = false) {
         failures = 0; setConnectionLost(false);
         if (data.peer?.language && data.peer.language !== roomRef.current?.peer?.language) {
           turns.flush();
-          translationRef.current.setTargetLanguage(data.peer.language);
+          // An unsupported session.update would kill the old direct connection before
+          // the contextual pipeline can take over at the sentence boundary.
+          if (supportsDirectOutput(data.peer.language)) translationRef.current.setTargetLanguage(data.peer.language);
         }
         if (roomRef.current?.me.consented && !data.me.consented) {
           recorder.current?.stop(); recorder.current?.discard(); recorder.current = new SpeechRecorder();
         }
         roomRef.current = data; setRoom(data);
         const wanted = desiredMode(data.me);
-        const unsupportedDirect = data.peer?.language === "th";
-        if (unsupportedDirect) modeReason.current = "Thai output uses the contextual pipeline: OpenAI live translation does not document Thai output.";
-        turns.requestMode((directUnavailable.current || unsupportedDirect) && wanted === "direct" ? "context" : wanted);
+        const unsupportedDirect = data.peer?.language && !supportsDirectOutput(data.peer.language);
+        if (unsupportedDirect) modeReason.current = `${data.peer.language.toUpperCase()} output uses mode 2: this language is not documented for OpenAI live translation output.`;
+        else if (!directUnavailable.current) modeReason.current = "";
+        turns.requestMode(modeForLanguage(wanted, data.peer?.language, directUnavailable.current));
         // Event metadata selects TTS per phrase. This prevents delayed direct audio from
         // overlapping contextual speech after the remote speaker has switched modes.
         directAudio.current?.setIncomingEnabled(data.peer?.activeMode !== "context" && !speaking.current);
@@ -333,7 +342,7 @@ export function useSharedConversation(id: string, signedIn = false) {
           data = await refreshed.json();
         }
         if (controller.signal.aborted) return;
-        const initialMode = data.peer?.language === "th" ? "context" : desiredMode(data.me);
+        const initialMode = modeForLanguage(desiredMode(data.me), data.peer?.language);
         turns.mode = initialMode; turns.desired = initialMode; setActiveMode(initialMode);
         roomRef.current = data; setRoom(data);
         // A reload starts a new provider; publish its actual mode even if the previous

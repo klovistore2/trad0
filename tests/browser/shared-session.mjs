@@ -86,20 +86,18 @@ try {
  // The home page opens no microphone, and without an account it offers signing in, not creating.
  await expect(anonymous.getByRole('button',{name:'Start talking'})).toHaveCount(0);
  // The other person's language is chosen before the conversation is created.
- const picker=anonymous.getByLabel('They speak');
- await expect(picker).toHaveValue('auto');
- await expect(anonymous.getByLabel('I speak')).toHaveValue('auto');
- await expect(picker.locator('option')).toContainText(['Français','English','ไทย · untested']);
- await anonymous.getByRole('link',{name:/Sign in/}).click();
- await anonymous.getByRole('button',{name:'Continue with Google'}).waitFor();
+ const picker=anonymous.getByLabel('Translate to:');
+ await expect(picker).toHaveValue('en');
+ await expect(anonymous.getByRole('status')).toHaveText('Auto ↔ English');
+ await expect(picker.locator('option')).toContainText(['French','English','Thai','Dutch']);
+ await anonymous.getByRole('button',{name:'Sign in to start a conversation'}).waitFor();
  await expect(anonymous.getByRole('button',{name:/password|e-mail address/i})).toHaveCount(0);
 
- const a=await client({id:accountId,email:accountEmail});await a.goto('/');
+ const a=await client({id:accountId,email:accountEmail});await a.goto('/fr');
  await a.getByText(accountEmail).waitFor();
  // English keeps the rest of this flow readable; the picker itself is checked above.
- await a.getByLabel('I speak').selectOption('fr');
- await a.getByLabel('They speak').selectOption('en');
- await a.getByRole('button',{name:/Talk to someone/}).click();
+ await a.locator('#peer-language').selectOption('en');
+ await a.getByRole('button',{name:/Parler à quelqu’un/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
  // The voice choice is asked once, on arrival. Declining keeps a standard voice.
  await a.getByRole('button',{name:/Pas maintenant/}).click();
@@ -112,6 +110,7 @@ try {
  // Nobody is speaking yet, so both sides are offered the one-tap start.
  await b.getByRole('button',{name:'Start talking'}).waitFor();
  await a.getByRole('button',{name:'Commencer à parler'}).waitFor();
+ await a.locator('#my-language').selectOption('fr');
  const c=await client();await c.goto(link);
  await expect(c.locator('.error-message')).toContainText(/terminée|inaccessible/);
  // A single tap starts the conversation and claims the free floor: no second press to speak.
@@ -196,6 +195,27 @@ try {
  await b.locator('#peer-language').selectOption('fr');
  await expect(a.locator('#my-language')).toHaveValue('fr');
  await b.waitForFunction(()=>window.testUpdates?.at(-1)?.session?.audio?.output?.language==='fr');
+ // Dutch persists in the real database and routes outgoing speech through mode 2.
+ const dutchUpdate=b.waitForResponse(response=>response.url().endsWith('/language') && response.request().method()==='PATCH');
+ await b.locator('#peer-language').selectOption('nl');
+ const dutchResponse=await dutchUpdate;
+ assert.equal(dutchResponse.status(),200,await dutchResponse.text());
+ await expect(a.locator('#my-language')).toHaveValue('nl',{timeout:10000});
+ await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');
+ assert.equal(await b.evaluate(()=>window.testUpdates?.some(e=>e.session?.audio?.output?.language==='nl')),false);
+ // Returning to Italian restores the direct pipeline without leaving a dead microphone.
+ await b.locator('#peer-language').selectOption('it');
+ await expect(a.locator('#my-language')).toHaveValue('it');
+ await expect(b.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
+ // A provider error exposes a working retry button instead of claiming the mic is open.
+ await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'error',error:{code:'test_interruption'}})}));
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='ended');
+ await b.getByRole('button',{name:/Join in/}).click();
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
+ await b.locator('#peer-language').selectOption('fr');
+ await expect(a.locator('#my-language')).toHaveValue('fr');
+ await b.waitForFunction(()=>window.testUpdates?.at(-1)?.session?.audio?.output?.language==='fr');
  // Speech detection is asynchronous. Mock its model result at the HTTP boundary, keep real
  // persistence and polling, then verify an explicit correction disables future detection.
  const sqlLanguage=neon(process.env.DATABASE_URL);
@@ -210,7 +230,7 @@ try {
  await b.locator('#my-language').selectOption('auto');
  await expect(b.locator('#my-language')).toHaveValue('auto');
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.input_transcript.delta',delta:'I am actually speaking English in this conversation.'})}));
- await expect(b.getByText('Detected · change if needed',{exact:true})).toBeVisible();
+ await expect(b.getByText(/English · Detected · change if needed/)).toBeVisible();
  assert.equal(detectionCalls,1);
  await b.locator('#my-language').selectOption('en');
  await expect(b.locator('#my-language')).toHaveValue('en');
@@ -242,12 +262,13 @@ try {
  await b.getByRole('button',{name:'Back to the conversation'}).click();
  await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');
  await expect(a.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
  await b.waitForTimeout(1200); // Accumulate a real bounded PCM sample from the fake microphone.
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'conversation.item.input_audio_transcription.delta',delta:'Can we go there tomorrow?'})}));
  await a.getByText('Peut-on y aller demain ?', {exact:true}).waitFor();
  await a.getByText(/Traduction en cours/).waitFor();
  assert.equal(llmCalls,1);
- assert.equal(toneCalls,1);
+ assert.equal(toneCalls,1,JSON.stringify(expressiveSpeech));
  assert.equal(expressiveSpeech.options.ttsModel,'eleven_v3');
  assert.equal(expressiveSpeech.tone.tone,'happy');
  await b.getByRole('button',{name:'Settings'}).click();

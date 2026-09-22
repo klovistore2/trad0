@@ -67,8 +67,10 @@ la bascule automatique. Un choix explicite de mode prévaut sur le choix automat
 
 Deux exceptions techniques imposent le mode 2, même si le mode direct est préféré :
 
-- **Sortie en thaï** : absente des langues de sortie documentées pour le modèle de traduction directe
-  utilisé lors de l’intégration. Le thaï en entrée n’a pas la même restriction.
+- **Sortie en thaï ou néerlandais** : absentes des langues de sortie documentées pour le modèle
+  de traduction directe. Les capacités d'entrée sont distinctes. `lib/translation/modes.ts`
+  centralise les sorties compatibles ; ne pas envoyer une langue incompatible par `session.update`
+  avant la bascule. L'italien peut utiliser le mode direct.
 - **Échec de la liaison audio entre appareils** : repli vers le circuit LLM + ElevenLabs. La détection
   d’échec prend du temps ; ce n’est pas une bascule instantanée ni une reprise garantie de l’audio perdu.
 
@@ -212,6 +214,8 @@ et certaines nouvelles chaînes ne sont pas traduites partout. Paramètres et di
   n’est pas une garantie de continuité audio.
 - Une panne temporaire de scrutation n’est pas une fin de session. Seuls 401/403/404 sont définitifs
   dans ce suivi ; conserver les tentatives de reconnexion pour les autres erreurs.
+- Une erreur du fournisseur ferme le micro et rétablit une commande de démarrage utilisable.
+  Ne pas laisser l'interface annoncer un micro ouvert après sa déconnexion.
 
 ## 4. Registre vocal, compte et clonage
 
@@ -275,7 +279,7 @@ Déploiement prévu sur Vercel ; pas de serveur applicatif audio permanent à ma
 | `components/conversation/` | Conversation, réglages, consentement, invitations et diagnostics |
 | `components/site/`, `app/about`, `app/faq` | Pages de présentation et FAQ publiques, en anglais, sans micro |
 | `app/[lang]/` | Mêmes pages sous le préfixe de langue (`/fr`, `/fr/about`, `/es/faq`), `/en/...` redirigé |
-| `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `011_conversation_modes.sql` |
+| `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `012_dutch_language.sql` |
 
 Conserver les interfaces `TranslationProvider`, `VoiceProvider` et `PeerTransport` : les événements
 spécifiques à un fournisseur ne doivent pas se propager dans toute l’interface utilisateur.
@@ -463,6 +467,16 @@ v3 Conversational (premier octet ~563 ms, téléchargement ~938 ms), v3 (~776 / 
 GPT Audio Mini (réponse textuelle de ton valide, ~2415 ms, audio synthétique MP3). Ces appels
 ne prouvent ni la qualité du thaï à l'écoute, ni la fidélité émotionnelle, ni la qualité d'un clone.
 Les chiffres sont des observations uniques, pas un benchmark ni une mesure navigateur complète.
+
+Correctif langues du 22 septembre 2026 : migration `012` appliquée pour accepter `nl` en base ;
+`009` reste synchronisée car le script rejoue toutes les migrations. **72 tests unitaires**, lint,
+TypeScript, build Webpack isolé et parcours Chromium à deux profils réussis : NL → mode 2,
+IT → mode 1, puis erreur fournisseur simulée et redémarrage effectif du micro. Les fournisseurs
+audio sont simulés dans ce parcours, la persistance Neon est réelle.
+Des appels ElevenLabs Flash réels ont renvoyé un MP3
+non vide pour une courte phrase synthétique en néerlandais et en italien. La création d'un jeton
+OpenAI a réussi pour ces deux langues, mais ce succès ne valide pas la traduction audio directe
+en néerlandais. Le blocage italien signalé sur appareil n'a pas été reproduit avec ces appels isolés.
 
 ## Consigne technique gérée par Next.js
 
