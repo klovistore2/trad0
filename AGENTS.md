@@ -130,10 +130,12 @@ il n'y a donc plus de repli à calculer par langue, ni de raison de remplacement
 Le v3 nu est prévu pour la narration et a été mesuré plus lent ; il n'est plus proposé.
 `ELEVENLABS_TTS_MODEL` ne sélectionne plus le modèle de synthèse.
 
-L'analyse de ton utilise toujours `gpt-audio-mini` (`TONE_MODEL`), le plus rapide des deux :
-une estimation qui arrive après la phrase ne sert à rien. Le budget d'attente après traduction est
-dérivé de la case (`toneWaitMs`) : 0 ms si le ton est refusé, 1000 ms s'il est demandé. Refuser ne
-doit rien coûter ; demander achète tout le budget.
+L'analyse de ton utilise toujours `gpt-audio-mini` (`TONE_MODEL`), le plus rapide des deux.
+Depuis le 22 septembre 2026, le ton est **échantillonné** et non plus estimé phrase par phrase :
+l'ancien budget d'attente de 1000 ms après traduction était plus court que l'analyse réelle
+(~1 s à chaud, ~2 s à froid côté serveur, plus l'envoi), si bien que presque toutes les phrases
+partaient en `timeout`. Un ton change rarement en moins de trois secondes : chaque phrase reprend
+donc la dernière estimation, **sans aucune attente**. Cocher la case ne coûte plus de délai.
 
 Les choix sont conservés sur cet appareil dans `localStorage`, pas sur le compte. Chaque phrase
 fige ses options dans les métadonnées de l'événement ; l'autre appareil les transmet à la synthèse.
@@ -144,27 +146,33 @@ Le relais HTTP existant et le téléchargement complet avant lecture sont conser
 L'analyse est distincte du clonage et fonctionne aussi pour un invité sans compte. Son activation
 explicite autorise les courts extraits nécessaires à cette fonctionnalité ; elle ne consent jamais
 au clonage. `ToneCapture` réutilise le micro existant via un AudioWorklet silencieux, uniquement
-lorsque ce locuteur a la parole en mode 2. Mémoire bornée aux huit dernières secondes en PCM mono
-16 kHz, remise à zéro après chaque phrase et à l'arrêt. Aucun fichier audio persistant.
-À la clôture du segment textuel, `/api/audio/tone` reçoit un WAV de 0,35 à 8 secondes et lance une
-analyse OpenAI en parallèle du LLM. L'analyse ne modifie ni le prompt ni le texte traduit.
+lorsque ce locuteur a la parole en mode 2. Mémoire bornée aux trois dernières secondes en PCM mono
+16 kHz (`TONE_WINDOW_SECONDS`), vidée à l'arrêt. Aucun fichier audio persistant. Rien n'est gardé
+tant que le locuteur se tait ; la capture démarre avec sa voix et envoie ses **trois premières
+secondes** à `/api/audio/tone` dès qu'elles sont entendues : pour une phrase de cinq secondes,
+l'estimation (~1 s) est prête avant la fin de la traduction. Une parole plus longue est
+ré-échantillonnée toutes les trois secondes. Une réplique plus courte est envoyée dès 0,7 s de
+silence si elle contient au moins une seconde de parole ; fermer le micro (rendre la parole,
+lecture reçue) fait de même, sans vider le tampon avant. L'analyse ne modifie ni le prompt ni le texte traduit.
 
-Deux estimations au plus sont en attente par navigateur. Après traduction, attendre au maximum
-le budget choisi, puis abandonner l'estimation tardive et continuer sans tag. Résultats ambigus,
-erreurs, capture indisponible et surcharge restent sans tag. Les réponses sont validées dans une
+`ToneTracker` garde le ton courant : **neutre par défaut**, remplacé par chaque estimation valide
+et conservé `TONE_HOLD_MS` (10 s) ; au-delà, retour au neutre. Une seule analyse à la fois ; une
+fenêtre qui arrive pendant une analyse est ignorée, la suivante suit de près. Le ton est lu après
+la traduction, donc une analyse terminée entre-temps profite déjà à la phrase. Résultats ambigus,
+erreurs et capture indisponible laissent le ton précédent valide ou le neutre. Les réponses sont validées dans une
 énumération fermée ; seuls les tags construits côté serveur sont ajoutés. Les crochets fournis dans
 le texte deviennent du texte ordinaire. `strength` décrit l'intensité, pas une probabilité calibrée.
 Le modèle audio utilise Chat Completions avec sortie texte, `store: false`, sans JSON Schema strict
 (non pris en charge par ces modèles audio). La route authentifie la session et borne le corps à 300 ko.
 
-Les diagnostics dans la roue dentée montrent estimation, modèle, délai de la requête d'analyse,
-attente ajoutée après LLM, modèle TTS réellement utilisé, délai jusqu'aux en-têtes ElevenLabs et délai
+Les diagnostics montrent estimation, modèle, fréquence d'échantillonnage, délai de la dernière
+analyse, modèle TTS réellement utilisé, délai jusqu'aux en-têtes ElevenLabs et délai
 client jusqu'au démarrage de lecture. Les en-têtes ne mesurent pas le premier son audible.
 
-Limites : découpage audio lié à l'arrivée des transcriptions, sans alignement acoustique mot à mot ;
-la fin d'une phrase longue est privilégiée par le tampon borné. Précision émotionnelle, stabilité sur
+Limites : le ton appliqué à une phrase vient des secondes précédentes, pas de la phrase elle-même ;
+un changement brusque n'est reflété qu'à la fenêtre suivante. Une force `low` ne produit aucun tag.
+Coût : environ une analyse par tranche de trois secondes de parole avec la case cochée. Précision émotionnelle, stabilité sur
 phrases courtes, clones et toutes les langues restent à évaluer. AudioWorklet/iPhone non validé.
-Une analyse trop lente peut donc être souvent ignorée avec le budget initial de 250 ms.
 Grok et Replicate ne sont pas intégrés : ajouter un fournisseur exige un adaptateur et des tests,
 pas simplement changer une variable. Le catalogue partagé est `lib/audio/speech-options.ts`.
 

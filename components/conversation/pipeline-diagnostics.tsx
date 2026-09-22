@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ConversationMode } from "@/lib/translation/modes";
 import type { PipelineTiming } from "@/lib/translation/conversation-pipeline";
 import type { SharedSession } from "@/types/session";
-import { TONE_MODEL, toneWaitMs, TTS_MODEL, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
+import { TONE_HOLD_MS, TONE_MODEL, TONE_WINDOW_SECONDS, TTS_MODEL, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
 export type PipelineState = {
   active: ConversationMode; desired: ConversationMode; switching: boolean; directAudio: string;
   reason: string; contextTurns: number; timing: PipelineTiming | null;
@@ -29,8 +29,8 @@ export function PipelineDiagnostics({ room, read }: { room: SharedSession; read:
       <dt>My output voice</dt><dd>{state?.active === "direct" ? "OpenAI" : room.me.useClone && room.me.voiceTier > 0 ? "ElevenLabs · clone" : `ElevenLabs · standard ${room.me.voiceRange ?? "neutral"}`}</dd>
       <dt>My speaking model</dt><dd>{TTS_MODEL}</dd>
       <dt>My tone analysis</dt><dd>{toneLabel(state?.outgoingSpeech)}</dd>
-      <dt>My tone budget</dt><dd>{state ? `${TONE_MODEL} · ${toneWaitMs(state.speechOptions)} ms` : "—"}</dd>
-      <dt>My tone request / extra wait after LLM</dt><dd>{state?.outgoingSpeech ? `${state.outgoingSpeech.tone.analysisMs} / ${state.outgoingSpeech.extraWaitMs} ms` : "—"}</dd>
+      <dt>My tone sampling</dt><dd>{`${TONE_MODEL} · every ${TONE_WINDOW_SECONDS} s of speech · held ${TONE_HOLD_MS / 1000} s`}</dd>
+      <dt>My last tone request</dt><dd>{state?.outgoingSpeech?.tone.status === "estimated" ? `${state.outgoingSpeech.tone.analysisMs} ms` : "—"}</dd>
       <dt>Incoming tone</dt><dd>{toneLabel(state?.incomingSpeech)}</dd>
       <dt>Incoming actual ElevenLabs model</dt><dd>{state?.synthesis?.model || "—"}</dd>
       <dt>ElevenLabs response headers (server)</dt><dd>{state?.synthesis?.headersMs ?? "—"} ms</dd>
@@ -43,6 +43,6 @@ export function PipelineDiagnostics({ room, read }: { room: SharedSession; read:
       <dt>Direct audio connection</dt><dd>{state?.directAudio}</dd>
       <dt>Fallback / failure</dt><dd>{state?.reason || "None"}</dd>
     </dl>
-    <p>Tone analysis overlaps translation. Extra wait is the added delay after translation. Response headers are not the first audible sound. Outgoing and incoming timings describe different sentences; do not add them together. Tone is experimental; strength is not a calibrated confidence score.</p>
+    <p>Tone is sampled from recent speech and never delays a sentence; without a recent estimate it is neutral. Response headers are not the first audible sound. Outgoing and incoming timings describe different sentences; do not add them together. Tone is experimental; strength is not a calibrated confidence score.</p>
   </details>;
 }

@@ -11,7 +11,7 @@ import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
 import { VoiceRangeDetector } from "@/lib/audio/voice-range";
 import { SpeechRecorder } from "@/lib/audio/speech-recorder";
 import { ToneCapture } from "@/lib/audio/tone-capture";
-import { startToneAnalysis } from "@/lib/audio/tone-analysis";
+import { ToneTracker } from "@/lib/audio/tone-analysis";
 import { DEFAULT_SPEECH_OPTIONS, isSpeechOptions, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
 import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
@@ -24,7 +24,7 @@ export function useSharedConversation(id: string, signedIn = false) {
   });
   const speechOptionsRef = useRef(speechOptions);
   const toneCapture = useRef<ToneCapture | null>(null);
-  const toneControllers = useRef(new Set<AbortController>());
+  const toneTracker = useRef<ToneTracker | null>(null);
   const incomingSpeech = useRef<SpeechMetadata | null>(null);
   const [room, setRoom] = useState<SharedSession | null>(null);
   const [message, setMessage] = useState("");
@@ -137,7 +137,7 @@ export function useSharedConversation(id: string, signedIn = false) {
     const open = micShouldBeOn();
     translationRef.current.setMicrophoneEnabled(open);
     if (!open) {
-      toneCapture.current?.stop();
+      toneCapture.current?.pause();
       // End of a turn: pause the capture, then see whether a tier has been reached.
       speechClock.current.pause();
       recorder.current?.pause();
@@ -196,29 +196,17 @@ export function useSharedConversation(id: string, signedIn = false) {
     const controller = new AbortController();
     let refreshTimer: ReturnType<typeof setTimeout>;
     const peer = new NeonPeerTransport(setMessage);
-    toneCapture.current = new ToneCapture();
-    const toneRequests = toneControllers.current;
+    const tones = new ToneTracker(id);
+    toneTracker.current = tones;
+    toneCapture.current = new ToneCapture(audio => tones.sample(audio));
     transport.current = peer;
     const turns = new ConversationPipeline({
       sessionId: id, speaker: () => roomRef.current?.me.slot ?? 0,
       languages: () => ({ sourceLanguage: roomRef.current?.me.language ?? "en", targetLanguage: roomRef.current?.peer?.language ?? "en" }),
       send: event => peer.send(event), onTranslation: text => setContextTranslation(previous => (previous + " " + text).trim().slice(-12_000)),
       onError: setMessage, canSwitch: () => !directAudio.current?.isSendingAudio(),
-      prepareSpeech: signal => {
-        const options = { ...speechOptionsRef.current };
-        const audio = toneCapture.current?.take() ?? null;
-        // Bound concurrent estimates even when the translation queue grows.
-        const busy = toneRequests.size >= 2;
-        const request = new AbortController();
-        if (!busy) toneRequests.add(request);
-        const job = startToneAnalysis(id, options, busy ? null : audio, AbortSignal.any([signal, request.signal]));
-        const cancel = () => { request.abort(); job.cancel(); toneRequests.delete(request); };
-        return { options, job: { cancel, finish: async wait => {
-          const result = await job.finish(wait); cancel();
-          if (busy && options.emotion) result.tone.status = "busy";
-          return result;
-        } } };
-      },
+      speechOptions: () => ({ ...speechOptionsRef.current }),
+      currentTone: options => tones.current(options),
       switchMode: async mode => {
         if (controller.signal.aborted) return;
         clearTimeout(sourceCommitTimer.current);
@@ -417,7 +405,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       document.removeEventListener("pointerdown", armSound); document.removeEventListener("keydown", armSound);
       unsubscribe(); turns.dispose(); peer.disconnect(); player.dispose(); detector.current?.stop(); detector.current = null; recorder.current?.stop(); recorder.current = null;
       toneCapture.current?.stop(); toneCapture.current = null;
-      for (const request of toneRequests) request.abort(); toneRequests.clear();
+      tones.reset(); toneTracker.current = null;
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
@@ -466,7 +454,7 @@ export function useSharedConversation(id: string, signedIn = false) {
     try { localStorage.setItem("trad0-speech-options", JSON.stringify(next)); } catch {}
     // Turning the estimate off must release the microphone tap and drop anything in flight.
     if (!next.emotion) {
-      for (const request of toneControllers.current) request.abort();
+      toneTracker.current?.reset();
       toneCapture.current?.stop();
     }
     syncMicrophone();

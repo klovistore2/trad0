@@ -1,3 +1,4 @@
+import { TONE_WINDOW_SECONDS } from "./speech-options";
 export function pcmWav(chunks: Float32Array[], rate: number): Blob | null {
   const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   if (length < rate * 0.35) return null;
@@ -13,6 +14,18 @@ export function pcmWav(chunks: Float32Array[], rate: number): Blob | null {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
+// Speaking level below which audio is treated as silence.
+const SILENCE_RMS = 0.01;
+// This much silence ends an utterance: a short one is analysed right away.
+const SPEECH_GAP_SECONDS = 0.7;
+function rms(chunks: Float32Array[]) {
+  let sum = 0, count = 0;
+  for (const chunk of chunks) for (const sample of chunk) { sum += sample * sample; count++; }
+  return count ? Math.sqrt(sum / count) : 0;
+}
+
+// Starts listening when the speaker starts talking and hands over the first seconds at once, so
+// the estimate is ready by the time the sentence is translated. Longer speech is re-sampled.
 export class ToneCapture {
   private context?: AudioContext;
   private source?: MediaStreamAudioSourceNode;
@@ -20,8 +33,14 @@ export class ToneCapture {
   private stream?: MediaStream;
   private chunks: Float32Array[] = [];
   private length = 0;
+  private fresh = 0;
+  private silence = 0;
+  private speaking = false;
   private generation = 0;
+  private paused = false;
+  constructor(private onWindow: (audio: Blob) => void, private windowSeconds = TONE_WINDOW_SECONDS) {}
   listen(stream: MediaStream) {
+    this.paused = false;
     if (this.stream === stream) return;
     this.stop(); this.stream = stream;
     const generation = this.generation;
@@ -32,9 +51,8 @@ export class ToneCapture {
         if (generation !== this.generation) return;
         const node = new AudioWorkletNode(context, "tone-capture"); this.node = node;
         node.port.onmessage = ({ data }: MessageEvent<Float32Array>) => {
-          if (generation !== this.generation) return;
-          this.chunks.push(data); this.length += data.length;
-          while (this.length > context.sampleRate * 8 && this.chunks.length) this.length -= this.chunks.shift()!.length;
+          if (generation !== this.generation || this.paused) return;
+          this.add(data, context.sampleRate);
         };
         this.source = context.createMediaStreamSource(stream);
         this.source.connect(node); node.connect(context.destination); // Processor outputs silence.
@@ -42,16 +60,36 @@ export class ToneCapture {
       } catch { if (generation === this.generation) this.stop(); }
     })();
   }
-  take() {
-    const result = pcmWav(this.chunks, this.context?.sampleRate ?? 16000);
-    this.chunks = []; this.length = 0;
-    return result;
+  add(data: Float32Array, rate: number) {
+    const voiced = rms([data]) >= SILENCE_RMS;
+    if (!this.speaking && !voiced) return;
+    this.speaking = true;
+    this.chunks.push(data); this.length += data.length; this.fresh += data.length;
+    this.silence = voiced ? 0 : this.silence + data.length;
+    while (this.length - this.chunks[0].length >= rate * this.windowSeconds) this.length -= this.chunks.shift()!.length;
+    if (this.fresh >= rate * this.windowSeconds) this.emit(rate);
+    else if (this.silence >= rate * SPEECH_GAP_SECONDS) this.endUtterance(rate);
+  }
+  // A closed microphone ends the turn: a short turn still gets one estimate from what it said.
+  pause() {
+    if (!this.paused) this.endUtterance(this.context?.sampleRate ?? 16000);
+    this.paused = true;
+  }
+  private endUtterance(rate: number) {
+    if (this.speaking && this.fresh - this.silence >= rate) this.emit(rate);
+    this.chunks = []; this.length = 0; this.fresh = 0; this.silence = 0; this.speaking = false;
+  }
+  private emit(rate: number) {
+    this.fresh = 0;
+    if (rms(this.chunks) < SILENCE_RMS) return;
+    const audio = pcmWav(this.chunks, rate);
+    if (audio) this.onWindow(audio);
   }
   stop() {
     this.generation++; this.source?.disconnect(); this.node?.disconnect();
     if (this.node) this.node.port.onmessage = null;
     if (this.context) void this.context.close().catch(() => {});
     this.context = undefined; this.source = undefined; this.node = undefined; this.stream = undefined;
-    this.chunks = []; this.length = 0;
+    this.chunks = []; this.length = 0; this.fresh = 0; this.silence = 0; this.speaking = false; this.paused = false;
   }
 }

@@ -15,9 +15,11 @@ export type ToneResult = { tone: Tone; strength: "low" | "medium" | "high"; stat
 export type SpeechMetadata = { options: SpeechOptions; tone: ToneResult; extraWaitMs: number };
 // Always the faster audio model: the estimate is useless once it arrives after the sentence.
 export const TONE_MODEL: typeof TONE_MODELS[number] = "gpt-audio-mini";
-// Asking for tone is asking to wait for it; refusing it must cost nothing. There is no middle
-// setting to pick because no speaker can weigh milliseconds against emotional accuracy.
-export const toneWaitMs = (options: SpeechOptions) => options.emotion ? 1000 : 0;
+// Tone rarely changes within a few seconds, so it is sampled on this much speech and each
+// sentence reuses the latest estimate: no sentence ever waits for its own analysis.
+export const TONE_WINDOW_SECONDS = 3;
+// After this long without a fresh estimate (silence, a long pause), the speaker is neutral again.
+export const TONE_HOLD_MS = 10_000;
 const oneOf = (values: readonly unknown[], value: unknown) => values.includes(value);
 export function isSpeechOptions(value: unknown): value is SpeechOptions {
   if (!value || typeof value !== "object") return false;
