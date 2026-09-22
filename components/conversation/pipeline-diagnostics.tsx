@@ -34,7 +34,7 @@ export function PipelineDiagnostics({ room, read, children }: { room: SharedSess
       <dt>Incoming tone</dt><dd>{toneLabel(state?.incomingSpeech)}</dd>
       <dt>Incoming actual ElevenLabs model</dt><dd>{state?.synthesis?.model || "—"}</dd>
       <dt>Incoming playback</dt><dd>{state?.synthesis?.playback || "—"}</dd>
-      <dt>Incoming stability</dt><dd>{state?.synthesis?.stability === "0" ? "0 · creative (tone tag)" : state?.synthesis?.stability || "—"}</dd>
+      <dt>Incoming stability</dt><dd>{state?.synthesis?.stability && !["default", "unknown"].includes(state.synthesis.stability) ? `${state.synthesis.stability} · expressive (tone tag)` : state?.synthesis?.stability || "—"}</dd>
       <dt>ElevenLabs response headers (server)</dt><dd>{state?.synthesis?.headersMs ?? "—"} ms</dd>
       <dt>Incoming speech request → playback started</dt><dd>{state?.audioLatency?.total || "—"} ms</dd>
       <dt>My clone</dt><dd>{room.me.hasAccount ? room.me.consented ? `${room.me.voiceStatus} · tier ${room.me.voiceTier}` : "Awaiting consent" : "Account required"}</dd>

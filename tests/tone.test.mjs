@@ -63,9 +63,11 @@ test('tone defaults to neutral, keeps the latest estimate for a while, and never
   tracker.sample(new Blob(['a']));tracker.sample(new Blob(['b']));assert.equal(calls,1,'one request at a time');
   assert.equal(tracker.current(speech.options).tone,'neutral','a sentence never waits for the pending window');
   respond(Response.json(result));await tick();await tick();await tick();
-  assert.equal(tracker.current(speech.options).tone,'happy');
+  assert.equal(tracker.current(speech.options).tone,'neutral','one medium window is not enough to change tone');
+  tracker.sample(new Blob(['a2']));respond(Response.json(result));await tick();await tick();await tick();
+  assert.equal(tracker.current(speech.options).tone,'happy','two windows in a row agree');
   assert.equal(tracker.current(speech.options,Date.now()+TONE_HOLD_MS+1).tone,'neutral','an old estimate expires');
-  tracker.sample(new Blob(['c']));assert.equal(calls,2);
+  tracker.sample(new Blob(['c']));assert.equal(calls,3);
   respond(Response.json({...result,tone:'invented'}));await tick();await tick();await tick();
   assert.equal(tracker.current(speech.options).tone,'happy','malformed output never replaces a valid estimate');
   tracker.reset();assert.equal(tracker.current(speech.options).tone,'neutral');
@@ -73,6 +75,18 @@ test('tone defaults to neutral, keeps the latest estimate for a while, and never
   tracker.sample(new Blob(['d']));await tick();await tick();
   assert.equal(tracker.current(speech.options).status,'unavailable');
  }finally{globalThis.fetch=previous;}
+});
+
+test('tone changes need two agreeing windows unless unmistakable; unknown changes nothing',()=>{
+ const tracker=new ToneTracker('room');const now=Date.now();
+ const estimate=(tone,strength='medium')=>({...result,tone,strength});
+ const tone=()=>tracker.current(speech.options,now).tone;
+ tracker.consider(estimate('angry','high'),now);assert.equal(tone(),'angry','high is adopted at once');
+ tracker.consider(estimate('happy'),now);assert.equal(tone(),'angry','one contradicting window is ignored');
+ tracker.consider(estimate('unknown'),now);assert.equal(tone(),'angry');
+ tracker.consider(estimate('happy'),now);assert.equal(tone(),'happy','a second agreeing window switches');
+ tracker.consider(estimate('sad'),now);tracker.consider(estimate('excited'),now);assert.equal(tone(),'happy','two different moods do not agree');
+ tracker.consider(estimate('happy','low'),now);assert.equal(tracker.current(speech.options,now).strength,'low','same tone refreshes its strength');
 });
 
 test('each sentence carries its settings snapshot and the latest tone, without waiting for analysis',async()=>{
@@ -141,8 +155,8 @@ test('speech relay uses validated tone tags and a model the browser cannot choos
   assert.equal(response.status,200);assert.equal(response.headers.get('X-TTS-Model'),'eleven_v3_conversational');
   assert.equal(payload.text,'[happily] shouts สวัสดี');assert.equal(payload.language_code,'th');
   assert.equal(payload.model_id,'eleven_v3_conversational');
-  assert.equal(payload.voice_settings.stability,0,'a tagged sentence uses the expressive setting');
-  assert.equal(response.headers.get('X-TTS-Stability'),'0');
+  assert.equal(payload.voice_settings.stability,0.3,'a tagged sentence uses the expressive setting');
+  assert.equal(response.headers.get('X-TTS-Stability'),'0.3');
   // A browser that names a model is ignored rather than obeyed: the ID never comes from the body.
   const injected=await route.POST(request({sessionId:'room',text:'Hello',speech:{...speech,options:{...speech.options,ttsModel:'arbitrary'}}}));
   assert.equal(injected.status,200);assert.equal(payload.model_id,'eleven_v3_conversational');

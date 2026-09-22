@@ -4,6 +4,9 @@ const neutral = (status: ToneResult["status"]): ToneResult => ({ tone: "neutral"
 // a time, since the next window follows soon. Sentences read the latest result, never wait.
 export class ToneTracker {
   private latest?: { tone: ToneResult; at: number };
+  // A single window can mishear a mood. A new tone is adopted when two windows in a row agree,
+  // or at once when it is unmistakable (high); until then the current tone stays.
+  private candidate?: ToneResult["tone"];
   private failure?: ToneResult["status"];
   private request?: AbortController;
   constructor(private sessionId: string) {}
@@ -17,15 +20,22 @@ export class ToneTracker {
       const data: unknown = response.ok ? await response.json() : null;
       if (controller.signal.aborted) return;
       if (!isToneResult(data) || data.status !== "estimated") { this.failure = "unavailable"; return; }
-      this.latest = { tone: { ...data, analysisMs: Math.round(performance.now() - started) }, at: Date.now() };
       this.failure = undefined;
+      this.consider({ ...data, analysisMs: Math.round(performance.now() - started) }, Date.now());
     })().catch(() => { if (!controller.signal.aborted) this.failure = "unavailable"; })
       .finally(() => { if (this.request === controller) this.request = undefined; });
+  }
+  consider(estimate: ToneResult, now: number) {
+    if (estimate.tone === "unknown") return; // No information: neither confirms nor contradicts.
+    const current = this.latest && now - this.latest.at <= TONE_HOLD_MS ? this.latest.tone.tone : "neutral";
+    if (estimate.tone === current || estimate.strength === "high" || estimate.tone === this.candidate) {
+      this.latest = { tone: estimate, at: now }; this.candidate = undefined;
+    } else this.candidate = estimate.tone;
   }
   current(options: SpeechOptions, now = Date.now()): ToneResult {
     if (!options.emotion) return neutral("disabled");
     if (!this.latest || now - this.latest.at > TONE_HOLD_MS) return neutral(this.failure ?? "no_audio");
     return this.latest.tone;
   }
-  reset() { this.request?.abort(); this.request = undefined; this.latest = undefined; this.failure = undefined; }
+  reset() { this.request?.abort(); this.request = undefined; this.latest = undefined; this.candidate = undefined; this.failure = undefined; }
 }

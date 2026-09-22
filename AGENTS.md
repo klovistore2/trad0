@@ -168,15 +168,16 @@ ré-échantillonnée toutes les trois secondes. Une réplique plus courte est en
 silence si elle contient au moins une seconde de parole ; fermer le micro (rendre la parole,
 lecture reçue) fait de même, sans vider le tampon avant. L'analyse ne modifie ni le prompt ni le texte traduit.
 
-`ToneTracker` garde le ton courant : **neutre par défaut**, remplacé par chaque estimation valide
-et conservé `TONE_HOLD_MS` (10 s) ; au-delà, retour au neutre. Une seule analyse à la fois ; une
+`ToneTracker` garde le ton courant : **neutre par défaut**, conservé `TONE_HOLD_MS` (10 s) ;
+un nouveau ton n'est adopté que si deux fenêtres de suite concordent, ou tout de suite s'il est
+d'intensité `high` ; `unknown` ne change rien ; au-delà, retour au neutre. Une seule analyse à la fois ; une
 fenêtre qui arrive pendant une analyse est ignorée, la suivante suit de près. Le ton est lu après
 la traduction, donc une analyse terminée entre-temps profite déjà à la phrase. Résultats ambigus,
 erreurs et capture indisponible laissent le ton précédent valide ou le neutre. Les réponses sont validées dans une
 énumération fermée ; seuls les tags construits côté serveur sont ajoutés. Les crochets fournis dans
 le texte deviennent du texte ordinaire. Une phrase qui porte un tag de ton est synthétisée avec
-`voice_settings.stability = 0` (« Creative » de v3, le plus expressif, avec un risque
-d'hallucination) ; les autres phrases n'envoient aucun réglage et gardent le défaut de la voix.
+`voice_settings.stability = 0.3` (`EXPRESSIVE_STABILITY` ; 0, « Creative », a été entendu comme
+trop irrégulier d'une phrase à l'autre le 23 septembre 2026) ; les autres phrases n'envoient aucun réglage et gardent le défaut de la voix.
 Le menu DEV affiche la stabilité reçue. Rendu à valider à l'écoute, clone et voix standard. `strength` décrit l'intensité, pas une probabilité calibrée.
 Le modèle audio utilise Chat Completions avec sortie texte, `store: false`, sans JSON Schema strict
 (non pris en charge par ces modèles audio). La route authentifie la session et borne le corps à 300 ko.
