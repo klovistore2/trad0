@@ -287,7 +287,7 @@ try {
  const guestId=randomUUID();
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${guestId},${guestEmail},'google')`;
  await b.context().addCookies(await signedInContext({id:guestId,email:guestEmail}));
- await b.goto(`/compte?returnTo=${encodeURIComponent(`/session/${sessionId}`)}`);
+ await b.goto(`/session/${sessionId}`);
  await b.waitForURL(`**/session/${sessionId}`);
  await b.getByRole('button',{name:'Use my voice'}).click();
  await expect(b.getByRole('dialog')).toHaveCount(0);

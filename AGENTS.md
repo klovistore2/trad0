@@ -224,7 +224,9 @@ Le créateur est connecté. L’invité reçoit une proposition de connexion Goo
 30 secondes de parole observée. Ce compteur fonctionne sans enregistrer d’échantillon de clonage.
 L’invitation est facultative ; son masquage et son compteur sont actuellement locaux à la page.
 
-Le retour OAuth est limité à une route de conversation autorisée. `/account` rattache le compte
+Le retour OAuth est limité à une route de conversation ou à un accueil autorisés (`lib/auth/return-to.ts`).
+Il n’y a plus de page de connexion : le bouton Google lance `signIn` sur place, depuis l’accueil,
+le dialogue de voix ou la proposition faite à l’invité. `/api/sessions/[id]/account` rattache le compte
 à la place existante, via l’identité invitée conservée dans le cookie. Se connecter n’accorde pas
 le consentement : seul un accord déjà enregistré sur ce compte peut être restauré automatiquement.
 L’identité Google est associée à `adu_users` par adresse e-mail ; préserver cette correspondance.
@@ -313,8 +315,9 @@ le même identifiant ; l’unicité de l’identifiant empêche leur double inse
 | `GET /api/cleanup` | Purge protégée par `CRON_SECRET` |
 
 Pages publiques et fichiers de référencement : `/` et `/[lang]` (accueil), `/about`, `/faq` et
-leurs variantes `/[lang]/about` et `/[lang]/faq`, dont le texte reste anglais : leur `canonical`
-pointe donc vers la version sans préfixe. Également `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` et `/llms.txt`. Tous sont générés au build
+leurs variantes `/[lang]/about` et `/[lang]/faq`. Le texte de ces deux pages est traduit dans les
+quinze langues (`lib/i18n/pages/`, un fichier par langue, repli sur l’anglais) : chaque adresse est
+donc sa propre `canonical` et déclare les autres en `alternates`. Également `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` et `/llms.txt`. Tous sont générés au build
 à partir de `NEXT_PUBLIC_APP_URL` : sans cette variable au moment du build, les adresses absolues
 pointent sur localhost. `robots.txt` n’exclut aucun agent ni robot d’IA ; seules les adresses
 privées (`/api/`, `/session/`, `/join/`) sont retirées de l’exploration.

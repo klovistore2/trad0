@@ -1,6 +1,6 @@
 "use client";
-import Link from "next/link";
 import { useState } from "react";
+import { GoogleSignIn } from "@/components/account/google-sign-in";
 import { FINAL_TIER, VOICE_TIERS } from "@/lib/voice/consent";
 import { rememberVoiceDecision } from "./voice-intro";
 import type { Participant } from "@/types/session";
@@ -35,7 +35,7 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
   }
   if (!me.hasAccount) return <div className="voice-consent">
     <p>Sign in with Google to use and keep your own voice. You can continue translating without an account.</p>
-    <Link className="demo-button" href={`/compte?returnTo=${encodeURIComponent(`/session/${sessionId}`)}`}>Sign in to keep my voice</Link>
+    <GoogleSignIn className="demo-button" returnTo={`/session/${sessionId}`} label="Sign in to keep my voice" />
   </div>;
   const next = VOICE_TIERS.find(step => step.tier > me.voiceTier);
   const active = me.voiceStatus === "ready" || me.voiceStatus === "verification_required";

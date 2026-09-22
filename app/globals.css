@@ -151,7 +151,10 @@ footer p span, .privacy-note { color: var(--muted); font-size: 11px; }
 .prose .lede { font-size: 17px; line-height: 1.75; color: var(--muted); max-width: none; margin: 24px 0 8px; }
 .prose h2 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 24px; letter-spacing: -.6px; margin: 44px 0 0; }
 .prose p { font-size: 15px; line-height: 1.85; margin: 14px 0 0; }
-.prose a { color: var(--ink); }
+/* `.prose a` is more specific than `.primary-button`: without this the label was painted in --ink
+   on an --ink background, an invisible button. Links in the text keep the reading colour. */
+.prose a:not(.primary-button) { color: var(--ink); }
+.prose a.primary-button { color: var(--button-text); text-decoration: none; }
 .steps { margin: 16px 0 0; padding-left: 20px; }
 .steps li { font-size: 15px; line-height: 1.85; margin-top: 12px; }
 .faq section { border-top: 1px solid var(--border); padding-bottom: 20px; }

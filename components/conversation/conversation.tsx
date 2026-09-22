@@ -34,10 +34,10 @@ export function Conversation({ email, pageLanguage }: { email: string | null; pa
     <header className="topbar">
       <Link className="wordmark" href="/" aria-label="Trad0, home">Trad0<span className="brand-dot">.</span></Link>
       <div className="topbar-actions">
-        {/* The two pages a visitor reads before talking; both are in English for now. */}
+        {/* The two pages a visitor reads before talking, in their language. */}
         <nav className="site-nav" aria-label="Pages">
-          <Link href={pagePath("about", pageLanguage)}>About</Link>
-          <Link href={pagePath("faq", pageLanguage)}>FAQ</Link>
+          <Link href={pagePath("about", pageLanguage)}>{t("navAbout")}</Link>
+          <Link href={pagePath("faq", pageLanguage)}>{t("navFaq")}</Link>
         </nav>
         <ThemeToggle />
       </div>
@@ -59,7 +59,7 @@ export function Conversation({ email, pageLanguage }: { email: string | null; pa
       </div>
       <div className="controls">
         <p className="session-status" role="status"><span className="status-dot" />{t("autoLanguage")} ↔ {languageLabel(peerLanguage, pageLanguage)}</p>
-        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={pageLanguage === "en" ? locale : pageLanguage} languageAuto peerLanguageAuto={false} t={t} />
+        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={pageLanguage === "en" ? locale : pageLanguage} languageAuto peerLanguageAuto={false} t={t} returnTo={homePath(pageLanguage)} />
         {email && <AccountStatus email={email} />}
       </div>
     </section>

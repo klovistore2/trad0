@@ -1,14 +1,15 @@
 "use client";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { GoogleSignIn } from "@/components/account/google-sign-in";
 import type { Language } from "@/types/session";
 import type { Translate } from "@/lib/i18n/strings";
 import { useRef, useState } from "react";
-export function StartSharedSession({ signedIn, peerLanguage, language, languageAuto, peerLanguageAuto, t }: { signedIn: boolean; peerLanguage: Language; language: Language; languageAuto: boolean; peerLanguageAuto: boolean; t: Translate }) {
+export function StartSharedSession({ signedIn, peerLanguage, language, languageAuto, peerLanguageAuto, t, returnTo }: { signedIn: boolean; peerLanguage: Language; language: Language; languageAuto: boolean; peerLanguageAuto: boolean; t: Translate; returnTo: string }) {
   const router = useRouter(); const busy = useRef(false);
   const [message, setMessage] = useState(""); const [loading, setLoading] = useState(false);
   // Creating a conversation keeps your voice, so it needs an account. Joining one never does.
-  if (!signedIn) return <Link className="primary-button" href="/compte">{t("homeSignIn")}</Link>;
+  // Google is the only way in, so the button signs in on the spot instead of opening a page for it.
+  if (!signedIn) return <GoogleSignIn returnTo={returnTo} label={t("homeSignIn")} />;
   return <div>
     <button className="primary-button" disabled={loading} onClick={async () => {
       if (busy.current) return; busy.current = true; setLoading(true); setMessage("");

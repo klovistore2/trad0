@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { homePath } from "@/lib/i18n/home-metadata";
+import { pagePath } from "@/lib/i18n/page-metadata";
 import { absolute } from "@/lib/i18n/site-url";
 import { LANGUAGES } from "@/types/session";
 
@@ -14,7 +15,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: code === "en" ? 1 : 0.8,
     alternates: { languages },
   }));
-  return [...home,
-    { url: absolute("/about"), changeFrequency: "monthly" as const, priority: 0.6 },
-    { url: absolute("/faq"), changeFrequency: "monthly" as const, priority: 0.6 }];
+  // About and FAQ are translated too, so every language's address is listed with its siblings.
+  const pages = (["about", "faq"] as const).flatMap(page => {
+    const siblings = Object.fromEntries(LANGUAGES.map(code => [code, absolute(pagePath(page, code))]));
+    return ordered.map(code => ({
+      url: absolute(pagePath(page, code)),
+      changeFrequency: "monthly" as const,
+      priority: code === "en" ? 0.6 : 0.5,
+      alternates: { languages: siblings },
+    }));
+  });
+  return [...home, ...pages];
 }
