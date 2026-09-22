@@ -4,6 +4,10 @@ const neutral = (status: ToneResult["status"]): ToneResult => ({ tone: "neutral"
 // a time, since the next window follows soon. Sentences read the latest result, never wait.
 export class ToneTracker {
   private latest?: { tone: ToneResult; at: number };
+  // How many analyses in a row must agree before the tone changes, and how long it holds.
+  private confirmations = 1;
+  private holdMs = TONE_HOLD_MS;
+  private candidate?: { tone: ToneResult["tone"]; count: number };
   private failure?: ToneResult["status"];
   private request?: AbortController;
   constructor(private sessionId: string) {}
@@ -17,15 +21,22 @@ export class ToneTracker {
       const data: unknown = response.ok ? await response.json() : null;
       if (controller.signal.aborted) return;
       if (!isToneResult(data) || data.status !== "estimated") { this.failure = "unavailable"; return; }
-      this.latest = { tone: { ...data, analysisMs: Math.round(performance.now() - started) }, at: Date.now() };
       this.failure = undefined;
+      this.consider({ ...data, analysisMs: Math.round(performance.now() - started) }, Date.now());
     })().catch(() => { if (!controller.signal.aborted) this.failure = "unavailable"; })
       .finally(() => { if (this.request === controller) this.request = undefined; });
   }
+  tune(confirmations: number, holdSeconds: number) { this.confirmations = confirmations; this.holdMs = holdSeconds * 1000; }
+  consider(estimate: ToneResult, now: number) {
+    const current = this.latest && now - this.latest.at <= this.holdMs ? this.latest.tone.tone : undefined;
+    const count = estimate.tone === current ? this.confirmations : this.candidate?.tone === estimate.tone ? this.candidate.count + 1 : 1;
+    if (count >= this.confirmations) { this.latest = { tone: estimate, at: now }; this.candidate = undefined; }
+    else this.candidate = { tone: estimate.tone, count };
+  }
   current(options: SpeechOptions, now = Date.now()): ToneResult {
     if (!options.emotion) return neutral("disabled");
-    if (!this.latest || now - this.latest.at > TONE_HOLD_MS) return neutral(this.failure ?? "no_audio");
+    if (!this.latest || now - this.latest.at > this.holdMs) return neutral(this.failure ?? "no_audio");
     return this.latest.tone;
   }
-  reset() { this.request?.abort(); this.request = undefined; this.latest = undefined; this.failure = undefined; }
+  reset() { this.request?.abort(); this.request = undefined; this.latest = undefined; this.candidate = undefined; this.failure = undefined; }
 }

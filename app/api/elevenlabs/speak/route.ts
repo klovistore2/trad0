@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { ...elevenHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({ text: spoken.text, model_id: model, ...(language ? { language_code: language } : {}),
-        ...(spoken.stability === undefined ? {} : { voice_settings: { stability: spoken.stability } }) }),
+        ...(spoken.stability === undefined ? {} : { voice_settings: { stability: spoken.stability, ...(spoken.style ? { style: spoken.style } : {}) } }) }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!upstream.ok || !upstream.body) throw new HttpError(502, "The voice is unavailable. The text is still shown.");
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       "X-Voice-Source": voiceId ? "clone" : `standard-${range ?? "neutral"}`,
       "X-TTS-Model": model,
       "X-TTS-Stability": spoken.stability === undefined ? "default" : String(spoken.stability),
+      "X-TTS-Style": String(spoken.style ?? 0),
       "X-TTS-Headers-Ms": String(Math.round(performance.now() - started)),
     } });
   } catch (error) { return failure(error); }

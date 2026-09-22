@@ -247,6 +247,12 @@ button:disabled { opacity: .5; cursor: wait; }
 .pipeline-diagnostics > p { padding: 0 12px; }
 .pipeline-diagnostics > dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-wrap: anywhere; text-align: left; padding: 12px; border: 1px solid var(--surface-border); border-radius: 12px; }
 .pipeline-diagnostics dd { margin: 0; }
+.tone-tuning { display: grid; gap: 10px; margin: 10px 0; padding: 12px; border: 1px solid var(--surface-border); border-radius: 12px; text-align: left; }
+.tone-tuning legend { padding: 0 6px; color: var(--ink); }
+.tuning-row { display: grid; gap: 4px; }
+.tuning-row span { display: flex; justify-content: space-between; gap: 12px; }
+.tuning-row b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tuning-row input { width: 100%; min-height: 32px; accent-color: var(--accent); }
 .settings .language-picker { max-width: 100%; }
 
 /* One row per decision: a large target, the choice in plain words, its cost underneath. */

@@ -90,7 +90,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           <OwnWords original={session.translation.original} translation={session.translation.translation}
             mine={room.me.language} theirs={room.peer.language} t={t} />
           {/* Only for the accounts listed in ADMIN_MAIL; everyone else sees the conversation alone. */}
-          {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState}>
+          {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState} tuning={session.toneTuning} onTuning={session.setToneTuning}>
             <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()}
               voiceStatus={session.voiceStatus} received={session.received} me={room.me} peer={room.peer} />
           </PipelineDiagnostics>}

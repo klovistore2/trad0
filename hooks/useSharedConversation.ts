@@ -12,7 +12,7 @@ import { VoiceRangeDetector } from "@/lib/audio/voice-range";
 import { SpeechRecorder } from "@/lib/audio/speech-recorder";
 import { ToneCapture } from "@/lib/audio/tone-capture";
 import { ToneTracker } from "@/lib/audio/tone-analysis";
-import { DEFAULT_SPEECH_OPTIONS, isSpeechOptions, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
+import { DEFAULT_SPEECH_OPTIONS, DEFAULT_TONE_TUNING, isSpeechOptions, isToneTuning, type SpeechOptions, type SpeechMetadata, type ToneTuning } from "@/lib/audio/speech-options";
 import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
@@ -23,8 +23,18 @@ export function useSharedConversation(id: string, signedIn = false) {
     catch { return DEFAULT_SPEECH_OPTIONS; }
   });
   const speechOptionsRef = useRef(speechOptions);
+  // DEV sliders for tone, kept on this phone. Defaults are the settings validated by ear.
+  const [toneTuning, updateToneTuning] = useState<ToneTuning>(() => {
+    try { const saved = JSON.parse(localStorage.getItem("trad0-tone-tuning") || "null"); return isToneTuning(saved) ? saved : DEFAULT_TONE_TUNING; }
+    catch { return DEFAULT_TONE_TUNING; }
+  });
+  const toneTuningRef = useRef(toneTuning);
   // Tone analysis is an account feature: a choice saved on this phone never applies to a guest.
-  const activeSpeechOptions = useCallback((): SpeechOptions => ({ ...speechOptionsRef.current, emotion: speechOptionsRef.current.emotion && !!roomRef.current?.me.hasAccount }), []);
+  // Each sentence carries the voice tuning of the phone that spoke it.
+  const activeSpeechOptions = useCallback((): SpeechOptions => {
+    const { stability, style, minStrength } = toneTuningRef.current;
+    return { ...speechOptionsRef.current, emotion: speechOptionsRef.current.emotion && !!roomRef.current?.me.hasAccount, voice: { stability, style, minStrength } };
+  }, []);
   const toneCapture = useRef<ToneCapture | null>(null);
   const toneTracker = useRef<ToneTracker | null>(null);
   const incomingSpeech = useRef<SpeechMetadata | null>(null);
@@ -214,8 +224,9 @@ export function useSharedConversation(id: string, signedIn = false) {
     let refreshTimer: ReturnType<typeof setTimeout>;
     const peer = new NeonPeerTransport(setMessage);
     const tones = new ToneTracker(id);
+    tones.tune(toneTuningRef.current.confirmations, toneTuningRef.current.holdSeconds);
     toneTracker.current = tones;
-    toneCapture.current = new ToneCapture(audio => tones.sample(audio));
+    toneCapture.current = new ToneCapture(audio => tones.sample(audio), toneTuningRef.current.windowSeconds);
     transport.current = peer;
     const turns = new ConversationPipeline({
       sessionId: id, speaker: () => roomRef.current?.me.slot ?? 0,
@@ -487,6 +498,13 @@ export function useSharedConversation(id: string, signedIn = false) {
     }
     syncMicrophone();
   }
+  function setToneTuning(next: ToneTuning) {
+    if (!isToneTuning(next)) return;
+    toneTuningRef.current = next; updateToneTuning(next);
+    try { localStorage.setItem("trad0-tone-tuning", JSON.stringify(next)); } catch {}
+    toneTracker.current?.tune(next.confirmations, next.holdSeconds);
+    toneCapture.current?.setWindow(next.windowSeconds);
+  }
   async function takeFloor() {
     if (claiming || floorRef.current === roomRef.current?.me.slot) return;
     await changeFloor(() => transport.current?.takeFloor(), "Impossible de prendre la parole.");
@@ -580,5 +598,5 @@ export function useSharedConversation(id: string, signedIn = false) {
   }), [activeSpeechOptions]);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { ended, speechOptions, setSpeechOptions, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, speakingTurn, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { ended, speechOptions, setSpeechOptions, toneTuning, setToneTuning, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, speakingTurn, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

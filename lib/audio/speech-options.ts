@@ -9,7 +9,7 @@ export const TONES = ["neutral", "happy", "sad", "angry", "excited", "whispering
 export type Tone = typeof TONES[number];
 // Only the trade-off the speaker actually decides. Everything it implies is derived below,
 // so the panel never asks a question whose answer follows from another answer.
-export type SpeechOptions = { emotion: boolean };
+export type SpeechOptions = { emotion: boolean; voice?: ToneVoice };
 export const DEFAULT_SPEECH_OPTIONS: SpeechOptions = { emotion: false };
 export type ToneResult = { tone: Tone; strength: "low" | "medium" | "high"; status: "estimated" | "disabled" | "no_audio" | "busy" | "unavailable" | "timeout"; analysisMs: number; model: string };
 export type SpeechMetadata = { options: SpeechOptions; tone: ToneResult; extraWaitMs: number };
@@ -20,10 +20,30 @@ export const TONE_MODEL: typeof TONE_MODELS[number] = "gpt-audio-mini";
 export const TONE_WINDOW_SECONDS = 3;
 // After this long without a fresh estimate (silence, a long pause), the speaker is neutral again.
 export const TONE_HOLD_MS = 10_000;
+// Fine tuning of tone, set with the DEV sliders while listening. The voice part travels with each
+// sentence to the synthesis; the rest shapes the estimate on the speaker's phone. Bounded numbers
+// only: a browser can shape how a tag sounds, never pick a model or a voice. Defaults are the
+// settings validated by ear (v10.2).
+export type ToneVoice = { stability: number; style: number; minStrength: ToneResult["strength"] };
+export type ToneTuning = ToneVoice & { confirmations: number; windowSeconds: number; holdSeconds: number };
+export const DEFAULT_TONE_TUNING: ToneTuning = { stability: 0, style: 0, minStrength: "medium", confirmations: 1, windowSeconds: TONE_WINDOW_SECONDS, holdSeconds: TONE_HOLD_MS / 1000 };
 const oneOf = (values: readonly unknown[], value: unknown) => values.includes(value);
+const within = (value: unknown, min: number, max: number) => typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+export function isToneVoice(value: unknown): value is ToneVoice {
+  if (!value || typeof value !== "object") return false;
+  const v = value as ToneVoice;
+  return within(v.stability, 0, 1) && within(v.style, 0, 1) && oneOf(["low", "medium", "high"], v.minStrength);
+}
+export function isToneTuning(value: unknown): value is ToneTuning {
+  if (!isToneVoice(value)) return false;
+  const v = value as ToneTuning;
+  return Number.isInteger(v.confirmations) && within(v.confirmations, 1, 3) && Number.isInteger(v.windowSeconds) && within(v.windowSeconds, 2, 6)
+    && Number.isInteger(v.holdSeconds) && within(v.holdSeconds, 5, 30);
+}
 export function isSpeechOptions(value: unknown): value is SpeechOptions {
   if (!value || typeof value !== "object") return false;
-  return typeof (value as SpeechOptions).emotion === "boolean";
+  const v = value as SpeechOptions;
+  return typeof v.emotion === "boolean" && (v.voice === undefined || isToneVoice(v.voice));
 }
 export function isToneResult(value: unknown): value is ToneResult {
   if (!value || typeof value !== "object") return false;
@@ -43,7 +63,9 @@ export function expressiveText(text: string, model: string, speech?: SpeechMetad
   // Only our own allowlisted tags become directives. Preserve literal content as words.
   const clean = text.replace(/[\[\]［］]/g, "");
   const tone = speech?.tone;
-  if (!speech?.options.emotion || tone?.status !== "estimated" || tone.strength === "low") return clean;
+  const rank = { low: 0, medium: 1, high: 2 };
+  const minimum = speech?.options.voice?.minStrength ?? DEFAULT_TONE_TUNING.minStrength;
+  if (!speech?.options.emotion || tone?.status !== "estimated" || rank[tone.strength] < rank[minimum]) return clean;
   const tags: Partial<Record<Tone, string>> = { happy: "happily", sad: "sad", angry: "angry", excited: "excited", whispering: "whispers" };
   const tag = tags[tone.tone];
   return tag ? `[${tag}] ${clean}` : clean;
@@ -55,5 +77,7 @@ export const EXPRESSIVE_STABILITY = 0;
 export function speechRequest(text: string, model: string, speech?: SpeechMetadata) {
   const spoken = expressiveText(text, model, speech);
   // Literal brackets are stripped from the text, so a leading one can only be our own tag.
-  return { text: spoken, stability: spoken.startsWith("[") ? EXPRESSIVE_STABILITY : undefined };
+  if (!spoken.startsWith("[")) return { text: spoken };
+  const voice = speech?.options.voice;
+  return { text: spoken, stability: voice?.stability ?? EXPRESSIVE_STABILITY, style: voice?.style || undefined };
 }

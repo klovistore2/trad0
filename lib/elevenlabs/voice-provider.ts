@@ -38,7 +38,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private failure = "";
   private voiceSource = "";
   private latency = { request: 0, total: 0 };
-  private synthesis = { model: "", stability: "", headersMs: 0, playback: "" };
+  private synthesis = { model: "", stability: "", style: "", headersMs: 0, playback: "" };
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -144,7 +144,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (controller.signal.aborted) return;
       const startedAt = Date.now();
       this.latency = { request: 0, total: 0 };
-      this.synthesis = { model: "", stability: "", headersMs: 0, playback: "" };
+      this.synthesis = { model: "", stability: "", style: "", headersMs: 0, playback: "" };
       await this.unlock();
       this.onStatus("loading");
       let text = "";
@@ -162,7 +162,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
       const Source = response.body ? streamingSource(response.headers.get("content-type")) : null;
-      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0, playback: Source ? "progressive" : "download" };
+      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", style: response.headers.get("x-tts-style") || "0", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0, playback: Source ? "progressive" : "download" };
       this.latency = { request: Date.now() - startedAt, total: 0 };
       let element: HTMLAudioElement;
       let finished: Promise<void> = Promise.resolve();

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLoader } from './load-ts.mjs';
 const load=createLoader();
-const {DEFAULT_SPEECH_OPTIONS: defaults,isSpeechOptions,isSpeechMetadata,expressiveText,TTS_MODEL,TONE_MODEL,TONE_HOLD_MS}=load('lib/audio/speech-options.ts');
+const {DEFAULT_SPEECH_OPTIONS: defaults,DEFAULT_TONE_TUNING,isSpeechOptions,isSpeechMetadata,isToneTuning,expressiveText,speechRequest,TTS_MODEL,TONE_MODEL,TONE_HOLD_MS}=load('lib/audio/speech-options.ts');
 const {pcmWav,ToneCapture}=load('lib/audio/tone-capture.ts');
 const {ToneTracker}=load('lib/audio/tone-analysis.ts');
 const {ConversationPipeline}=load('lib/translation/conversation-pipeline.ts');
@@ -157,4 +157,27 @@ test('speech relay uses validated tone tags and a model the browser cannot choos
   if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;
   if(oldModel===undefined)delete process.env.ELEVENLABS_TTS_MODEL;else process.env.ELEVENLABS_TTS_MODEL=oldModel;
  }
+});
+
+test('DEV tone tuning is bounded, travels with the sentence and defaults to the validated settings',()=>{
+ assert.ok(isToneTuning(DEFAULT_TONE_TUNING));
+ assert.deepEqual({...DEFAULT_TONE_TUNING},{stability:0,style:0,minStrength:'medium',confirmations:1,windowSeconds:3,holdSeconds:10});
+ for(const bad of [{stability:1.5},{style:-0.1},{minStrength:'max'},{confirmations:4},{confirmations:1.5},{windowSeconds:10},{holdSeconds:2}])
+  assert.equal(isToneTuning({...DEFAULT_TONE_TUNING,...bad}),false,JSON.stringify(bad));
+ assert.equal(isSpeechOptions({emotion:true,voice:{stability:2,style:0,minStrength:'low'}}),false,'out-of-range voice is refused');
+ const voice=(extra)=>({...speech,options:{...speech.options,voice:{stability:0.4,style:0.2,minStrength:'medium',...extra}}});
+ assert.deepEqual(speechRequest('Hello',TTS_MODEL,voice()),{text:'[happily] Hello',stability:0.4,style:0.2});
+ assert.deepEqual(speechRequest('Hello',TTS_MODEL,speech),{text:'[happily] Hello',stability:0,style:undefined},'no tuning: validated defaults');
+ assert.deepEqual(speechRequest('Hello',TTS_MODEL,{...speech,tone:{...result,strength:'low'}}),{text:'Hello'},'low stays untagged by default');
+ assert.equal(speechRequest('Hello',TTS_MODEL,{...voice({minStrength:'low'}),tone:{...result,strength:'low'}}).text,'[happily] Hello');
+ assert.equal(speechRequest('Hello',TTS_MODEL,voice({minStrength:'high'})).text,'Hello','medium is below a high minimum');
+});
+
+test('tone tracker follows the tuned confirmations and hold time',()=>{
+ const tracker=new ToneTracker('room');const now=Date.now();const est=(tone)=>({...result,tone});
+ tracker.consider(est('happy'),now);assert.equal(tracker.current(speech.options,now).tone,'happy','one analysis is enough by default');
+ tracker.tune(2,5);
+ tracker.consider(est('sad'),now);assert.equal(tracker.current(speech.options,now).tone,'happy');
+ tracker.consider(est('sad'),now);assert.equal(tracker.current(speech.options,now).tone,'sad','two agreeing analyses');
+ assert.equal(tracker.current(speech.options,now+6000).tone,'neutral','held 5 s');
 });

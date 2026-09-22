@@ -39,6 +39,7 @@ export class ToneCapture {
   private generation = 0;
   private paused = false;
   constructor(private onWindow: (audio: Blob) => void, private windowSeconds = TONE_WINDOW_SECONDS) {}
+  setWindow(seconds: number) { this.windowSeconds = seconds; }
   listen(stream: MediaStream) {
     this.paused = false;
     if (this.stream === stream) return;

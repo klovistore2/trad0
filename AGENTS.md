@@ -180,7 +180,13 @@ le texte deviennent du texte ordinaire. Une phrase qui porte un tag de ton est s
 `voice_settings.stability = 0` (`EXPRESSIVE_STABILITY`, « Creative » de v3, le plus expressif).
 Essayé le 23 septembre 2026 : 0.3 avec double confirmation du ton a été jugé moins bon à l'écoute,
 retour à 0 et à l'adoption immédiate ; les autres phrases n'envoient aucun réglage et gardent le défaut de la voix.
-Le menu DEV affiche la stabilité reçue. Rendu à valider à l'écoute, clone et voix standard. `strength` décrit l'intensité, pas une probabilité calibrée.
+Le menu DEV affiche la stabilité reçue et contient un **pupitre de réglage temporaire du ton**
+(23 septembre 2026) : stabilité et `style` des phrases taguées, intensité minimale d'un tag,
+analyses concordantes avant un changement, fenêtre d'analyse et durée de validité. Chaque téléphone
+règle **sa propre parole sortante** ; les réglages vocaux voyagent dans `options.voice` de chaque
+phrase, validés et bornés côté serveur (`isToneVoice`), et sont gardés dans `localStorage`
+(`trad0-tone-tuning`). Les valeurs par défaut (`DEFAULT_TONE_TUNING`) sont celles validées à
+l'écoute en v10.2. Une fois le bon réglage trouvé, le figer dans le code et retirer le pupitre. Rendu à valider à l'écoute, clone et voix standard. `strength` décrit l'intensité, pas une probabilité calibrée.
 Le modèle audio utilise Chat Completions avec sortie texte, `store: false`, sans JSON Schema strict
 (non pris en charge par ces modèles audio). La route authentifie la session et borne le corps à 300 ko.
 
