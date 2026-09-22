@@ -110,10 +110,10 @@ try {
  await b.getByLabel(/Match my tone of voice/).check();
  await b.getByRole('button',{name:'Back to the conversation'}).click();
  // Explicit test preference; tone must never change the product's mode selection.
- await expect(b.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('1 ·');
  const mode=await b.request.patch(`/api/sessions/${sessionId}/mode`,{headers:{origin:baseURL},data:{preference:'context'}});
  assert.equal(mode.status(),200);
- await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·',{timeout:15000});
+ await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('2 ·',{timeout:15000});
  const uploads=[],responses=[],published=[],syntheses=[];
  b.on('request',request=>{
   if(request.url().endsWith('/api/audio/tone')) {

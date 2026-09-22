@@ -18,7 +18,7 @@ Variables serveur :
 - `ELEVENLABS_FALLBACK_VOICE_ID` facultatif. Sinon l’application sélectionne une voix standard du compte.
 - `OPENAI_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper` pour conserver la transcription en continu.
 - `OPENAI_TEXT_TRANSLATION_MODEL=gpt-4.1-mini` pour le mode avec contexte. Le modèle doit accepter Chat Completions et le JSON structuré.
-- `APP_DIAGNOSTICS=1` affiche le panneau des deux circuits sur la conversation ; absent, il est visible uniquement avec `next dev`. `0` le masque partout.
+- `ADMIN_MAIL` : adresse(s) Google, séparées par des virgules, qui voient le menu DEV sur la conversation, ainsi que l'invité d'une conversation créée par l'une d'elles. Une entrée `@domaine` couvre tout un domaine. Personne d'autre ne le voit.
 - `WEBRTC_ICE_SERVERS` : tableau JSON des serveurs STUN/TURN pour l’audio direct entre appareils. `[]` fonctionne seulement si les réseaux permettent la connexion directe. Utiliser des identifiants TURN dédiés : cette configuration est remise aux participants authentifiés.
 - `DATABASE_URL` : connexion Neon. Les migrations additives créent seulement les tables `adu_sessions`, `adu_participants`, `adu_events`, plus les colonnes `adu_sessions.floor_slot` (tour de parole), `adu_participants.voice_range` (registre détecté) et `adu_participants.voice_tier` (palier de clonage). `npm run db:migrate` rejoue l’ensemble du dossier `migrations/`, sans effet sur une base déjà à jour.
 - `AUTH_SECRET` : clé de signature des sessions Auth.js, `openssl rand -base64 32`.

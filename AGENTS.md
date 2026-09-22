@@ -386,16 +386,17 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `CRON_SECRET` | Autorisation de purge et prérequis de clonage |
 | `NEXT_PUBLIC_APP_URL` | Origine réelle du site ; HTTPS sur téléphone, jamais localhost dans un QR partagé avec un téléphone |
 | `WEBRTC_ICE_SERVERS` | Tableau JSON STUN/TURN remis aux participants authentifiés ; identifiants dédiés à ce service |
-| `APP_DIAGNOSTICS` | `1` : panneau des modes visible ; `0` : masqué ; sinon visible seulement en développement |
+| `ADMIN_MAIL` | Adresse(s) Google, séparées par des virgules, qui voient le menu DEV ; `@domaine` couvre un domaine (serveur de test : `@example.test`) |
 
 Les deux panneaux de diagnostic sont une exception temporaire, demandée pour le développement, à la
-sobriété de l'écran de conversation. Ils se déplient tous les deux **sur l'écran de conversation**,
-sous « Mes mots », et non plus dans les paramètres : leurs valeurs ne bougent que pendant un échange.
+sobriété de l'écran de conversation. Ils forment **un seul menu DEV sur l'écran de conversation**,
+sous « Mes mots » : le diagnostic voix et son se déplie à la fin du menu DEV, et non plus dans les paramètres : leurs valeurs ne bougent que pendant un échange.
 Le premier montre les deux directions, modèles, voix, contexte, liaison directe et mesures
 disponibles, avec l'estimation de ton visible dès la ligne repliée. Le second reprend le diagnostic
-audio historique. Ils sont actuellement affichés **sans condition**, à la demande explicite de
-l'auteur qui teste seul sur appareils : `APP_DIAGNOSTICS` ne les masque plus. Les remettre derrière
-`room.diagnostics` dans `shared-conversation.tsx` avant toute mise à disposition d'autres personnes.
+audio historique. Ils ne s'affichent que pour un compte Google listé dans `ADMIN_MAIL`, comparé
+sans tenir compte de la casse **côté serveur** dans `sessionState` : l'adresse ne part jamais au
+navigateur, qui ne reçoit que `diagnostics: true`. L'invité d'une conversation créée par un admin
+voit aussi le menu : c'est le partenaire de test. Les autres ne voient rien, y compris en local.
 
 Distinguer attente de fin de phrase, LLM, publication, transport et démarrage audio. L’âge d’un événement
 est calculé par PostgreSQL : ne pas soustraire les horloges de deux téléphones. Les mesures sortantes

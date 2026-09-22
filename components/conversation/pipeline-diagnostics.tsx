@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ConversationMode } from "@/lib/translation/modes";
 import type { PipelineTiming } from "@/lib/translation/conversation-pipeline";
 import type { SharedSession } from "@/types/session";
@@ -14,7 +14,7 @@ export type PipelineState = {
 };
 const toneLabel = (speech: SpeechMetadata | null | undefined) => speech ? `${speech.tone.status} · ${speech.tone.tone} · ${speech.tone.strength} · ${speech.tone.model}` : "—";
 const label = (mode: string) => mode === "context" ? "2 · Transcript → LLM → ElevenLabs" : "1 · OpenAI live speech";
-export function PipelineDiagnostics({ room, read }: { room: SharedSession; read: () => PipelineState }) {
+export function PipelineDiagnostics({ room, read, children }: { room: SharedSession; read: () => PipelineState; children?: ReactNode }) {
   const [state, setState] = useState<PipelineState | null>(null);
   useEffect(() => { const update = () => setState(read()); update(); const timer = setInterval(update, 500); return () => clearInterval(timer); }, [read]);
   return <details className="pipeline-diagnostics">
@@ -44,5 +44,6 @@ export function PipelineDiagnostics({ room, read }: { room: SharedSession; read:
       <dt>Fallback / failure</dt><dd>{state?.reason || "None"}</dd>
     </dl>
     <p>Tone is sampled from recent speech and never delays a sentence; without a recent estimate it is neutral. Response headers are not the first audible sound. Outgoing and incoming timings describe different sentences; do not add them together. Tone is experimental; strength is not a calibrated confidence score.</p>
+    {children}
   </details>;
 }

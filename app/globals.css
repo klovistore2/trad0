@@ -244,7 +244,7 @@ button:disabled { opacity: .5; cursor: wait; }
 .pipeline-diagnostics { width: 100%; max-width: 560px; margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .pipeline-diagnostics summary { cursor: pointer; padding: 12px; font-size: 12px; }
 .pipeline-diagnostics > p { padding: 0 12px; }
-.pipeline-diagnostics dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-wrap: anywhere; text-align: left; padding: 12px; border: 1px solid var(--surface-border); border-radius: 12px; }
+.pipeline-diagnostics > dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-wrap: anywhere; text-align: left; padding: 12px; border: 1px solid var(--surface-border); border-radius: 12px; }
 .pipeline-diagnostics dd { margin: 0; }
 .settings .language-picker { max-width: 100%; }
 

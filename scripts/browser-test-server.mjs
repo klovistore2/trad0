@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout } from 'node:timers/promises';
 const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--port', '3100'], {
   // Dummy Google credentials so the sign-in page has the same layout as production.
-  env: { ...process.env, NEXT_TEST_BUILD:'1', APP_DIAGNOSTICS:'1', NEXT_PUBLIC_APP_URL:'http://localhost:3100', AUTH_GOOGLE_ID:'browser-test', AUTH_GOOGLE_SECRET:'browser-test' }, stdio: ['ignore','pipe','pipe'],
+  env: { ...process.env, NEXT_TEST_BUILD:'1', ADMIN_MAIL:'@example.test', NEXT_PUBLIC_APP_URL:'http://localhost:3100', AUTH_GOOGLE_ID:'browser-test', AUTH_GOOGLE_SECRET:'browser-test' }, stdio: ['ignore','pipe','pipe'],
 });
 let output='';server.stdout.on('data',chunk=>{output+=chunk.toString();});server.stderr.on('data',chunk=>{output+=chunk.toString();});
 try {

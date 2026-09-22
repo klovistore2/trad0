@@ -201,12 +201,12 @@ try {
  const dutchResponse=await dutchUpdate;
  assert.equal(dutchResponse.status(),200,await dutchResponse.text());
  await expect(a.locator('#my-language')).toHaveValue('nl',{timeout:10000});
- await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');
+ await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('2 ·');
  assert.equal(await b.evaluate(()=>window.testUpdates?.some(e=>e.session?.audio?.output?.language==='nl')),false);
  // Returning to Italian restores the direct pipeline without leaving a dead microphone.
  await b.locator('#peer-language').selectOption('it');
  await expect(a.locator('#my-language')).toHaveValue('it');
- await expect(b.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('1 ·');
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
  // A provider error exposes a working retry button instead of claiming the mic is open.
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'error',error:{code:'test_interruption'}})}));
@@ -264,8 +264,8 @@ try {
  }, sessionId);
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
  await b.getByRole('button',{name:'Back to the conversation'}).click();
- await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');
- await expect(a.locator('.pipeline-diagnostics summary')).toContainText('1 ·');
+ await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('2 ·');
+ await expect(a.locator('.pipeline-diagnostics > summary')).toContainText('1 ·');
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live' && window.testMicrophone.enabled);
  await b.waitForTimeout(1200); // Accumulate a real bounded PCM sample from the fake microphone.
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'conversation.item.input_audio_transcription.delta',delta:'Can we go there tomorrow?'})}));

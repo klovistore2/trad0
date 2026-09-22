@@ -134,7 +134,7 @@ async function direction(speaker,listener,id,source,target,preference) {
   await speaker.getByRole('button',{name:'Settings',exact:true}).click();
   await speaker.locator('#translation-mode').selectOption(preference);
   await speaker.getByRole('button',{name:'Back to the conversation'}).click();
-  await expect(speaker.locator('.pipeline-diagnostics summary')).toContainText(result.expectedMode==='context'?'2 ·':'1 ·',{timeout:20000});
+  await expect(speaker.locator('.pipeline-diagnostics > summary')).toContainText(result.expectedMode==='context'?'2 ·':'1 ·',{timeout:20000});
   const audio=await fixture(listener,source,id);
   if(await listener.locator('.sound-icon').getAttribute('aria-pressed')==='true')await listener.locator('.sound-icon').click();
   // Start (or claim the free floor) through the same control as a real user.
@@ -142,7 +142,7 @@ async function direction(speaker,listener,id,source,target,preference) {
   await speaker.waitForFunction(()=>{
    const s=window.liveTest;return s.mic?.readyState==='live' && s.mic.enabled && s.connections.some(c=>c.provider && c.peer.connectionState==='connected');
   },null,{timeout:40000});
-  result.actualMode=(await speaker.locator('.pipeline-diagnostics summary').textContent()).includes('2 ·')?'context':'direct';
+  result.actualMode=(await speaker.locator('.pipeline-diagnostics > summary').textContent()).includes('2 ·')?'context':'direct';
   assert.equal(result.actualMode,result.expectedMode,'no unobserved fallback');
   const before=await snapshot(listener);
   const energyBefore=before.connections.filter(c=>!c.provider).reduce((sum,c)=>sum+c.energy,0);
