@@ -40,6 +40,11 @@ function isAdmin(email: unknown) {
 export async function sessionState(id: string): Promise<SharedSession> {
   const me = await member(id); const sql = db();
   await sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`;
+  // A conversation ends an hour after it goes quiet, not an hour after it started: each poll
+  // pushes the deadline, written at most every five minutes, within six hours in total.
+  await sql`UPDATE adu_sessions SET expires_at=LEAST(now()+interval '1 hour', created_at+interval '6 hours')
+    WHERE id=${id} AND closed=false AND expires_at>now() AND expires_at<now()+interval '55 minutes'
+      AND expires_at<created_at+interval '6 hours'`;
   const rows = await sql`SELECT slot, lower(u.email) as email, user_id IS NOT NULL as "hasAccount", preferred_mode as "preferredMode", active_mode as "activeMode", language, language_auto as "languageAuto", language_detected as "languageDetected", language_revision as "languageRevision", language_attempts as "languageAttempts", voice_status as "voiceStatus", voice_range as "voiceRange", voice_tier as "voiceTier", use_clone as "useClone", consent_at IS NOT NULL as consented, last_seen>now()-interval '15 seconds' as online FROM adu_participants p LEFT JOIN adu_users u ON u.id=p.user_id WHERE session_id=${id} ORDER BY slot`;
   // Diagnostics follow the admin account, and its test partner when the admin created the
   // conversation. Checked here so no address ever reaches the browser.

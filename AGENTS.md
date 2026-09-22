@@ -39,7 +39,9 @@ Haut-parleur ou écouteur facultatif, avec le routage audio normal du navigateur
    transcription et la traduction envoyée, sans les imposer dans l’affichage principal.
 7. L’invité peut ensuite se connecter et consentir au clonage. Refuser laisse la conversation utilisable.
 
-Les sessions expirent après une heure. Fermer un onglet ne ferme pas la session. Le bouton de fin
+Les sessions expirent après **une heure sans activité** (échéance repoussée par la scrutation de
+l'état, au plus toutes les cinq minutes), dans la limite de six heures depuis la création. Avant le
+23 septembre 2026, l'heure partait de la création et coupait les conversations longues en plein échange. Fermer un onglet ne ferme pas la session. Le bouton de fin
 ferme la conversation pour les deux personnes et efface ses données temporaires ; les voix de compte
 restent conservées. Le bouton s'appelle donc « End the conversation » : l'ancien libellé
 « End session & delete voices » promettait une suppression qui n'a jamais lieu.
@@ -168,16 +170,16 @@ ré-échantillonnée toutes les trois secondes. Une réplique plus courte est en
 silence si elle contient au moins une seconde de parole ; fermer le micro (rendre la parole,
 lecture reçue) fait de même, sans vider le tampon avant. L'analyse ne modifie ni le prompt ni le texte traduit.
 
-`ToneTracker` garde le ton courant : **neutre par défaut**, conservé `TONE_HOLD_MS` (10 s) ;
-un nouveau ton n'est adopté que si deux fenêtres de suite concordent, ou tout de suite s'il est
-d'intensité `high` ; `unknown` ne change rien ; au-delà, retour au neutre. Une seule analyse à la fois ; une
+`ToneTracker` garde le ton courant : **neutre par défaut**, remplacé par chaque estimation valide
+et conservé `TONE_HOLD_MS` (10 s) ; au-delà, retour au neutre. Une seule analyse à la fois ; une
 fenêtre qui arrive pendant une analyse est ignorée, la suivante suit de près. Le ton est lu après
 la traduction, donc une analyse terminée entre-temps profite déjà à la phrase. Résultats ambigus,
 erreurs et capture indisponible laissent le ton précédent valide ou le neutre. Les réponses sont validées dans une
 énumération fermée ; seuls les tags construits côté serveur sont ajoutés. Les crochets fournis dans
 le texte deviennent du texte ordinaire. Une phrase qui porte un tag de ton est synthétisée avec
-`voice_settings.stability = 0.3` (`EXPRESSIVE_STABILITY` ; 0, « Creative », a été entendu comme
-trop irrégulier d'une phrase à l'autre le 23 septembre 2026) ; les autres phrases n'envoient aucun réglage et gardent le défaut de la voix.
+`voice_settings.stability = 0` (`EXPRESSIVE_STABILITY`, « Creative » de v3, le plus expressif).
+Essayé le 23 septembre 2026 : 0.3 avec double confirmation du ton a été jugé moins bon à l'écoute,
+retour à 0 et à l'adoption immédiate ; les autres phrases n'envoient aucun réglage et gardent le défaut de la voix.
 Le menu DEV affiche la stabilité reçue. Rendu à valider à l'écoute, clone et voix standard. `strength` décrit l'intensité, pas une probabilité calibrée.
 Le modèle audio utilise Chat Completions avec sortie texte, `store: false`, sans JSON Schema strict
 (non pris en charge par ces modèles audio). La route authentifie la session et borne le corps à 300 ko.
