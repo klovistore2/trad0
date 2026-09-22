@@ -28,6 +28,5 @@ export function ShareSession({ id }: { id: string }) {
     }}>Partager</button></div>
     <input id="join-link" className="join-link" aria-label="Lien d’invitation" readOnly defaultValue={url} onFocus={event => event.target.select()} />
     {message && <p role="status" className="quiet-note">{message}</p>}
-    <p className="quiet-note">En local : deux fenêtres de navigateurs distincts.<br />Sur deux téléphones : une URL HTTPS accessible aux deux.</p>
   </section>;
 }

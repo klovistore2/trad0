@@ -62,13 +62,13 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
     setBusy(false);
   }
   return <div className="voice-consent">
-    <p>Your voice is learned from your own turns in this conversation and sent to ElevenLabs to speak for you. Samples stay in memory, never on our servers, and the other person is never captured.</p>
+    <p>Your voice is learned from your own turns in this conversation and sent to a voice service to speak for you. Samples stay in memory, never on our servers.</p>
     <label className="setting-toggle">
       <input type="checkbox" disabled={busy} checked={pending ?? server} onChange={event => void toggle(event.target.checked)} />
       <span>Use my own voice when possible<em>Slightly slower: your words take the context route so they can be spoken in your voice.</em></span>
     </label>
     {me.consented && <p role="status" className="setting-status">{me.voiceStatus === "verification_required"
-      ? "ElevenLabs requires verification. A standard voice is used meanwhile."
+      ? "Your voice needs verification before it can be used. A standard voice is used meanwhile."
       : me.voiceStatus === "ready"
         ? next ? `Your voice is ready (step ${me.voiceTier}/${FINAL_TIER}) · ${seconds}s of ${next.seconds}s captured towards the next version.`
           : "Your voice is final; no more audio is kept."

@@ -37,7 +37,7 @@ export function SettingsPanel({ id, me, peer, speechSeconds, onConsent, onRefres
       <VoiceConsent sessionId={id} me={me} seconds={speechSeconds} onConsent={onConsent} onRefresh={onRefresh} onUseClone={onUseClone} />
       <label className="setting-toggle">
         <input type="checkbox" checked={speechOptions.emotion} onChange={event => onSpeechOptions({ ...speechOptions, emotion: event.target.checked })} />
-        <span>Match my tone of voice<em>Slightly slower: a short excerpt of your speech is sent to OpenAI to estimate how you said it. Separate from voice cloning, and available without an account.</em></span>
+        <span>Match my tone of voice<em>Slightly slower: a short excerpt of your speech is analysed to estimate how you said it. Separate from your own voice, and available without an account.</em></span>
       </label>
     </div>
 
