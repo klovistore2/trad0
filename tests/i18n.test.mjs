@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { translator } from '../lib/i18n/strings.ts';
+import { createLoader } from './load-ts.mjs';
 import { LANGUAGES } from '../types/session.ts';
 
 const KEYS = ['muteSound','unmuteSound','soundOn','textOnly','theirWords','connectedTitle','connectedIntro',
@@ -31,4 +32,14 @@ test('the guest reads their own language, not the creator’s', () => {
 test('English is the base and is always complete', () => {
   const en = translator('en');
   for (const key of KEYS) assert.ok(en(key).trim().length > 0, key);
+});
+
+test('language menus show a flag and follow the reader’s alphabetical order',()=>{
+ const {languageOptions}=createLoader()('lib/i18n/language-names.ts');
+ const fr=languageOptions('fr');
+ assert.equal(fr.length,15);
+ assert.deepEqual(fr.slice(0,3).map(o=>o.code),['de','en','zh'],'Allemand, Anglais, Chinois');
+ assert.equal(fr.find(o=>o.code==='fr').label,'🇫🇷 Français');
+ const en=languageOptions('en').map(o=>o.code);
+ assert.equal(en[0],'zh','Chinese comes first in English');assert.equal(en.at(-1),'vi');
 });

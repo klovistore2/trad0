@@ -89,7 +89,7 @@ try {
  const picker=anonymous.getByLabel('Translate to:');
  await expect(picker).toHaveValue('en');
  await expect(anonymous.getByRole('status')).toHaveText('Auto ↔ English');
- await expect(picker.locator('option')).toContainText(['French','English','Thai','Dutch']);
+ await expect(picker.locator('option')).toContainText(['Dutch','English','French','Thai']);
  await anonymous.getByRole('button',{name:'Sign in to start a conversation'}).waitFor();
  await expect(anonymous.getByRole('button',{name:/password|e-mail address/i})).toHaveCount(0);
 
@@ -147,8 +147,7 @@ try {
  await expect(b.getByText(/Touch the screen/)).toHaveCount(0);
  // A speaker can check what the microphone understood, not only what the other person receives.
  await a.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.input_transcript.delta',delta:'Ceci est ce que j’ai réellement dit.'})}));
- await a.getByText('Mes mots',{exact:true}).click();
- await a.getByRole('button',{name:'Ce que j’ai dit'}).click();
+ // Open by default, own words first: no tap needed to see what the microphone understood.
  await a.getByText('Ceci est ce que j’ai réellement dit.',{exact:true}).waitFor();
  await a.getByRole('button',{name:'Ce que l’autre reçoit'}).click();
  await a.getByText('This is a synthetic translation test.',{exact:true}).waitFor();

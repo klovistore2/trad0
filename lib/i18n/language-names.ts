@@ -11,5 +11,18 @@ export function languageLabel(code: Language, locale: Language): string {
   return languageNames[code];
 }
 
-export const languageOptions = (locale: Language) =>
-  LANGUAGES.map(code => ({ code, label: languageLabel(code, locale) }));
+// One flag per language, from its most populous or best-known country: a visual cue to find a
+// language faster, never a claim about who speaks it. The name beside it stays the reference.
+export const languageFlags: Record<Language, string> = {
+  fr: "🇫🇷", en: "🇬🇧", th: "🇹🇭", es: "🇪🇸", pt: "🇵🇹", it: "🇮🇹", de: "🇩🇪", nl: "🇳🇱",
+  ja: "🇯🇵", ko: "🇰🇷", zh: "🇨🇳", ru: "🇷🇺", hi: "🇮🇳", id: "🇮🇩", vi: "🇻🇳",
+};
+
+// Sorted by the name the reader actually sees, in the reader's own alphabet.
+export function languageOptions(locale: Language) {
+  const options = LANGUAGES.map(code => ({ code, name: languageLabel(code, locale) }));
+  let compare: (a: string, b: string) => number;
+  try { compare = new Intl.Collator(locale).compare; } catch { compare = (a, b) => a.localeCompare(b); }
+  return options.sort((a, b) => compare(a.name, b.name))
+    .map(({ code, name }) => ({ code, label: `${languageFlags[code]} ${name}` }));
+}
