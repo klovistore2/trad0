@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useSharedConversation } from "@/hooks/useSharedConversation";
-import { languageNames } from "@/types/session";
+import { languageLabel } from "@/lib/i18n/language-names";
 import { translator } from "@/lib/i18n/strings";
 import { ThemeToggle } from "./theme-toggle";
 import { ShareSession } from "./share-session";
@@ -89,6 +89,6 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
         </div>
       </>}
     </section>
-    <footer><span className="footer-mark">↔</span><p>Trad0<br /><span>{languageNames[room?.me.language ?? "en"]}</span></p></footer>
+    <footer><span className="footer-mark">↔</span><p>Trad0<br /><span>{languageLabel(room?.me.language ?? "en", room?.me.language ?? "en")}</span></p></footer>
   </main>;
 }

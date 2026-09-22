@@ -187,8 +187,12 @@ une révision empêche une détection déjà en cours de l’écraser. Revenir �
 sans remettre à zéro le budget des tentatives. En mode direct, `session.update` change la langue cible
 sans remplacer le micro, sauf si le changement exige aussi une bascule de circuit.
 
-L’accueil est en anglais par défaut ; un sélecteur en pied de page change la langue affichée et sert
-aussi de suggestion initiale pour la langue du créateur. La conversation suit la langue du participant.
+L’accueil est en anglais par défaut sur `/` ; chaque autre langue a son adresse `/[lang]` pour le
+référencement, avec `alternates` et redirection de `/en` vers `/`. Le sélecteur en pied de page
+navigue vers ces adresses et sert aussi de suggestion initiale pour la langue du créateur.
+La conversation suit la langue du participant. Les noms de langues des menus sont affichés dans la
+langue de lecture via `Intl.DisplayNames` (`lib/i18n/language-names.ts`), les endonymes de
+`types/session.ts` servant de repli.
 `lib/i18n/strings.ts` fournit les chaînes, avec repli vers l’anglais. Les traductions restent non relues
 et certaines nouvelles chaînes ne sont pas traduites partout. Paramètres et diagnostics sont en anglais.
 

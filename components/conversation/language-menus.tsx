@@ -1,6 +1,7 @@
 "use client";
-import { LANGUAGES, languageNames, type Language } from "@/types/session";
+import { type Language } from "@/types/session";
 import { translator } from "@/lib/i18n/strings";
+import { languageLabel, languageOptions } from "@/lib/i18n/language-names";
 
 type Choice = { language: Language; languageAuto: boolean; languageDetected?: boolean; languageAttempts?: number };
 export function LanguageMenus({ mine, theirs, locale = "en", disabled = false, onMine, onTheirs }: {
@@ -9,6 +10,8 @@ export function LanguageMenus({ mine, theirs, locale = "en", disabled = false, o
   onTheirs: (language: Language | "auto") => void;
 }) {
   const t = translator(locale);
+  // Names are shown in the reader's own language: a menu is useless in a script you cannot read.
+  const options = languageOptions(locale);
   return <div className="language-menus">
     {([{ id: "my-language", label: t("iSpeak"), choice: mine, change: onMine },
       { id: "peer-language", label: t("theySpeak"), choice: theirs, change: onTheirs }]).map(({ id, label, choice, change }) =>
@@ -20,10 +23,10 @@ export function LanguageMenus({ mine, theirs, locale = "en", disabled = false, o
           {/* Auto stays selected only while nothing has been heard: once the transcription
               names a language, the menu shows it, and the hint says it came from detection. */}
           <option value="auto">{t("autoLanguage")}</option>
-          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
+          {options.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
         </select>
         {choice.languageAuto && <span className="language-hint" role="status">
-          {choice.languageDetected ? `${languageNames[choice.language]} · ${t("languageDetected")}`
+          {choice.languageDetected ? `${languageLabel(choice.language, locale)} · ${t("languageDetected")}`
             : (choice.languageAttempts ?? 0) >= 3 ? t("chooseLanguage") : t("detectOnSpeech")}
         </span>}
       </div>)}
