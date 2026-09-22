@@ -18,7 +18,8 @@ export function PipelineDiagnostics({ room, read }: { room: SharedSession; read:
   const [state, setState] = useState<PipelineState | null>(null);
   useEffect(() => { const update = () => setState(read()); update(); const timer = setInterval(update, 500); return () => clearInterval(timer); }, [read]);
   return <details className="pipeline-diagnostics">
-    <summary>DEV · {label(state?.active ?? room.me.activeMode)}</summary>
+    <summary>DEV · {label(state?.active ?? room.me.activeMode)}
+      {state?.speechOptions.emotion && ` · tone ${state.outgoingSpeech?.tone.status === "estimated" ? `${state.outgoingSpeech.tone.tone} (${state.outgoingSpeech.tone.strength})` : state.outgoingSpeech?.tone.status ?? "waiting"}`}</summary>
     <dl>
       <dt>My outgoing speech</dt><dd>{label(state?.active ?? room.me.activeMode)}</dd>
       <dt>Their outgoing speech</dt><dd>{label(room.peer?.activeMode ?? "direct")}</dd>
@@ -28,10 +29,10 @@ export function PipelineDiagnostics({ room, read }: { room: SharedSession; read:
       <dt>My output voice</dt><dd>{state?.active === "direct" ? "OpenAI" : room.me.useClone && room.me.voiceTier > 0 ? "ElevenLabs · clone" : `ElevenLabs · standard ${room.me.voiceRange ?? "neutral"}`}</dd>
       <dt>My speaking model</dt><dd>{TTS_MODEL}</dd>
       <dt>My tone analysis</dt><dd>{toneLabel(state?.outgoingSpeech)}</dd>
+      <dt>My tone budget</dt><dd>{state ? `${TONE_MODEL} · ${toneWaitMs(state.speechOptions)} ms` : "—"}</dd>
       <dt>My tone request / extra wait after LLM</dt><dd>{state?.outgoingSpeech ? `${state.outgoingSpeech.tone.analysisMs} / ${state.outgoingSpeech.extraWaitMs} ms` : "—"}</dd>
       <dt>Incoming tone</dt><dd>{toneLabel(state?.incomingSpeech)}</dd>
       <dt>Incoming actual ElevenLabs model</dt><dd>{state?.synthesis?.model || "—"}</dd>
-      <dt>My tone budget</dt><dd>{state ? `${TONE_MODEL} · ${toneWaitMs(state.speechOptions)} ms` : "—"}</dd>
       <dt>ElevenLabs response headers (server)</dt><dd>{state?.synthesis?.headersMs ?? "—"} ms</dd>
       <dt>Incoming speech request → playback started</dt><dd>{state?.audioLatency?.total || "—"} ms</dd>
       <dt>My clone</dt><dd>{room.me.hasAccount ? room.me.consented ? `${room.me.voiceStatus} · tier ${room.me.voiceTier}` : "Awaiting consent" : "Account required"}</dd>

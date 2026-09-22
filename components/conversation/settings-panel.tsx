@@ -8,15 +8,11 @@ import { AudioDiagnostics, type AudioState } from "./audio-diagnostics";
 import type { Participant } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
 import type { SpeechOptions } from "@/lib/audio/speech-options";
-import { PipelineDiagnostics, type PipelineState } from "./pipeline-diagnostics";
-import type { SharedSession } from "@/types/session";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose, speechOptions, onSpeechOptions, room, readPipelineState }: {
+export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose, speechOptions, onSpeechOptions }: {
   speechOptions: SpeechOptions;
   onSpeechOptions: (options: SpeechOptions) => void;
-  room: SharedSession;
-  readPipelineState: () => PipelineState;
   id: string;
   me: Participant;
   peer: Participant;
@@ -65,7 +61,6 @@ export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, 
     <div className="settings-group">
       <h2>{"Developer"}</h2>
       <AudioDiagnostics read={readAudioState} onTestTone={onTestTone} voiceStatus={voiceStatus} received={received} me={me} peer={peer} />
-      <PipelineDiagnostics room={room} read={readPipelineState} />
     </div>
 
     <div className="settings-group settings-danger">
