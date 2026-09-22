@@ -290,7 +290,7 @@ try {
  await a.screenshot({path:'/tmp/a-deux-conversation.png',fullPage:true});
  // The conversation screen carries none of this: settings hold voice, invite, diagnostics and closing.
  await expect(a.getByLabel(/Use my own voice when possible/)).toBeHidden();
- await expect(a.getByRole('button',{name:'End session & delete voices'})).toBeHidden();
+ await expect(a.getByRole('button',{name:'End the conversation'})).toBeHidden();
  // Consent is the tick itself, recorded server side; cloning then follows speech on its own.
  await a.getByRole('button',{name:'Settings'}).click();
  await a.getByRole('heading',{name:'Settings'}).waitFor();
@@ -326,7 +326,7 @@ try {
   return rows[0];
  }).toEqual({user_id:guestId,consented:true});
  assert.deepEqual(errors,[]);
- await a.getByRole('button',{name:'End session & delete voices'}).click();
+ await a.getByRole('button',{name:'End the conversation'}).click();
  await a.waitForURL(baseURL+'/');
  console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, real PCM tone capture, per-speaker TTS options, voice consent and withdrawal, theme, session closure.');
 } finally {

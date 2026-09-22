@@ -3,26 +3,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { VoiceConsent } from "./voice-consent";
 import { ShareSession } from "./share-session";
-import { AudioDiagnostics, type AudioState } from "./audio-diagnostics";
 import type { Participant } from "@/types/session";
-import type { VoiceStatus } from "@/types/voice";
 import type { SpeechOptions } from "@/lib/audio/speech-options";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, me, peer, speechSeconds, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose, speechOptions, onSpeechOptions }: {
+export function SettingsPanel({ id, me, speechSeconds, onConsent, onRefresh, onUseClone, onClose, speechOptions, onSpeechOptions }: {
   speechOptions: SpeechOptions;
   onSpeechOptions: (options: SpeechOptions) => void;
   id: string;
   me: Participant;
-  peer: Participant;
   speechSeconds: number;
   onConsent: () => void;
   onRefresh: () => void;
   onUseClone: (useClone: boolean) => void;
-  readAudioState: () => AudioState;
-  onTestTone: () => void;
-  voiceStatus: VoiceStatus;
-  received: number;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -46,14 +39,8 @@ export function SettingsPanel({ id, me, peer, speechSeconds, onConsent, onRefres
       <ShareSession id={id} />
     </div>
 
-    <div className="settings-group">
-      <h2>{"Developer"}</h2>
-      <AudioDiagnostics read={readAudioState} onTestTone={onTestTone} voiceStatus={voiceStatus} received={received} me={me} peer={peer} />
-    </div>
-
     <div className="settings-group settings-danger">
       <h2>{"End"}</h2>
-      <p>{"Closes the conversation and clears its temporary data. Voices saved to accounts are kept."}</p>
       <button className="demo-button" disabled={closing} onClick={async () => {
         setClosing(true); setMessage("");
         try {
@@ -62,7 +49,7 @@ export function SettingsPanel({ id, me, peer, speechSeconds, onConsent, onRefres
           if (!response.ok) throw new Error(data.error);
           router.push("/");
         } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); setClosing(false); }
-      }}>{"End session & delete voices"}</button>
+      }}>{"End the conversation"}</button>
       {message && <p role="alert">{message}</p>}
     </div>
   </section>;

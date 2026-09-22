@@ -10,6 +10,7 @@ import { SettingsPanel } from "./settings-panel";
 import { VoiceIntro } from "./voice-intro";
 import { GuestVoiceOffer } from "./guest-voice-offer";
 import { PipelineDiagnostics } from "./pipeline-diagnostics";
+import { AudioDiagnostics } from "./audio-diagnostics";
 import { OwnWords } from "./own-words";
 import { LanguageMenus } from "./language-menus";
 
@@ -39,11 +40,10 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
     <section className="conversation-body">
       {!room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
       : !room.peer ? <ShareSession id={id} />
-      : settings ? <SettingsPanel id={id} me={room.me} peer={room.peer} speechSeconds={session.speechSeconds}
+      : settings ? <SettingsPanel id={id} me={room.me} speechSeconds={session.speechSeconds}
           speechOptions={session.speechOptions} onSpeechOptions={session.setSpeechOptions}
           onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
-          readAudioState={session.readAudioState} onTestTone={() => void session.playTestTone()}
-          voiceStatus={session.voiceStatus} received={session.received} onClose={() => setSettings(false)} />
+          onClose={() => setSettings(false)} />
       : <>
         <LanguageMenus mine={room.me} theirs={room.peer} locale={room.me.language} disabled={session.changingLanguage}
           onMine={language => void session.setLanguage(room.me.slot, language)}
@@ -66,7 +66,9 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {t("playing")}</p>}
           <OwnWords original={session.translation.original} translation={session.translation.translation}
             mine={room.me.language} theirs={room.peer.language} t={t} />
-          {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState} />}
+          {room.diagnostics && <><PipelineDiagnostics room={room} read={session.readPipelineState} />
+            <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()}
+              voiceStatus={session.voiceStatus} received={session.received} me={room.me} peer={room.peer} /></>}
         </div>
         {!room.me.hasAccount && <GuestVoiceOffer id={id} seconds={session.spokenSeconds} t={t} />}
         <div className="controls">

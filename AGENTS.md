@@ -41,7 +41,8 @@ Haut-parleur ou écouteur facultatif, avec le routage audio normal du navigateur
 
 Les sessions expirent après une heure. Fermer un onglet ne ferme pas la session. Le bouton de fin
 ferme la conversation pour les deux personnes et efface ses données temporaires ; les voix de compte
-restent conservées. Le libellé actuel « End session & delete voices » est donc imparfait.
+restent conservées. Le bouton s'appelle donc « End the conversation » : l'ancien libellé
+« End session & delete voices » promettait une suppression qui n'a jamais lieu.
 
 La création nécessite actuellement un compte pour réutiliser une voix enregistrée entre sessions.
 Ne pas présenter le parcours comme « invité ↔ invité » dès la création. L’accueil n’ouvre aucun micro
@@ -379,10 +380,12 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `WEBRTC_ICE_SERVERS` | Tableau JSON STUN/TURN remis aux participants authentifiés ; identifiants dédiés à ce service |
 | `APP_DIAGNOSTICS` | `1` : panneau des modes visible ; `0` : masqué ; sinon visible seulement en développement |
 
-Le panneau des modes est une exception temporaire, demandée pour le développement, à la sobriété de
-l’écran de conversation. Il montre les deux directions, modèles, voix, contexte, liaison directe et
-mesures disponibles. Le diagnostic audio historique reste également dans les paramètres ; il n’est
-actuellement pas masqué par `APP_DIAGNOSTICS`.
+Les deux panneaux de diagnostic sont une exception temporaire, demandée pour le développement, à la
+sobriété de l'écran de conversation. Ils se déplient tous les deux **sur l'écran de conversation**,
+sous « Mes mots », et non plus dans les paramètres : leurs valeurs ne bougent que pendant un échange.
+Le premier montre les deux directions, modèles, voix, contexte, liaison directe et mesures
+disponibles, avec l'estimation de ton visible dès la ligne repliée. Le second reprend le diagnostic
+audio historique. `APP_DIAGNOSTICS` masque désormais les deux.
 
 Distinguer attente de fin de phrase, LLM, publication, transport et démarrage audio. L’âge d’un événement
 est calculé par PostgreSQL : ne pas soustraire les horloges de deux téléphones. Les mesures sortantes
@@ -416,7 +419,7 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
 - **Clonage** : qualité des échantillons et des clones à tester ; pas de filtrage complet par qualité
   de transcription. Les horloges de parole sont des estimations à partir des fragments, pas une mesure
   acoustique exacte. Correction manuelle du registre vocal non implémentée.
-- **Interface** : textes non tous relus/traduits, ancien libellé ambigu de fermeture, diagnostics à
+- **Interface** : textes non tous relus/traduits, diagnostics à
   retirer ou masquer pour la production. Refus du dialogue mémorisé localement, pas une préférence
   de refus explicite et universelle sur le compte.
 - **Protection des coûts** : pas de quotas ni de limitation de débit distribuée. Le contrôle d’origine
