@@ -289,3 +289,16 @@ test('a speaker who turns their clone off is spoken with the standard voice, and
     for (const [key,value] of Object.entries({...previous,...clearedBefore})) {if(value===undefined)delete process.env[key];else process.env[key]=value;}
   }
 });
+
+test('progressive playback is used only for MP3 the browser declares it can stream',()=>{
+ const {streamingSource}=createLoader()('lib/elevenlabs/voice-provider.ts');
+ const yes={isTypeSupported:type=>type==='audio/mpeg'},no={isTypeSupported:()=>false};
+ const broken={isTypeSupported:()=>{throw new Error('unsupported');}};
+ assert.equal(streamingSource('audio/mpeg',{MediaSource:yes}),yes);
+ assert.equal(streamingSource('audio/mpeg',{ManagedMediaSource:yes,MediaSource:no}),yes,'iPhone Safari exposes ManagedMediaSource');
+ assert.equal(streamingSource('audio/mpeg',{ManagedMediaSource:broken,MediaSource:yes}),yes);
+ assert.equal(streamingSource('audio/mpeg',{MediaSource:no}),null,'no MP3 support: download first, as before');
+ assert.equal(streamingSource('audio/mpeg',{}),null);
+ assert.equal(streamingSource('audio/wav',{MediaSource:yes}),null,'other formats keep the download path');
+ assert.equal(streamingSource(null,{MediaSource:yes}),null);
+});

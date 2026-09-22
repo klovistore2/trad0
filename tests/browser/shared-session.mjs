@@ -253,9 +253,10 @@ try {
   await route.fulfill({json:{text:'Peut-on y aller demain ?',targetLanguage:'fr',model:'test-fast-llm',contextTurns:body.context.length,translationMs:42}});
  });
  await b.getByRole('button',{name:'Settings'}).click();
- await expect(b.getByLabel(/Match my tone of voice/)).not.toBeChecked();
- // The model and the wait budget follow from this one box; the panel offers nothing else to set.
- await b.getByLabel(/Match my tone of voice/).check();
+ // Tone analysis is an account feature: a guest is never offered it, even with a saved choice.
+ await b.getByRole('heading',{name:'Settings'}).waitFor();
+ await expect(b.getByLabel(/Match my tone of voice/)).toHaveCount(0);
+ await b.evaluate(()=>localStorage.setItem('trad0-speech-options',JSON.stringify({emotion:true})));
  // No mode control is left in the panel: auto follows the clone, so the journey drives the
  // documented route itself to exercise the context pipeline without one.
  await b.evaluate(async id => {
@@ -272,14 +273,9 @@ try {
  await a.getByText('Peut-on y aller demain ?', {exact:true}).waitFor();
  await a.getByText(/Traduction en cours/).waitFor();
  assert.equal(llmCalls,1);
- assert.equal(toneCalls,1,JSON.stringify(expressiveSpeech));
- assert.equal(expressiveSpeech.options.emotion,true);
- assert.equal(expressiveSpeech.tone.model,'gpt-audio-mini');
- assert.equal(expressiveSpeech.tone.tone,'happy');
- await b.getByRole('button',{name:'Settings'}).click();
- await expect(b.getByLabel(/Match my tone of voice/)).toBeChecked();
- await b.getByLabel(/Match my tone of voice/).uncheck();
- await b.getByRole('button',{name:'Back to the conversation'}).click();
+ assert.equal(toneCalls,0,'a guest never uploads tone audio');
+ assert.equal(expressiveSpeech.options.emotion,false);
+ assert.equal(expressiveSpeech.tone.status,'disabled');
  assert.equal(await a.evaluate(()=>window.testRecordings),0);
  assert.equal(await b.evaluate(()=>window.testRecordings),0);
  // Handing the floor back leaves both microphones closed, the resting state of a session.
@@ -301,7 +297,8 @@ try {
  await a.getByText('Remove my voice').click();
  await a.getByRole('button',{name:/Delete my voice/}).click();
  await expect(a.getByLabel(/Use my own voice when possible/)).not.toBeChecked();
- await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
+ // Inviting belongs to the waiting screen only: settings carry no second invitation.
+ await expect(a.getByRole('img',{name:'QR code du lien d’invitation'})).toHaveCount(0);
  await a.getByRole('button',{name:'Changer le thème clair ou sombre'}).click();
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});
  assert.deepEqual(errors,[]);
@@ -328,7 +325,7 @@ try {
  assert.deepEqual(errors,[]);
  await a.getByRole('button',{name:'End the conversation'}).click();
  await a.waitForURL(baseURL+'/');
- console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, real PCM tone capture, per-speaker TTS options, voice consent and withdrawal, theme, session closure.');
+ console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, tone kept for accounts, per-speaker TTS options, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();
  if(process.env.DATABASE_URL) {

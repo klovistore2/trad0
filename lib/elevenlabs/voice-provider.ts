@@ -17,6 +17,19 @@ export function wav(seconds: number, frequency: number, rate = 8000) {
   return URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
 }
 
+// Progressive playback: the relayed MP3 is fed to the same media element while it downloads.
+// Used only where the browser declares MP3 support for it; otherwise the whole file is fetched
+// first, exactly as before. iPhone Safari exposes ManagedMediaSource rather than MediaSource.
+type MediaSourceClass = { new(): MediaSource; isTypeSupported(type: string): boolean };
+export function streamingSource(contentType: string | null, scope: object = globalThis): MediaSourceClass | null {
+  if (!contentType?.startsWith("audio/mpeg")) return null;
+  const candidates = scope as { ManagedMediaSource?: MediaSourceClass; MediaSource?: MediaSourceClass };
+  for (const Source of [candidates.ManagedMediaSource, candidates.MediaSource]) {
+    try { if (Source?.isTypeSupported("audio/mpeg")) return Source; } catch { /* Unsupported: try the next one. */ }
+  }
+  return null;
+}
+
 export class ElevenLabsVoiceProvider implements VoiceProvider {
   private element?: HTMLAudioElement;
   private active?: AbortController;
@@ -25,7 +38,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private failure = "";
   private voiceSource = "";
   private latency = { request: 0, total: 0 };
-  private synthesis = { model: "", stability: "", headersMs: 0 };
+  private synthesis = { model: "", stability: "", headersMs: 0, playback: "" };
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -38,12 +51,56 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     }
     return this.element;
   }
-  private play(source: string) {
+  private load(source: string) {
     const element = this.audio();
     if (this.source) URL.revokeObjectURL(this.source);
     this.source = source;
     element.src = source;
-    return element.play();
+    return element;
+  }
+  private play(source: string) {
+    return this.load(source).play();
+  }
+  // Appends the stream as it arrives and starts playing on the first chunk. Resolves once
+  // playback has started; `finished` settles when the whole stream has been handed over.
+  private async stream(Source: MediaSourceClass, body: ReadableStream<Uint8Array<ArrayBuffer>>, signal: AbortSignal) {
+    const media = new Source();
+    const element = this.audio();
+    // Required by ManagedMediaSource on iPhone unless an AirPlay alternative is offered.
+    element.disableRemotePlayback = true;
+    this.load(URL.createObjectURL(media));
+    await new Promise<void>((resolve, reject) => {
+      media.addEventListener("sourceopen", () => resolve(), { once: true });
+      signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+    const buffer = media.addSourceBuffer("audio/mpeg");
+    const appended = () => new Promise<void>((resolve, reject) => {
+      buffer.addEventListener("updateend", () => resolve(), { once: true });
+      buffer.addEventListener("error", () => reject(new Error("La lecture a été interrompue.")), { once: true });
+    });
+    let playing = false;
+    let startPlayback!: () => void; let failPlayback!: (error: unknown) => void;
+    const started = new Promise<void>((resolve, reject) => { startPlayback = resolve; failPlayback = reject; });
+    const reader = body.getReader();
+    const finished = (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done || signal.aborted) break;
+          if (!value.byteLength) continue;
+          const ready = appended(); buffer.appendBuffer(value); await ready;
+          if (!playing) { playing = true; element.play().then(startPlayback, failPlayback); }
+        }
+        if (!signal.aborted && media.readyState === "open") media.endOfStream();
+        if (!playing) failPlayback(new Error("Aucun son reçu. Réessayez."));
+      } catch (error) {
+        if (!playing) failPlayback(error);
+        throw error;
+      } finally { if (signal.aborted) void reader.cancel().catch(() => {}); }
+    })();
+    finished.catch(() => {}); // Reported through `started` or by the caller once playing.
+    await started;
+    return { element, finished };
   }
 
   async unlock() {
@@ -88,7 +145,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (controller.signal.aborted) return;
       const startedAt = Date.now();
       this.latency = { request: 0, total: 0 };
-      this.synthesis = { model: "", stability: "", headersMs: 0 };
+      this.synthesis = { model: "", stability: "", headersMs: 0, playback: "" };
       await this.unlock();
       this.onStatus("loading");
       let text = "";
@@ -104,13 +161,21 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
-      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0 };
+      const Source = response.body ? streamingSource(response.headers.get("content-type")) : null;
+      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0, playback: Source ? "progressive" : "download" };
       this.latency = { request: Date.now() - startedAt, total: 0 };
-      const blob = await response.blob();
-      if (controller.signal.aborted) return;
-      if (!blob.size) { this.failure = "empty audio"; throw new Error("Aucun son reçu. Réessayez."); }
-      const element = this.audio();
-      await this.play(URL.createObjectURL(blob));
+      let element: HTMLAudioElement;
+      let finished: Promise<void> = Promise.resolve();
+      if (Source && response.body) {
+        ({ element, finished } = await this.stream(Source, response.body, controller.signal));
+        if (controller.signal.aborted) return;
+      } else {
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        if (!blob.size) { this.failure = "empty audio"; throw new Error("Aucun son reçu. Réessayez."); }
+        element = this.audio();
+        await this.play(URL.createObjectURL(blob));
+      }
       this.latency = { request: this.latency.request, total: Date.now() - startedAt };
       this.onStatus("playing");
       await new Promise<void>((resolve, reject) => {
@@ -123,6 +188,8 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         controller.signal.addEventListener("abort", onAbort, { once: true });
         element.onended = () => settle();
         element.onerror = () => { this.failure = "audio element error"; settle(new Error("La lecture a été interrompue.")); };
+        // A stream cut mid-sentence ends playback with an error instead of hanging.
+        finished.catch(() => { if (!controller.signal.aborted) { this.failure = "audio stream error"; settle(new Error("La lecture a été interrompue.")); } });
       });
       if (!controller.signal.aborted) { this.failure = ""; this.onStatus("idle"); }
     } catch (error) {

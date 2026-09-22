@@ -114,8 +114,13 @@ Le prompt demande de conserver le sens, l’intention, le ton, les noms et les n
 
 La traduction complète est publiée au destinataire. Celui-ci appelle `/api/elevenlabs/speak`, qui
 résout **côté serveur** la voix du locuteur et relaie le flux `audio/mpeg` vers un élément `<audio>`.
-**Le navigateur attend actuellement `response.blob()` avant de lire** : le relais serveur transmet
-un flux, mais la lecture côté client n’est pas encore progressive. Le LLM répond également par phrase
+**La lecture est progressive depuis le 22 septembre 2026** : le même `POST` et le même élément
+`<audio>`, mais le MP3 est versé dans un `MediaSource` (`ManagedMediaSource` sur iPhone) au fil du
+téléchargement, et la lecture démarre au premier morceau. Uniquement si le navigateur déclare
+`audio/mpeg` compatible et que la réponse est du MP3 (`streamingSource`) ; sinon repli à l'identique
+sur `response.blob()`. Un flux coupé en cours de phrase arrête la lecture avec une erreur, sans
+blocage. Le menu DEV affiche `progressive` ou `download`. Validé dans Chromium avec un vrai MP3 servi
+en 2 s (premier son ~300 ms) ; **iPhone/Safari non validé**. Le LLM répond toujours par phrase
 complète, sans diffusion des tokens. Tenir compte de ces attentes dans toute analyse de latence.
 
 La liaison navigateur → ElevenLabs par WebSocket a été abandonnée après un refus réel du navigateur
@@ -147,7 +152,7 @@ Les choix sont conservés sur cet appareil dans `localStorage`, pas sur le compt
 fige ses options dans les métadonnées de l'événement ; l'autre appareil les transmet à la synthèse.
 Le mode 1 ignore ces options. Aucun changement de schéma Neon n'est nécessaire.
 Un `ttsModel` envoyé par un navigateur est ignoré, pas obéi : l'identifiant ne vient jamais du corps.
-Le relais HTTP existant et le téléchargement complet avant lecture sont conservés.
+Le relais HTTP existant est conservé.
 
 L'analyse est distincte du clonage mais **réservée aux comptes** : un invité ne voit pas la case,
 un choix déjà mémorisé sur le téléphone ne s'applique pas sans compte, et `/api/audio/tone` refuse
@@ -426,8 +431,8 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
 - **Réseau du mode 1** : avec `WEBRTC_ICE_SERVERS=[]`, seules les connexions directes possibles sur le
   réseau fonctionneront. Configurer TURN pour les réseaux qui l’exigent. Le repli actuel n’est pas
   un système complet de reconnexion/ICE restart ; pas de retour automatique garanti vers le mode 1.
-- **Latence du mode 2** : réponse LLM complète, appels sérialisés, scrutation, audio reçu entièrement
-  avant lecture et redémarrage fournisseur à la bascule. La file LLM n’a pas encore de plafond explicite.
+- **Latence du mode 2** : réponse LLM complète, appels sérialisés, scrutation, lecture qui attend la fin
+  de la phrase précédente (pas de préchargement) et redémarrage fournisseur à la bascule. La file LLM n’a pas encore de plafond explicite.
   Mesurer en conversation réelle avant de changer modèle, accès base ou stratégie de diffusion.
 - **Écho entre appareils** : le haut-parleur de B peut revenir dans le micro de A. L’annulation locale
   d’écho ne connaît pas le son émis par l’autre téléphone. La mémoire actuelle ne filtre aucun doublon.
