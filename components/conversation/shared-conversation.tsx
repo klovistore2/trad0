@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useSharedConversation } from "@/hooks/useSharedConversation";
 import { languageLabel } from "@/lib/i18n/language-names";
 import { translator } from "@/lib/i18n/strings";
@@ -21,13 +22,22 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
   const soundActive = session.soundReady && session.soundOn;
   // Each participant reads their own language: the guest was handed a phone and shares none.
   const t = translator(room?.me.language ?? "en");
+  const router = useRouter();
+  const home = !room || room.me.language === "en" ? "/" : `/${room.me.language}`;
+  // A closed conversation leaves nothing to do here: say so briefly, then go home.
+  useEffect(() => {
+    if (!session.ended) return;
+    const timer = setTimeout(() => router.replace(home), 3000);
+    return () => clearTimeout(timer);
+  }, [session.ended, router, home]);
+  const away = !room?.peer?.online;
   return <main className="conversation">
     {room?.me.hasAccount && <VoiceIntro consented={room.me.consented} t={t} onAccept={session.giveConsent} />}
     <header className="topbar">
       <Link className="wordmark" href="/">Trad0<span className="brand-dot">.</span></Link>
       <div className="topbar-actions">
         <span className="edition">TRAD0 · LIVE</span>
-        {room?.peer && <button type="button" className="theme-toggle" onClick={() => setSettings(open => !open)}
+        {room?.peer && !session.ended && <button type="button" className="theme-toggle" onClick={() => setSettings(open => !open)}
           aria-label="Settings" title="Settings" aria-pressed={settings}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3.2" />
@@ -38,7 +48,8 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
       </div>
     </header>
     <section className="conversation-body">
-      {!room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
+      {session.ended ? <><h1>{t("conversationEnded")}</h1><p className="intro">{t("backHome")}</p><Link href={home}>Trad0</Link></>
+      : !room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
       : !room.peer ? <ShareSession id={id} />
       : settings ? <SettingsPanel id={id} me={room.me} speechSeconds={session.speechSeconds}
           speechOptions={session.speechOptions} onSpeechOptions={session.setSpeechOptions}
@@ -78,8 +89,9 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
           {session.connectionLost && <p className="quiet-note" role="status">{t("reconnecting")}</p>}
           {!session.enabled
-            ? <button className="primary-button" disabled={session.starting} onClick={() => void session.start()}>{session.starting
+            ? <button className="primary-button" disabled={session.starting || away} onClick={() => void session.start()}>{session.starting
                 ? t("connecting")
+                : away ? t("peerOffline")
                 : session.floorFree ? t("startTalking") : t("joinIn")}</button>
             : session.hasFloor
               ? <>
@@ -88,7 +100,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
                 </>
               : <>
                   <p className="floor-state" role="status"><span className="status-dot" />{session.floorFree ? t("bothClosed") : t("theyAreSpeaking")}</p>
-                  <button disabled={session.claiming} className="primary-button" onClick={() => void session.takeFloor()}>{session.floorFree ? t("speak") : t("letMeSpeak")}</button>
+                  <button disabled={session.claiming || away} className="primary-button" onClick={() => void session.takeFloor()}>{session.floorFree ? t("speak") : t("letMeSpeak")}</button>
                 </>}
         </div>
       </>}

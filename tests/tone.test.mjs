@@ -96,7 +96,7 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
  const before=globalThis.fetch;const oldKey=process.env.OPENAI_API_KEY;const oldUrl=process.env.NEXT_PUBLIC_APP_URL;
  process.env.OPENAI_API_KEY='test-only';process.env.NEXT_PUBLIC_APP_URL='http://localhost:3000';
  let checked=false,calls=0,content=JSON.stringify({tone:'sad',strength:'medium'});
- const route=createLoader({'@/lib/session/auth':{member:async()=>{checked=true;return {slot:0};}}})('app/api/audio/tone/route.ts');
+ const route=createLoader({'@/lib/session/auth':{member:async()=>{checked=true;return {slot:0,user_id:'account'};}}})('app/api/audio/tone/route.ts');
  globalThis.fetch=async(_url,init)=>{
   calls++;assert.ok(checked);const body=JSON.parse(init.body);
   assert.equal(body.store,false);assert.deepEqual(body.modalities,['text']);
@@ -116,6 +116,8 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
   assert.equal((await route.POST(request())).status,502);
   const denied=createLoader({'@/lib/session/auth':{member:async()=>{throw new Error('denied');}}})('app/api/audio/tone/route.ts');
   const beforeDenied=calls;await denied.POST(request());assert.equal(calls,beforeDenied);
+  const guest=createLoader({'@/lib/session/auth':{member:async()=>({slot:1,user_id:null})}})('app/api/audio/tone/route.ts');
+  const refused=await guest.POST(request());assert.equal(refused.status,403,'a guest without an account is refused');assert.equal(calls,beforeDenied);
  }finally{
   globalThis.fetch=before;
   if(oldKey===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=oldKey;

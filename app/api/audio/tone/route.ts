@@ -18,7 +18,8 @@ export async function POST(request: Request) {
     const form = await new Response(new Blob(chunks), { headers: { "Content-Type": request.headers.get("content-type") || "" } }).formData();
     const sessionId = form.get("sessionId"); const model = form.get("model"); const audio = form.get("audio");
     if (typeof sessionId !== "string" || !TONE_MODELS.includes(model as typeof TONE_MODELS[number]) || !(audio instanceof File)) throw new HttpError(400, "Invalid tone request.");
-    await member(sessionId);
+    // Tone analysis is paid per request: only a participant signed in with an account may use it.
+    if (!(await member(sessionId)).user_id) throw new HttpError(403, "Sign in to match your tone.");
     const bytes = Buffer.from(await audio.arrayBuffer());
     // Only our bounded, mono 16-bit 16kHz WAV format. No decoder, URLs or file storage.
     if (bytes.length < 11244 || bytes.length > 256044 || bytes.toString("ascii", 0, 4) !== "RIFF"

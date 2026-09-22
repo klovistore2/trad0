@@ -23,10 +23,13 @@ export function useSharedConversation(id: string, signedIn = false) {
     catch { return DEFAULT_SPEECH_OPTIONS; }
   });
   const speechOptionsRef = useRef(speechOptions);
+  // Tone analysis is an account feature: a choice saved on this phone never applies to a guest.
+  const activeSpeechOptions = useCallback((): SpeechOptions => ({ ...speechOptionsRef.current, emotion: speechOptionsRef.current.emotion && !!roomRef.current?.me.hasAccount }), []);
   const toneCapture = useRef<ToneCapture | null>(null);
   const toneTracker = useRef<ToneTracker | null>(null);
   const incomingSpeech = useRef<SpeechMetadata | null>(null);
   const [room, setRoom] = useState<SharedSession | null>(null);
+  const [ended, setEnded] = useState(false);
   const [message, setMessage] = useState("");
   const [incoming, setIncoming] = useState("");
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
@@ -62,7 +65,7 @@ export function useSharedConversation(id: string, signedIn = false) {
   // Last sentence measured end to end, so every latency change can be judged on facts.
   const timing = useRef({ transport: 0, request: 0, playback: 0 });
   const refreshNow = useRef<() => void>(() => {});
-  const stopped = useRef<"never started" | "running" | "paused by you" | "session ended">("never started");
+  const stopped = useRef<"never started" | "running" | "paused by you" | "peer away" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<ConversationPipeline | null>(null);
   const voice = useRef<ElevenLabsVoiceProvider | null>(null);
@@ -148,12 +151,12 @@ export function useSharedConversation(id: string, signedIn = false) {
     const stream = translationRef.current.getStream?.();
     if (!stream) return;
     detector.current?.listen(stream);
-    if (speechOptionsRef.current.emotion && publisher.current?.mode === "context" && !document.hidden) toneCapture.current?.listen(stream);
+    if (activeSpeechOptions().emotion && publisher.current?.mode === "context" && !document.hidden) toneCapture.current?.listen(stream);
     else toneCapture.current?.stop();
     const me = roomRef.current?.me;
     if (me?.hasAccount && me.consented && me.voiceTier < FINAL_TIER) recorder.current?.listen(stream);
     else recorder.current?.pause();
-  }, [micShouldBeOn, cloneIfDue]);
+  }, [micShouldBeOn, cloneIfDue, activeSpeechOptions]);
 
   const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
   const playQueue = useCallback(async () => {
@@ -205,7 +208,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       languages: () => ({ sourceLanguage: roomRef.current?.me.language ?? "en", targetLanguage: roomRef.current?.peer?.language ?? "en" }),
       send: event => peer.send(event), onTranslation: text => setContextTranslation(previous => (previous + " " + text).trim().slice(-12_000)),
       onError: setMessage, canSwitch: () => !directAudio.current?.isSendingAudio(),
-      speechOptions: () => ({ ...speechOptionsRef.current }),
+      speechOptions: activeSpeechOptions,
       currentTone: options => tones.current(options),
       switchMode: async mode => {
         if (controller.signal.aborted) return;
@@ -283,7 +286,7 @@ export function useSharedConversation(id: string, signedIn = false) {
           // Only a closed, expired or foreign session is final. Everything else deserves a retry.
           if ([401, 403, 404].includes(response.status)) {
             setMessage(data.error || "La conversation est terminée.");
-            stopped.current = "session ended";
+            stopped.current = "session ended"; setEnded(true);
             running.current = false; setEnabled(false); player.stop(); directAudio.current?.dispose(); turns.dispose(); translationRef.current.stop();
             toneCapture.current?.stop();
             return;
@@ -302,6 +305,12 @@ export function useSharedConversation(id: string, signedIn = false) {
           recorder.current?.stop(); recorder.current?.discard(); recorder.current = new SpeechRecorder();
         }
         roomRef.current = data; setRoom(data);
+        // Nobody is listening any more: close the microphone rather than let them talk into the void.
+        // The session stays open, so the controls come back when the other person returns.
+        if (data.peer && !data.peer.online && running.current) {
+          running.current = false; setEnabled(false); stopped.current = "peer away";
+          turns.flush(); recorder.current?.pause(); toneCapture.current?.stop(); translationRef.current.stop();
+        }
         const wanted = desiredMode(data.me);
         const unsupportedDirect = data.peer?.language && !supportsDirectOutput(data.peer.language);
         if (unsupportedDirect) modeReason.current = `${data.peer.language.toUpperCase()} output uses mode 2: this language is not documented for OpenAI live translation output.`;
@@ -409,7 +418,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
-  }, [id, signedIn, playQueue, syncMicrophone, canPlay]);
+  }, [id, signedIn, playQueue, syncMicrophone, canPlay, activeSpeechOptions]);
 
   async function unlockSound() {
     await Promise.all([voice.current?.unlock(), directAudio.current?.unlock()]);
@@ -547,10 +556,10 @@ export function useSharedConversation(id: string, signedIn = false) {
     switching: publisher.current?.switching ?? false, directAudio: directAudio.current?.status ?? "waiting",
     reason: modeReason.current, contextTurns: publisher.current?.memory.recent().length ?? 0,
     timing: publisher.current?.timing ?? null, receivedTiming: timing.current,
-    speechOptions: speechOptionsRef.current, outgoingSpeech: publisher.current?.speech ?? null, incomingSpeech: incomingSpeech.current,
+    speechOptions: activeSpeechOptions(), outgoingSpeech: publisher.current?.speech ?? null, incomingSpeech: incomingSpeech.current,
     synthesis: voice.current?.lastSynthesis ?? null, audioLatency: voice.current?.lastLatency ?? null,
-  }), []);
+  }), [activeSpeechOptions]);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { speechOptions, setSpeechOptions, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { ended, speechOptions, setSpeechOptions, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }

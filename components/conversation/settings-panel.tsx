@@ -2,7 +2,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { VoiceConsent } from "./voice-consent";
-import { ShareSession } from "./share-session";
 import type { Participant } from "@/types/session";
 import type { SpeechOptions } from "@/lib/audio/speech-options";
 
@@ -28,15 +27,10 @@ export function SettingsPanel({ id, me, speechSeconds, onConsent, onRefresh, onU
     <div className="settings-group">
       <h2>{"My voice"}</h2>
       <VoiceConsent sessionId={id} me={me} seconds={speechSeconds} onConsent={onConsent} onRefresh={onRefresh} onUseClone={onUseClone} />
-      <label className="setting-toggle">
+      {me.hasAccount && <label className="setting-toggle">
         <input type="checkbox" checked={speechOptions.emotion} onChange={event => onSpeechOptions({ ...speechOptions, emotion: event.target.checked })} />
-        <span>Match my tone of voice<em>No added delay: a few seconds of your speech are analysed now and then to estimate how you are speaking. Separate from your own voice, and available without an account.</em></span>
-      </label>
-    </div>
-
-    <div className="settings-group">
-      <h2>{"Invite"}</h2>
-      <ShareSession id={id} />
+        <span>Match my tone of voice<em>No added delay: a few seconds of your speech are analysed now and then to estimate how you are speaking. Separate from your own voice.</em></span>
+      </label>}
     </div>
 
     <div className="settings-group settings-danger">

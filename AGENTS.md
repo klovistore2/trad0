@@ -44,6 +44,12 @@ ferme la conversation pour les deux personnes et efface ses données temporaires
 restent conservées. Le bouton s'appelle donc « End the conversation » : l'ancien libellé
 « End session & delete voices » promettait une suppression qui n'a jamais lieu.
 
+Quand la conversation est fermée ou expirée, l'autre personne voit « Cette conversation est
+terminée » puis revient à l'accueil dans sa langue après trois secondes. Quand l'autre personne
+est seulement absente (plus de 15 s sans scrutation : onglet fermé, téléphone verrouillé), le micro
+se ferme et les boutons de parole sont bloqués jusqu'à son retour, sans renvoi vers l'accueil :
+elle peut revenir tant que la session n'a pas expiré.
+
 La création nécessite actuellement un compte pour réutiliser une voix enregistrée entre sessions.
 Ne pas présenter le parcours comme « invité ↔ invité » dès la création. L’accueil n’ouvre aucun micro
 et ne propose plus de démonstration préécrite : elle ne prouvait rien d’une traduction vocale réelle.
@@ -143,7 +149,9 @@ Le mode 1 ignore ces options. Aucun changement de schéma Neon n'est nécessaire
 Un `ttsModel` envoyé par un navigateur est ignoré, pas obéi : l'identifiant ne vient jamais du corps.
 Le relais HTTP existant et le téléchargement complet avant lecture sont conservés.
 
-L'analyse est distincte du clonage et fonctionne aussi pour un invité sans compte. Son activation
+L'analyse est distincte du clonage mais **réservée aux comptes** : un invité ne voit pas la case,
+un choix déjà mémorisé sur le téléphone ne s'applique pas sans compte, et `/api/audio/tone` refuse
+un participant sans compte (403), chaque analyse étant payante. Son activation
 explicite autorise les courts extraits nécessaires à cette fonctionnalité ; elle ne consent jamais
 au clonage. `ToneCapture` réutilise le micro existant via un AudioWorklet silencieux, uniquement
 lorsque ce locuteur a la parole en mode 2. Mémoire bornée aux trois dernières secondes en PCM mono
