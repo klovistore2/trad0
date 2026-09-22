@@ -50,20 +50,25 @@ Un visiteur sans compte n’a donc rien à essayer seul ; c’est assumé, pas u
 
 ## 2. Deux modes de traduction, indépendants par locuteur
 
-Le choix dans les paramètres concerne **mes paroles sortantes**, pas une préférence globale de session.
-`preferred_mode` vaut `auto`, `direct` ou `context` ; `active_mode` indique le circuit effectivement utilisé.
+Le mode n'est plus un réglage : il découle de la case « utiliser ma voix ». Sans clone, ou clone
+décoché, c'est le mode 1 rapide ; dès que le clone est utilisable et coché, c'est le mode 2.
+`preferred_mode` reste `auto` pour tout le monde et n'est plus écrit par l'interface ;
+`PATCH /api/sessions/[id]/mode` accepte toujours `direct` et `context`, ce qui sert au parcours
+navigateur pour exercer le circuit contextuel sans clone. `active_mode` indique le circuit utilisé.
+Chaque locuteur a son propre mode : ce n'est pas une préférence globale de session.
 
 | Mode | Traitement | Voix entendue par l’autre personne |
 | --- | --- | --- |
 | 1 — `direct` | Micro → OpenAI Realtime Translation → texte et audio traduits | Voix du modèle OpenAI |
 | 2 — `context` | Micro → transcription OpenAI → LLM avec contexte → ElevenLabs | Clone activé et utilisable, sinon voix standard adaptée au registre |
-| `auto` | Mode 1 initialement ; mode 2 dès que le clone de ce locuteur est disponible et activé avec consentement | Dépend du mode actif |
+| `auto` (seul mode réel) | Mode 1 initialement ; mode 2 dès que le clone de ce locuteur est disponible et coché | Dépend du mode actif |
 
-Le mode 2 est accessible **sans compte et sans consentir au clonage**. Le clonage peut déclencher
-la bascule automatique, mais n’est pas une condition d’accès à une traduction avec contexte.
-Un clone déjà enregistré peut permettre de commencer directement en mode 2. Pendant son affinage,
+Le circuit du mode 2 fonctionne **sans compte et sans consentir au clonage** : sa voix standard reste
+utilisable. Mais **aucune commande d'interface n'y conduit plus** sans clone, puisque le menu de mode
+a été retiré ; seules la langue de sortie et l'échec de la liaison audio y mènent désormais.
+Un clone déjà enregistré permet de commencer directement en mode 2. Pendant son affinage,
 un premier clone utilisable reste en service. Une voix en attente de vérification ne déclenche pas
-la bascule automatique. Un choix explicite de mode prévaut sur le choix automatique du clone.
+la bascule automatique.
 
 Deux exceptions techniques imposent le mode 2, même si le mode direct est préféré :
 

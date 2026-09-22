@@ -256,7 +256,12 @@ try {
  await expect(b.getByLabel(/Match my tone of voice/)).not.toBeChecked();
  // The model and the wait budget follow from this one box; the panel offers nothing else to set.
  await b.getByLabel(/Match my tone of voice/).check();
- await b.locator('#translation-mode').selectOption('context');
+ // No mode control is left in the panel: auto follows the clone, so the journey drives the
+ // documented route itself to exercise the context pipeline without one.
+ await b.evaluate(async id => {
+  const response = await fetch(`/api/sessions/${id}/mode`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({preference:'context'})});
+  if(!response.ok) throw new Error('mode preference rejected');
+ }, sessionId);
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
  await b.getByRole('button',{name:'Back to the conversation'}).click();
  await expect(b.locator('.pipeline-diagnostics summary')).toContainText('2 ·');

@@ -41,7 +41,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
       : !room.peer ? <ShareSession id={id} />
       : settings ? <SettingsPanel id={id} me={room.me} peer={room.peer} speechSeconds={session.speechSeconds}
           speechOptions={session.speechOptions} onSpeechOptions={session.setSpeechOptions}
-          onMode={mode => void session.setMode(mode)} onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
+          onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
           readAudioState={session.readAudioState} onTestTone={() => void session.playTestTone()}
           voiceStatus={session.voiceStatus} received={session.received} onClose={() => setSettings(false)} />
       : <>

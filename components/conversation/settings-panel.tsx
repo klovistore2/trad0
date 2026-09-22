@@ -1,5 +1,4 @@
 "use client";
-import type { ModePreference } from "@/lib/translation/modes";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { VoiceConsent } from "./voice-consent";
@@ -10,14 +9,13 @@ import type { VoiceStatus } from "@/types/voice";
 import type { SpeechOptions } from "@/lib/audio/speech-options";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose, speechOptions, onSpeechOptions }: {
+export function SettingsPanel({ id, me, peer, speechSeconds, onConsent, onRefresh, onUseClone, readAudioState, onTestTone, voiceStatus, received, onClose, speechOptions, onSpeechOptions }: {
   speechOptions: SpeechOptions;
   onSpeechOptions: (options: SpeechOptions) => void;
   id: string;
   me: Participant;
   peer: Participant;
   speechSeconds: number;
-  onMode: (mode: ModePreference) => void;
   onConsent: () => void;
   onRefresh: () => void;
   onUseClone: (useClone: boolean) => void;
@@ -34,16 +32,6 @@ export function SettingsPanel({ id, me, peer, speechSeconds, onMode, onConsent, 
     <h1>{"Settings"}</h1>
     <button className="primary-button" onClick={onClose}>{"Back to the conversation"}</button>
 
-    <div className="settings-group">
-      <h2>Translation</h2>
-      <label htmlFor="translation-mode">My outgoing speech</label>
-      <select id="translation-mode" className="language-picker" value={me.preferredMode} onChange={event => onMode(event.target.value as ModePreference)}>
-        <option value="auto">Automatic · use context when my clone is ready</option>
-        <option value="direct">Mode 1 · OpenAI live speech</option>
-        <option value="context">Mode 2 · translation with context + ElevenLabs</option>
-      </select>
-      <p>Changes apply between sentences. Mode 2 works with a standard voice, without an account or voice cloning.</p>
-    </div>
     <div className="settings-group">
       <h2>{"My voice"}</h2>
       <VoiceConsent sessionId={id} me={me} seconds={speechSeconds} onConsent={onConsent} onRefresh={onRefresh} onUseClone={onUseClone} />

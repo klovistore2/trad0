@@ -4,7 +4,7 @@ import { useTranslationSession } from "./useTranslationSession";
 import { useLanguageDetection } from "./useLanguageDetection";
 import { NeonPeerTransport } from "@/lib/realtime/neon-transport";
 import { ConversationPipeline } from "@/lib/translation/conversation-pipeline";
-import { desiredMode, modeForLanguage, supportsDirectOutput, type ConversationMode, type ModePreference } from "@/lib/translation/modes";
+import { desiredMode, modeForLanguage, supportsDirectOutput, type ConversationMode } from "@/lib/translation/modes";
 import { PeerAudioLink } from "@/lib/realtime/audio-link";
 import { SpeechClock } from "@/lib/audio/speech-clock";
 import { ElevenLabsVoiceProvider } from "@/lib/elevenlabs/voice-provider";
@@ -520,14 +520,6 @@ export function useSharedConversation(id: string, signedIn = false) {
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
   }
-  async function setMode(preference: ModePreference) {
-    setMessage("");
-    try {
-      const response = await fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preference }) });
-      if (!response.ok) throw new Error((await response.json()).error);
-      refreshNow.current();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not change mode."); }
-  }
   async function setLanguage(slot: number, language: Language | "auto") {
     if (changingLanguageRef.current) return;
     changingLanguageRef.current = true; setChangingLanguage(true); setMessage("");
@@ -572,5 +564,5 @@ export function useSharedConversation(id: string, signedIn = false) {
   }), []);
   const hasFloor = room ? floor === room.me.slot : false;
   const floorFree = floor === null;
-  return { speechOptions, setSpeechOptions, activeMode, setMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
+  return { speechOptions, setSpeechOptions, activeMode, readPipelineState, spokenSeconds, room, message: message || translation.message, incoming, voiceStatus, enabled, soundOn, hasFloor, floorFree, claiming, starting, changingLanguage, setLanguage, received, speechSeconds, connectionLost, soundReady, translation: activeMode === "context" ? { ...translation, translation: contextTranslation } : translation, start, stop, takeFloor, releaseFloor, toggleSound, giveConsent, setUseClone, refresh: () => refreshNow.current(), enableSound, playTestTone, readAudioState };
 }
