@@ -9,7 +9,7 @@ export const isLanguage = (value: unknown): value is Language =>
   typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
 export type VoiceRange = "low" | "high";
 export type Participant = { slot: number; hasAccount: boolean; preferredMode: ModePreference; activeMode: ConversationMode; language: Language; languageAuto: boolean; languageDetected: boolean; languageRevision: number; languageAttempts: number; online: boolean; voiceRange: VoiceRange | null; voiceTier: number; useClone: boolean; consented: boolean; voiceStatus: "none" | "learning" | "ready" | "verification_required" };
-export type SharedSession = { id: string; expiresAt: string; floor: number | null; me: Participant; peer: Participant | null; diagnostics?: boolean; models?: { realtime: string; transcription: string; translation: string; voice: string } };
+export type SharedSession = { id: string; expiresAt: string; floor: number | null; me: Participant; peer: Participant | null; diagnostics?: boolean; models?: { realtime: string; transcription: string; translation: string } };
 export type PeerEvent = { id: string; turnId: string; text: string; committed: boolean; kind?: "original" | "translation"; original?: string; mode?: ConversationMode; sourceLanguage?: Language; targetLanguage?: Language; timing?: PipelineTiming; speech?: SpeechMetadata };
 export type ReceivedEvent = PeerEvent & { seq: string; ageMs?: number };
 export interface PeerTransport {

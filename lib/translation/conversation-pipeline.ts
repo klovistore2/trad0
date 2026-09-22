@@ -2,7 +2,7 @@ import { TurnPublisher } from "@/lib/realtime/turn-publisher";
 import { ConversationMemory } from "./memory";
 import type { ConversationMode } from "./modes";
 import type { Language, PeerEvent } from "@/types/session";
-import type { SpeechOptions, SpeechMetadata } from "@/lib/audio/speech-options";
+import { toneWaitMs, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
 import type { ToneJob } from "@/lib/audio/tone-analysis";
 
 export type PipelineTiming = { waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
@@ -67,7 +67,7 @@ export class ConversationPipeline {
       const actualLanguage = { ...language, targetLanguage: data.targetLanguage as Language };
       this.memory.add(event.turnId, { speaker: this.options.speaker(), original, translation: data.text, ...actualLanguage });
       this.options.onTranslation(data.text);
-      const speechMetadata = speech ? { options: speech.options, ...await speech.job.finish(speech.options.toneWaitMs) } : undefined;
+      const speechMetadata = speech ? { options: speech.options, ...await speech.job.finish(toneWaitMs(speech.options)) } : undefined;
       if (this.controller.signal.aborted) return;
       this.speech = speechMetadata ?? null;
       const publishStarted = performance.now();

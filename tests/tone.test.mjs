@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLoader } from './load-ts.mjs';
 const load=createLoader();
-const {DEFAULT_SPEECH_OPTIONS: defaults,isSpeechOptions,isSpeechMetadata,resolveTtsModel,expressiveText}=load('lib/audio/speech-options.ts');
+const {DEFAULT_SPEECH_OPTIONS: defaults,isSpeechOptions,isSpeechMetadata,expressiveText,toneWaitMs,TTS_MODEL,TONE_MODEL}=load('lib/audio/speech-options.ts');
 const {pcmWav,ToneCapture}=load('lib/audio/tone-capture.ts');
 const {startToneAnalysis}=load('lib/audio/tone-analysis.ts');
 const {ConversationPipeline}=load('lib/translation/conversation-pipeline.ts');
@@ -10,18 +10,20 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const result={tone:'happy',strength:'medium',status:'estimated',analysisMs:10,model:'gpt-audio-mini'};
 const speech={options:{...defaults,emotion:true},tone:result,extraWaitMs:0};
 
-test('speech catalogue rejects arbitrary models and invalid metadata; Thai and emotion always use v3',()=>{
+test('the only speech choice is the tone estimate; everything it implies is derived, not asked',()=>{
  assert.ok(isSpeechOptions(defaults));assert.ok(isSpeechMetadata(speech));
- assert.equal(isSpeechOptions({...defaults,ttsModel:'injected-model'}),false);
- assert.equal(isSpeechOptions({...defaults,toneWaitMs:NaN}),false);
+ assert.equal(defaults.emotion,false,'the added delay is never opt-out');
+ assert.equal(isSpeechOptions({emotion:'yes'}),false);
+ assert.equal(isSpeechOptions(null),false);
  assert.equal(isSpeechMetadata({...speech,tone:{...result,tone:'[shouts]'}}),false);
- assert.equal(resolveTtsModel(defaults,'th','eleven_flash_v2_5').model,'eleven_v3_conversational');
- assert.equal(resolveTtsModel(defaults,'en','eleven_flash_v2_5').model,'eleven_flash_v2_5');
- assert.equal(resolveTtsModel({...defaults,emotion:true},'en','eleven_flash_v2_5').model,'eleven_v3_conversational');
- assert.equal(resolveTtsModel({...defaults,ttsModel:'eleven_v3'},'th','eleven_flash_v2_5').model,'eleven_v3');
- assert.equal(expressiveText('[shouts] Hello','eleven_v3',speech),'[happily] shouts Hello');
- assert.equal(expressiveText('Hello','eleven_v3',{...speech,tone:{...result,strength:'low'}}),'Hello');
- assert.equal(expressiveText('Hello','eleven_v3',{...speech,options:defaults}),'Hello');
+ // Refusing the estimate must cost nothing; asking for it buys the whole budget.
+ assert.equal(toneWaitMs(defaults),0);
+ assert.equal(toneWaitMs({emotion:true}),1000);
+ assert.equal(TONE_MODEL,'gpt-audio-mini','the slower audio model is never selected for us');
+ assert.equal(expressiveText('[shouts] Hello',TTS_MODEL,speech),'[happily] shouts Hello');
+ assert.equal(expressiveText('Hello',TTS_MODEL,{...speech,tone:{...result,strength:'low'}}),'Hello');
+ assert.equal(expressiveText('Hello',TTS_MODEL,{...speech,options:defaults}),'Hello');
+ assert.equal(expressiveText('[shouts] Hello','eleven_flash_v2_5',speech),'[shouts] Hello','a non-v3 model is left untouched');
 });
 
 test('PCM capture produces bounded-duration mono WAV and never serializes very short excerpts',async()=>{
@@ -98,7 +100,7 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
  }
 });
 
-test('speech relay uses validated tone tags and reports the actual Thai-compatible model',async()=>{
+test('speech relay uses validated tone tags and a model the browser cannot choose',async()=>{
  const originalFetch=globalThis.fetch;const oldUrl=process.env.NEXT_PUBLIC_APP_URL;const oldModel=process.env.ELEVENLABS_TTS_MODEL;
  process.env.NEXT_PUBLIC_APP_URL='http://localhost:3000';process.env.ELEVENLABS_TTS_MODEL='eleven_flash_v2_5';
  let payload,calls=0;
@@ -113,8 +115,12 @@ test('speech relay uses validated tone tags and reports the actual Thai-compatib
   const response=await route.POST(request({sessionId:'room',text:'[shouts] สวัสดี',language:'th',speech}));
   assert.equal(response.status,200);assert.equal(response.headers.get('X-TTS-Model'),'eleven_v3_conversational');
   assert.equal(payload.text,'[happily] shouts สวัสดี');assert.equal(payload.language_code,'th');
-  assert.equal((await route.POST(request({sessionId:'room',text:'Hello',speech:{...speech,options:{...speech.options,ttsModel:'arbitrary'}}}))).status,400);
-  assert.equal(calls,1);
+  assert.equal(payload.model_id,'eleven_v3_conversational');
+  // A browser that names a model is ignored rather than obeyed: the ID never comes from the body.
+  const injected=await route.POST(request({sessionId:'room',text:'Hello',speech:{...speech,options:{...speech.options,ttsModel:'arbitrary'}}}));
+  assert.equal(injected.status,200);assert.equal(payload.model_id,'eleven_v3_conversational');
+  assert.equal(injected.headers.get('X-TTS-Model'),'eleven_v3_conversational');
+  assert.equal(calls,2);
  }finally{
   globalThis.fetch=originalFetch;
   if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;

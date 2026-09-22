@@ -37,7 +37,8 @@ test('relayed speech uses the other participant’s ready clone, never a client 
     assert.equal(response.headers.get('content-type'),'audio/mpeg');
     assert.match(upstream.url,/\/peer-clone\/stream/);
     assert.doesNotMatch(upstream.url,/unrelated-voice/);
-    assert.equal(upstream.body.model_id,'test-model');
+    // The speaking model is fixed in code: an environment value no longer selects it.
+    assert.equal(upstream.body.model_id,'eleven_v3_conversational');
     assert.equal(upstream.body.language_code,'fr');
     assert.equal(upstream.key,'test-key');
   } finally {

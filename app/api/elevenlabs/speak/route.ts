@@ -2,7 +2,7 @@ import { member } from "@/lib/session/auth";
 import { db } from "@/lib/neon/db";
 import { elevenHeaders, fallbackVoice } from "@/lib/elevenlabs/server";
 import { checkOrigin, failure, HttpError, readJson } from "@/lib/server/http";
-import { DEFAULT_SPEECH_OPTIONS, expressiveText, isSpeechMetadata, resolveTtsModel } from "@/lib/audio/speech-options";
+import { expressiveText, isSpeechMetadata, TTS_MODEL } from "@/lib/audio/speech-options";
 
 export const maxDuration = 30;
 
@@ -29,8 +29,9 @@ export async function POST(request: Request) {
       // The speaker's own range, so the receiver hears a fitting voice before any clone exists.
       if (rows[0].voice_range === "low" || rows[0].voice_range === "high") range = rows[0].voice_range;
     }
-    const configured = process.env.ELEVENLABS_TTS_MODEL?.trim() || "eleven_flash_v2_5";
-    const { model, reason } = resolveTtsModel(speech?.options ?? DEFAULT_SPEECH_OPTIONS, language, configured);
+    // One model for every sentence: it is the only v3 member that covers Thai and the emotion
+    // tags, so there is nothing left to resolve per language or per speaker.
+    const model = TTS_MODEL;
     const voice = voiceId || await fallbackVoice(range);
     const started = performance.now();
     const upstream = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}/stream?output_format=mp3_22050_32`, {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       "Content-Type": "audio/mpeg", "Cache-Control": "no-store",
       // Development aid: lets the page show which voice was actually used.
       "X-Voice-Source": voiceId ? "clone" : `standard-${range ?? "neutral"}`,
-      "X-TTS-Model": model, "X-TTS-Fallback": reason,
+      "X-TTS-Model": model,
       "X-TTS-Headers-Ms": String(Math.round(performance.now() - started)),
     } });
   } catch (error) { return failure(error); }

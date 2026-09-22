@@ -111,19 +111,28 @@ alors que Node pouvait se connecter. Conserver le relais HTTP tant qu’un rempl
 validé avec proxys, VPN et extensions. L’élément média est aussi un choix de compatibilité mobile ;
 les analyseurs Web Audio ne sont pas la sortie de lecture.
 
-### Expérimentation de la synthèse et du ton (22 septembre 2026)
+### Synthèse et ton : un seul modèle, deux cases (22 septembre 2026)
 
-Les paramètres proposent, pour **mes paroles sortantes en mode 2**, un modèle ElevenLabs
-(`auto`, `eleven_flash_v2_5`, `eleven_v3`, `eleven_v3_conversational`), l'analyse du ton activable,
-le modèle audio OpenAI (`gpt-audio-mini`, `gpt-audio`) et l'attente supplémentaire maximale après
-traduction (0, 250 ou 1000 ms). Valeurs initiales : auto, ton désactivé, Mini, 250 ms.
+Les paramètres ne proposent plus de menus techniques. Pour **mes paroles sortantes en mode 2**,
+deux cases à cocher seulement : utiliser ma voix clonée quand c'est possible, et reproduire mon ton.
+Chacune annonce son coût en délai. Tout ce qui en découle est décidé dans le code, jamais demandé :
+un locuteur ne peut pas arbitrer entre des millisecondes et une justesse émotionnelle.
+
+La synthèse utilise **`eleven_v3_conversational` pour chaque phrase** (`TTS_MODEL`). C'est le seul
+membre v3 conçu pour le temps réel, et le seul qui couvre à la fois le thaï et les tags expressifs :
+il n'y a donc plus de repli à calculer par langue, ni de raison de remplacement à afficher.
+Le v3 nu est prévu pour la narration et a été mesuré plus lent ; il n'est plus proposé.
+`ELEVENLABS_TTS_MODEL` ne sélectionne plus le modèle de synthèse.
+
+L'analyse de ton utilise toujours `gpt-audio-mini` (`TONE_MODEL`), le plus rapide des deux :
+une estimation qui arrive après la phrase ne sert à rien. Le budget d'attente après traduction est
+dérivé de la case (`toneWaitMs`) : 0 ms si le ton est refusé, 1000 ms s'il est demandé. Refuser ne
+doit rien coûter ; demander achète tout le budget.
+
 Les choix sont conservés sur cet appareil dans `localStorage`, pas sur le compte. Chaque phrase
 fige ses options dans les métadonnées de l'événement ; l'autre appareil les transmet à la synthèse.
 Le mode 1 ignore ces options. Aucun changement de schéma Neon n'est nécessaire.
-
-Flash ne documente pas le thaï ni les tags expressifs. Le serveur impose donc v3 Conversational
-pour le thaï ou l'option émotion si le modèle demandé n'est pas déjà v3. Un choix explicite de v3
-reste v3. Le modèle réellement utilisé et la raison du remplacement apparaissent dans les diagnostics.
+Un `ttsModel` envoyé par un navigateur est ignoré, pas obéi : l'identifiant ne vient jamais du corps.
 Le relais HTTP existant et le téléchargement complet avant lecture sont conservés.
 
 L'analyse est distincte du clonage et fonctionne aussi pour un invité sans compte. Son activation
@@ -356,7 +365,7 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `OPENAI_INPUT_TRANSCRIPTION_MODEL` | Transcription des deux circuits ; défaut `gpt-realtime-whisper` |
 | `OPENAI_TEXT_TRANSLATION_MODEL` | LLM du mode 2 ; défaut `gpt-4.1-mini`, compatible Chat Completions et JSON structuré |
 | `OPENAI_LANGUAGE_DETECTION_MODEL` | Classification initiale ; défaut `gpt-4.1-nano` |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_TTS_MODEL` | Synthèse et clonage ; défaut de synthèse : `eleven_flash_v2_5`, surcharge par phrase dans les paramètres ; v3 requis pour thaï/ton |
+| `ELEVENLABS_API_KEY` | Synthèse et clonage. Le modèle de synthèse est fixé dans le code (`eleven_v3_conversational`) ; `ELEVENLABS_TTS_MODEL` n'est plus lu par la route de synthèse |
 | `ELEVENLABS_FALLBACK_VOICE_ID`, `ELEVENLABS_VOICE_LOW`, `ELEVENLABS_VOICE_HIGH` | Choix facultatifs de voix standard |
 | `DATABASE_URL` | Neon |
 | `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js et Google ; URI de retour OAuth à configurer pour chaque origine |

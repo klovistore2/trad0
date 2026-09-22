@@ -118,6 +118,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "ภาษาของหน้านี้",
   },
   es: {
+    keepVoiceTitle: "Conserva tu voz", keepVoiceBody: "¿Quieres oír tu propia voz en la traducción? Inicia sesión con Google y luego elige si crear tu voz.", keepVoiceAction: "Iniciar sesión para conservar mi voz", notNow: "Ahora no",
     iSpeak: "Yo hablo", theySpeak: "La otra persona habla", autoLanguage: "Auto", detectOnSpeech: "Se detecta al hablar", languageDetected: "Detectado · se puede cambiar", chooseLanguage: "Elige el idioma",
     muteSound: "Silenciar el sonido", unmuteSound: "Activar el sonido", soundOn: "Sonido activado", textOnly: "Solo texto",
     theirWords: "SUS PALABRAS, EN TU IDIOMA", connectedTitle: "Estáis conectados.",
@@ -149,6 +150,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "Idioma de la página",
   },
   pt: {
+    keepVoiceTitle: "Guarde a sua voz", keepVoiceBody: "Quer ouvir a sua própria voz na tradução? Inicie sessão com o Google e depois escolha se quer criar a sua voz.", keepVoiceAction: "Iniciar sessão para guardar a minha voz", notNow: "Agora não",
     iSpeak: "Eu falo", theySpeak: "A outra pessoa fala", autoLanguage: "Auto", detectOnSpeech: "Detetado ao falar", languageDetected: "Detetado · pode alterar", chooseLanguage: "Escolha o idioma",
     muteSound: "Desligar o som", unmuteSound: "Ligar o som", soundOn: "Som ligado", textOnly: "Apenas texto",
     theirWords: "AS PALAVRAS DELE, NA SUA LÍNGUA", connectedTitle: "Estão ligados.",
@@ -180,6 +182,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "Idioma da página",
   },
   it: {
+    keepVoiceTitle: "Conserva la tua voce", keepVoiceBody: "Vuoi sentire la tua voce nella traduzione? Accedi con Google, poi scegli se creare la tua voce.", keepVoiceAction: "Accedi per conservare la mia voce", notNow: "Non ora",
     iSpeak: "Io parlo", theySpeak: "L’altra persona parla", autoLanguage: "Auto", detectOnSpeech: "Rilevata quando parli", languageDetected: "Rilevata · modificabile", chooseLanguage: "Scegli la lingua",
     muteSound: "Disattivare l’audio", unmuteSound: "Attivare l’audio", soundOn: "Audio attivo", textOnly: "Solo testo",
     theirWords: "LE SUE PAROLE, NELLA TUA LINGUA", connectedTitle: "Siete collegati.",
@@ -211,6 +214,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "Lingua della pagina",
   },
   de: {
+    keepVoiceTitle: "Deine Stimme behalten", keepVoiceBody: "Möchtest du deine eigene Stimme in der Übersetzung hören? Melde dich mit Google an und entscheide dann, ob deine Stimme erstellt wird.", keepVoiceAction: "Anmelden und meine Stimme behalten", notNow: "Jetzt nicht",
     iSpeak: "Ich spreche", theySpeak: "Andere Person spricht", autoLanguage: "Auto", detectOnSpeech: "Erkennung beim Sprechen", languageDetected: "Erkannt · änderbar", chooseLanguage: "Sprache wählen",
     muteSound: "Ton ausschalten", unmuteSound: "Ton einschalten", soundOn: "Ton an", textOnly: "Nur Text",
     theirWords: "IHRE WORTE, IN DEINER SPRACHE", connectedTitle: "Ihr seid verbunden.",
@@ -270,6 +274,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     voiceAccept: "Mijn stem gebruiken", voiceDecline: "Niet nu — een standaardstem houden",
   },
   ja: {
+    keepVoiceTitle: "自分の声を残す", keepVoiceBody: "翻訳を自分の声で聞きませんか？Google でログインしたあと、自分の声を作成するかどうかを選べます。", keepVoiceAction: "ログインして自分の声を残す", notNow: "今はしない",
     iSpeak: "自分の言語", theySpeak: "相手の言語", autoLanguage: "自動", detectOnSpeech: "話すと検出します", languageDetected: "検出済み・変更可能", chooseLanguage: "言語を選択",
     muteSound: "音を消す", unmuteSound: "音を出す", soundOn: "音声オン", textOnly: "テキストのみ",
     theirWords: "相手の言葉を、あなたの言語で", connectedTitle: "つながりました。",
@@ -301,6 +306,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "ページの言語",
   },
   ko: {
+    keepVoiceTitle: "내 목소리 유지하기", keepVoiceBody: "번역을 내 목소리로 듣고 싶으신가요? Google로 로그인한 뒤 목소리를 만들지 선택하세요.", keepVoiceAction: "로그인하고 내 목소리 유지", notNow: "지금은 아니요",
     iSpeak: "내 언어", theySpeak: "상대방 언어", autoLanguage: "자동", detectOnSpeech: "말하면 감지합니다", languageDetected: "감지됨 · 변경 가능", chooseLanguage: "언어 선택",
     muteSound: "소리 끄기", unmuteSound: "소리 켜기", soundOn: "소리 켜짐", textOnly: "텍스트만",
     theirWords: "상대의 말을, 당신의 언어로", connectedTitle: "연결되었습니다.",
@@ -332,6 +338,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "페이지 언어",
   },
   zh: {
+    keepVoiceTitle: "保留你的声音", keepVoiceBody: "想用自己的声音听到翻译吗？先用 Google 登录，然后选择是否创建你的声音。", keepVoiceAction: "登录以保留我的声音", notNow: "暂时不用",
     iSpeak: "我说", theySpeak: "对方说", autoLanguage: "自动", detectOnSpeech: "说话时检测", languageDetected: "已检测 · 可修改", chooseLanguage: "选择语言",
     muteSound: "静音", unmuteSound: "打开声音", soundOn: "声音已开", textOnly: "仅文字",
     theirWords: "对方的话，用你的语言", connectedTitle: "已连接。",
@@ -363,6 +370,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "页面语言",
   },
   vi: {
+    keepVoiceTitle: "Giữ giọng của bạn", keepVoiceBody: "Bạn muốn nghe bản dịch bằng chính giọng của mình? Đăng nhập bằng Google, rồi chọn có tạo giọng của bạn hay không.", keepVoiceAction: "Đăng nhập để giữ giọng của tôi", notNow: "Chưa cần",
     iSpeak: "Tôi nói", theySpeak: "Người kia nói", autoLanguage: "Tự động", detectOnSpeech: "Phát hiện khi nói", languageDetected: "Đã phát hiện · có thể đổi", chooseLanguage: "Chọn ngôn ngữ",
     muteSound: "Tắt tiếng", unmuteSound: "Bật tiếng", soundOn: "Đã bật tiếng", textOnly: "Chỉ văn bản",
     theirWords: "LỜI CỦA HỌ, BẰNG NGÔN NGỮ CỦA BẠN", connectedTitle: "Hai bạn đã kết nối.",
@@ -394,6 +402,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "Ngôn ngữ trang",
   },
   id: {
+    keepVoiceTitle: "Simpan suaramu", keepVoiceBody: "Ingin mendengar terjemahan dengan suaramu sendiri? Masuk dengan Google, lalu pilih apakah suaramu dibuat.", keepVoiceAction: "Masuk untuk menyimpan suara saya", notNow: "Nanti saja",
     iSpeak: "Saya berbicara", theySpeak: "Lawan bicara", autoLanguage: "Otomatis", detectOnSpeech: "Terdeteksi saat berbicara", languageDetected: "Terdeteksi · dapat diubah", chooseLanguage: "Pilih bahasa",
     muteSound: "Matikan suara", unmuteSound: "Nyalakan suara", soundOn: "Suara aktif", textOnly: "Hanya teks",
     theirWords: "KATA MEREKA, DALAM BAHASAMU", connectedTitle: "Kalian terhubung.",
@@ -425,6 +434,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "Bahasa halaman",
   },
   ru: {
+    keepVoiceTitle: "Сохраните свой голос", keepVoiceBody: "Хотите слышать перевод своим голосом? Войдите через Google, а затем решите, создавать ли ваш голос.", keepVoiceAction: "Войти и сохранить мой голос", notNow: "Не сейчас",
     iSpeak: "Я говорю", theySpeak: "Собеседник говорит", autoLanguage: "Авто", detectOnSpeech: "Определяется при речи", languageDetected: "Определён · можно изменить", chooseLanguage: "Выберите язык",
     muteSound: "Выключить звук", unmuteSound: "Включить звук", soundOn: "Звук включён", textOnly: "Только текст",
     theirWords: "ЕГО СЛОВА, НА ВАШЕМ ЯЗЫКЕ", connectedTitle: "Вы на связи.",
@@ -456,6 +466,7 @@ const translations: Partial<Record<Language, Partial<Record<StringKey, string>>>
     pageLanguage: "Язык страницы",
   },
   hi: {
+    keepVoiceTitle: "अपनी आवाज़ सहेजें", keepVoiceBody: "क्या आप अनुवाद को अपनी ही आवाज़ में सुनना चाहते हैं? Google से साइन इन करें, फिर तय करें कि अपनी आवाज़ बनानी है या नहीं।", keepVoiceAction: "साइन इन करके अपनी आवाज़ सहेजें", notNow: "अभी नहीं",
     iSpeak: "मैं बोलता हूँ", theySpeak: "वे बोलते हैं", autoLanguage: "स्वचालित", detectOnSpeech: "बोलने पर पहचान होगी", languageDetected: "पहचानी गई · बदल सकते हैं", chooseLanguage: "भाषा चुनें",
     muteSound: "आवाज़ बंद करें", unmuteSound: "आवाज़ चालू करें", soundOn: "आवाज़ चालू", textOnly: "केवल टेक्स्ट",
     theirWords: "उनकी बात, आपकी भाषा में", connectedTitle: "आप जुड़ गए हैं।",

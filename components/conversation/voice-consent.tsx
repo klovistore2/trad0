@@ -1,12 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
 import { FINAL_TIER, VOICE_TIERS } from "@/lib/voice/consent";
 import { rememberVoiceDecision } from "./voice-intro";
 import type { Participant } from "@/types/session";
 
-// Consent is given once, then the clone improves on its own from the conversation.
-// Nothing is recorded before this button is pressed.
+// One checkbox for the choice a speaker actually has, and nothing else in the way. Ticking it
+// is the explicit agreement: the disclosure sits above it, so the box is never the first time
+// recording is mentioned. Nothing is captured until it is ticked.
 export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onUseClone }: {
   sessionId: string;
   me: Participant;
@@ -17,6 +18,17 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
 }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  // The box answers the tap at once. Session state is polled, so a purely controlled checkbox
+  // would untick itself for a second and read as a failure. The timer is a safety net: a refused
+  // agreement must not leave the box claiming something the server never recorded.
+  const server = me.consented && me.useClone;
+  const [pending, setPending] = useState<boolean | null>(null);
+  if (pending !== null && pending === server) setPending(null);
+  useEffect(() => {
+    if (pending === null) return;
+    const timer = setTimeout(() => setPending(null), 5000);
+    return () => clearTimeout(timer);
+  }, [pending]);
   // reset keeps the agreement and starts the tiers over; otherwise the agreement is withdrawn.
   async function act(reset: boolean) {
     setBusy(true); setMessage("");
@@ -38,42 +50,37 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
     <GoogleSignIn className="demo-button" returnTo={`/session/${sessionId}`} label="Sign in to keep my voice" />
   </div>;
   const next = VOICE_TIERS.find(step => step.tier > me.voiceTier);
-  const active = me.voiceStatus === "ready" || me.voiceStatus === "verification_required";
-  const summary = active
-    ? (`✓ Your voice is active (tier ${me.voiceTier}/${FINAL_TIER})`)
-    : me.consented
-      ? ("Learning your voice…")
-      : ("Use my voice");
-  return <details className="voice-consent"><summary>{summary}</summary>
-    {!me.consented
-      ? <>
-          <p>{"The other person hears your translated words in a standard voice. With your permission, your voice is learned from this conversation and sent to ElevenLabs to speak for you instead. Nothing is recorded before you agree."}</p>
-          <p>{"Samples are held in browser memory and sent to ElevenLabs to create your voice. They are never saved on our servers. Your voice is saved to your account until you remove it."}</p>
-          <button className="demo-button" disabled={busy} onClick={async () => { setBusy(true); rememberVoiceDecision("accepted"); await onConsent(); setBusy(false); }}>
-            {"I agree · use and save my voice"}
-          </button>
-        </>
-      : <>
-          <p role="status">{me.voiceStatus === "verification_required"
-            ? ("ElevenLabs requires verification. The standard voice remains active.")
-            : next
-              ? (`Speech captured: ${seconds}s of ${next.seconds}s before the next version of your voice.`)
-              : ("Your voice is final; no more audio is kept.")}</p>
-          <p>{"Only your own turns are captured, never the other person."}</p>
-          <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(false)}>
-            {"Stop using my voice"}
-          </button>
-          {me.voiceTier > 0 && <>
-            <button className="demo-button" aria-pressed={me.useClone} onClick={() => onUseClone(!me.useClone)}>
-              {me.useClone
-                ? ("Cloned voice in use · tap for the standard voice")
-                : ("Standard voice in use · tap for my cloned voice")}
-            </button>
-            <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(true)}>
-              {"Rebuild my voice from scratch"}
-            </button>
-          </>}
-        </>}
+  // Unticking keeps the recorded voice: only the separate removal below deletes it.
+  async function toggle(on: boolean) {
+    setPending(on);
+    if (!on) { onUseClone(false); return; }
+    setBusy(true);
+    // One intent, two server facts. A speaker who turned the voice off earlier keeps that
+    // refusal in their profile, so agreeing again would otherwise leave the voice unused.
+    if (!me.consented) { rememberVoiceDecision("accepted"); await onConsent(); }
+    if (!me.useClone) onUseClone(true);
+    setBusy(false);
+  }
+  return <div className="voice-consent">
+    <p>Your voice is learned from your own turns in this conversation and sent to ElevenLabs to speak for you. Samples stay in memory, never on our servers, and the other person is never captured.</p>
+    <label className="setting-toggle">
+      <input type="checkbox" disabled={busy} checked={pending ?? server} onChange={event => void toggle(event.target.checked)} />
+      <span>Use my own voice when possible<em>Slightly slower: your words take the context route so they can be spoken in your voice.</em></span>
+    </label>
+    {me.consented && <p role="status" className="setting-status">{me.voiceStatus === "verification_required"
+      ? "ElevenLabs requires verification. A standard voice is used meanwhile."
+      : me.voiceStatus === "ready"
+        ? next ? `Your voice is ready (step ${me.voiceTier}/${FINAL_TIER}) · ${seconds}s of ${next.seconds}s captured towards the next version.`
+          : "Your voice is final; no more audio is kept."
+        : next ? `Learning your voice · ${seconds}s of ${next.seconds}s captured.` : "Learning your voice…"}</p>}
+    {me.consented && <details className="voice-remove"><summary>Remove my voice</summary>
+      <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(false)}>
+        Delete my voice and withdraw my agreement
+      </button>
+      {me.voiceTier > 0 && <button className="demo-button" disabled={busy || me.voiceStatus === "learning"} onClick={() => void act(true)}>
+        Rebuild my voice from scratch
+      </button>}
+    </details>}
     {message && <p role="alert">{message}</p>}
-  </details>;
+  </div>;
 }

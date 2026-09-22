@@ -464,7 +464,8 @@ export function useSharedConversation(id: string, signedIn = false) {
     publisher.current?.flush();
     speechOptionsRef.current = next; updateSpeechOptions(next);
     try { localStorage.setItem("trad0-speech-options", JSON.stringify(next)); } catch {}
-    if (!next.emotion || next.toneModel !== speechOptions.toneModel) {
+    // Turning the estimate off must release the microphone tap and drop anything in flight.
+    if (!next.emotion) {
       for (const request of toneControllers.current) request.abort();
       toneCapture.current?.stop();
     }

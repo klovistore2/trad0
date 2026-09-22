@@ -253,10 +253,9 @@ try {
   await route.fulfill({json:{text:'Peut-on y aller demain ?',targetLanguage:'fr',model:'test-fast-llm',contextTurns:body.context.length,translationMs:42}});
  });
  await b.getByRole('button',{name:'Settings'}).click();
- await expect(b.getByLabel('Estimate my vocal tone')).not.toBeChecked();
- await b.getByLabel('ElevenLabs model',{exact:true}).selectOption('eleven_v3');
- await b.getByLabel('Estimate my vocal tone').check();
- await b.getByLabel('Maximum extra wait after translation').selectOption('1000');
+ await expect(b.getByLabel(/Match my tone of voice/)).not.toBeChecked();
+ // The model and the wait budget follow from this one box; the panel offers nothing else to set.
+ await b.getByLabel(/Match my tone of voice/).check();
  await b.locator('#translation-mode').selectOption('context');
  await b.waitForFunction(()=>window.testMicrophone.readyState==='live');
  await b.getByRole('button',{name:'Back to the conversation'}).click();
@@ -269,11 +268,12 @@ try {
  await a.getByText(/Traduction en cours/).waitFor();
  assert.equal(llmCalls,1);
  assert.equal(toneCalls,1,JSON.stringify(expressiveSpeech));
- assert.equal(expressiveSpeech.options.ttsModel,'eleven_v3');
+ assert.equal(expressiveSpeech.options.emotion,true);
+ assert.equal(expressiveSpeech.tone.model,'gpt-audio-mini');
  assert.equal(expressiveSpeech.tone.tone,'happy');
  await b.getByRole('button',{name:'Settings'}).click();
- await expect(b.getByLabel('ElevenLabs model',{exact:true})).toHaveValue('eleven_v3');
- await b.getByLabel('Estimate my vocal tone').uncheck();
+ await expect(b.getByLabel(/Match my tone of voice/)).toBeChecked();
+ await b.getByLabel(/Match my tone of voice/).uncheck();
  await b.getByRole('button',{name:'Back to the conversation'}).click();
  assert.equal(await a.evaluate(()=>window.testRecordings),0);
  assert.equal(await b.evaluate(()=>window.testRecordings),0);
@@ -284,16 +284,18 @@ try {
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.screenshot({path:'/tmp/a-deux-conversation.png',fullPage:true});
  // The conversation screen carries none of this: settings hold voice, invite, diagnostics and closing.
- await expect(a.getByText('Use my voice',{exact:true})).toBeHidden();
+ await expect(a.getByLabel(/Use my own voice when possible/)).toBeHidden();
  await expect(a.getByRole('button',{name:'End session & delete voices'})).toBeHidden();
- // Consent is a single tap and is recorded server side; cloning then follows speech on its own.
+ // Consent is the tick itself, recorded server side; cloning then follows speech on its own.
  await a.getByRole('button',{name:'Settings'}).click();
  await a.getByRole('heading',{name:'Settings'}).waitFor();
- await a.getByText('Use my voice',{exact:true}).click();
- await a.getByRole('button',{name:/I agree/}).click();
- await a.locator('.voice-consent').getByText(/Speech captured/).waitFor();
- await a.getByRole('button',{name:'Stop using my voice'}).click();
- await a.getByRole('button',{name:/I agree/}).waitFor();
+ await expect(a.getByLabel(/Use my own voice when possible/)).not.toBeChecked();
+ await a.getByLabel(/Use my own voice when possible/).check();
+ await a.locator('.voice-consent').getByText(/captured/).waitFor();
+ // Removing the voice stays a separate, explicit act, never a side effect of unticking.
+ await a.getByText('Remove my voice').click();
+ await a.getByRole('button',{name:/Delete my voice/}).click();
+ await expect(a.getByLabel(/Use my own voice when possible/)).not.toBeChecked();
  await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
  await a.getByRole('button',{name:'Changer le thème clair ou sombre'}).click();
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});

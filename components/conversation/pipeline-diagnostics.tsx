@@ -3,13 +3,13 @@ import { useEffect, useState } from "react";
 import type { ConversationMode } from "@/lib/translation/modes";
 import type { PipelineTiming } from "@/lib/translation/conversation-pipeline";
 import type { SharedSession } from "@/types/session";
-import type { SpeechOptions, SpeechMetadata } from "@/lib/audio/speech-options";
+import { TONE_MODEL, toneWaitMs, TTS_MODEL, type SpeechOptions, type SpeechMetadata } from "@/lib/audio/speech-options";
 export type PipelineState = {
   active: ConversationMode; desired: ConversationMode; switching: boolean; directAudio: string;
   reason: string; contextTurns: number; timing: PipelineTiming | null;
   receivedTiming: { transport: number; request: number; playback: number };
   speechOptions: SpeechOptions; outgoingSpeech: SpeechMetadata | null; incomingSpeech: SpeechMetadata | null;
-  synthesis: { model: string; fallback: string; headersMs: number } | null;
+  synthesis: { model: string; headersMs: number } | null;
   audioLatency: { request: number; total: number } | null;
 };
 const toneLabel = (speech: SpeechMetadata | null | undefined) => speech ? `${speech.tone.status} · ${speech.tone.tone} · ${speech.tone.strength} · ${speech.tone.model}` : "—";
@@ -26,12 +26,12 @@ export function PipelineDiagnostics({ room, read }: { room: SharedSession; read:
       <dt>Transcription</dt><dd>{room.models?.transcription}</dd>
       <dt>Translation</dt><dd>{state?.active === "context" ? room.models?.translation : room.models?.realtime}</dd>
       <dt>My output voice</dt><dd>{state?.active === "direct" ? "OpenAI" : room.me.useClone && room.me.voiceTier > 0 ? "ElevenLabs · clone" : `ElevenLabs · standard ${room.me.voiceRange ?? "neutral"}`}</dd>
-      <dt>My requested ElevenLabs model</dt><dd>{state?.speechOptions.ttsModel ?? "auto"} · default {room.models?.voice}</dd>
+      <dt>My speaking model</dt><dd>{TTS_MODEL}</dd>
       <dt>My tone analysis</dt><dd>{toneLabel(state?.outgoingSpeech)}</dd>
       <dt>My tone request / extra wait after LLM</dt><dd>{state?.outgoingSpeech ? `${state.outgoingSpeech.tone.analysisMs} / ${state.outgoingSpeech.extraWaitMs} ms` : "—"}</dd>
       <dt>Incoming tone</dt><dd>{toneLabel(state?.incomingSpeech)}</dd>
       <dt>Incoming actual ElevenLabs model</dt><dd>{state?.synthesis?.model || "—"}</dd>
-      <dt>Model override</dt><dd>{state?.synthesis?.fallback || "None"}</dd>
+      <dt>My tone budget</dt><dd>{state ? `${TONE_MODEL} · ${toneWaitMs(state.speechOptions)} ms` : "—"}</dd>
       <dt>ElevenLabs response headers (server)</dt><dd>{state?.synthesis?.headersMs ?? "—"} ms</dd>
       <dt>Incoming speech request → playback started</dt><dd>{state?.audioLatency?.total || "—"} ms</dd>
       <dt>My clone</dt><dd>{room.me.hasAccount ? room.me.consented ? `${room.me.voiceStatus} · tier ${room.me.voiceTier}` : "Awaiting consent" : "Account required"}</dd>
