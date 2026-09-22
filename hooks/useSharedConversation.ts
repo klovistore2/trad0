@@ -158,6 +158,12 @@ export function useSharedConversation(id: string, signedIn = false) {
     else recorder.current?.pause();
   }, [micShouldBeOn, cloneIfDue, activeSpeechOptions]);
 
+  // A playback problem concerns one sentence: say so briefly, then clear it if nothing replaced it.
+  const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const flash = useCallback((text: string) => {
+    setMessage(text); clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setMessage(current => current === text ? "" : current), 5000);
+  }, []);
   const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
   const playQueue = useCallback(async () => {
     if (speaking.current || !canPlay()) return;
@@ -168,22 +174,26 @@ export function useSharedConversation(id: string, signedIn = false) {
       while (canPlay() && queue.current.length) {
         const event = queue.current.shift()!;
         incomingSpeech.current = event.speech ?? null;
-        await voice.current?.speakStream({ sessionId: id, speech: event.speech, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
+        try {
+          await voice.current?.speakStream({ sessionId: id, speech: event.speech, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
+        } catch (error) {
+          // A system-suspended context is not an error the listener should read: re-arm quietly.
+          if (voice.current && voice.current.contextState !== "running") {
+            queue.current = []; soundReadyRef.current = false; setSoundReady(false); rearm.current();
+            break;
+          }
+          // One sentence failing must not silence the ones already waiting behind it.
+          flash(error instanceof Error ? error.message : "The sound is unavailable. The text is still shown.");
+        }
         const measured = voice.current?.lastLatency;
         if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
       }
-    } catch (error) {
-      queue.current = [];
-      // A system-suspended context is not an error the listener should read: re-arm quietly.
-      if (voice.current && voice.current.contextState !== "running") {
-        soundReadyRef.current = false; setSoundReady(false); rearm.current();
-      } else setMessage(error instanceof Error ? error.message : "Le son est indisponible. Le texte reste accessible.");
     } finally {
       speaking.current = false;
       directAudio.current?.setIncomingEnabled(roomRef.current?.peer?.activeMode !== "context");
       syncMicrophone();
     }
-  }, [id, syncMicrophone, canPlay]);
+  }, [id, syncMicrophone, canPlay, flash]);
 
   // A tier must not wait for the floor to be handed back: someone can hold it for minutes.
   useEffect(() => {

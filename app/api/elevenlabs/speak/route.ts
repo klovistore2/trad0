@@ -42,7 +42,7 @@ export async function POST(request: Request) {
         ...(spoken.stability === undefined ? {} : { voice_settings: { stability: spoken.stability } }) }),
       signal: AbortSignal.timeout(20_000),
     });
-    if (!upstream.ok || !upstream.body) throw new HttpError(502, "La voix est indisponible. Le texte reste accessible.");
+    if (!upstream.ok || !upstream.body) throw new HttpError(502, "The voice is unavailable. The text is still shown.");
     // Piped straight through: no audio is buffered, written or logged here.
     return new Response(upstream.body, { headers: {
       "Content-Type": "audio/mpeg", "Cache-Control": "no-store",

@@ -76,11 +76,11 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     const buffer = media.addSourceBuffer("audio/mpeg");
     const appended = () => new Promise<void>((resolve, reject) => {
       buffer.addEventListener("updateend", () => resolve(), { once: true });
-      buffer.addEventListener("error", () => reject(new Error("La lecture a été interrompue.")), { once: true });
+      buffer.addEventListener("error", () => reject(new Error("Playback was interrupted.")), { once: true });
     });
     let playing = false;
-    let startPlayback!: () => void; let failPlayback!: (error: unknown) => void;
-    const started = new Promise<void>((resolve, reject) => { startPlayback = resolve; failPlayback = reject; });
+    let startPlayback!: (playing: boolean) => void; let failPlayback!: (error: unknown) => void;
+    const started = new Promise<boolean>((resolve, reject) => { startPlayback = resolve; failPlayback = reject; });
     const reader = body.getReader();
     const finished = (async () => {
       try {
@@ -89,18 +89,17 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
           if (done || signal.aborted) break;
           if (!value.byteLength) continue;
           const ready = appended(); buffer.appendBuffer(value); await ready;
-          if (!playing) { playing = true; element.play().then(startPlayback, failPlayback); }
+          if (!playing) { playing = true; element.play().then(() => startPlayback(true), failPlayback); }
         }
         if (!signal.aborted && media.readyState === "open") media.endOfStream();
-        if (!playing) failPlayback(new Error("Aucun son reçu. Réessayez."));
+        if (!playing) startPlayback(false);
       } catch (error) {
         if (!playing) failPlayback(error);
         throw error;
       } finally { if (signal.aborted) void reader.cancel().catch(() => {}); }
     })();
     finished.catch(() => {}); // Reported through `started` or by the caller once playing.
-    await started;
-    return { element, finished };
+    return { element, finished, playing: await started };
   }
 
   async unlock() {
@@ -109,7 +108,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       await this.play(wav(0.05, 0));
       this.ready = true;
     } catch {
-      throw new Error("Touchez l’écran pour entendre la traduction.");
+      throw new Error("Tap the screen to hear the translation.");
     }
   }
   get contextState() { return this.ready ? "running" : "absent"; }
@@ -150,7 +149,8 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       this.onStatus("loading");
       let text = "";
       for await (const chunk of textStream) text += chunk;
-      if (!text.trim() || controller.signal.aborted) return;
+      // Nothing to pronounce (a lone "…" or "?" between fast sentences): skip, never an error.
+      if (!/[\p{L}\p{N}]/u.test(text) || controller.signal.aborted) { this.onStatus("idle"); return; }
       const response = await fetch("/api/elevenlabs/speak", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, text, language, speech }), signal: controller.signal,
@@ -158,7 +158,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (!response.ok) {
         const detail = await response.json().catch(() => ({}));
         this.failure = `speech HTTP ${response.status}`;
-        throw new Error(detail.error || "La voix est indisponible. Le texte reste accessible.");
+        throw new Error(detail.error || "The voice is unavailable. The text is still shown.");
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
       const Source = response.body ? streamingSource(response.headers.get("content-type")) : null;
@@ -167,12 +167,15 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       let element: HTMLAudioElement;
       let finished: Promise<void> = Promise.resolve();
       if (Source && response.body) {
-        ({ element, finished } = await this.stream(Source, response.body, controller.signal));
+        const streamed = await this.stream(Source, response.body, controller.signal);
         if (controller.signal.aborted) return;
+        if (!streamed.playing) { this.failure = "empty audio"; this.onStatus("idle"); return; }
+        ({ element, finished } = streamed);
       } else {
         const blob = await response.blob();
         if (controller.signal.aborted) return;
-        if (!blob.size) { this.failure = "empty audio"; throw new Error("Aucun son reçu. Réessayez."); }
+        // An empty answer is a sentence with nothing to say, not a failure: move on silently.
+        if (!blob.size) { this.failure = "empty audio"; this.onStatus("idle"); return; }
         element = this.audio();
         await this.play(URL.createObjectURL(blob));
       }
@@ -187,15 +190,15 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         const onAbort = () => settle();
         controller.signal.addEventListener("abort", onAbort, { once: true });
         element.onended = () => settle();
-        element.onerror = () => { this.failure = "audio element error"; settle(new Error("La lecture a été interrompue.")); };
+        element.onerror = () => { this.failure = "audio element error"; settle(new Error("Playback was interrupted.")); };
         // A stream cut mid-sentence ends playback with an error instead of hanging.
-        finished.catch(() => { if (!controller.signal.aborted) { this.failure = "audio stream error"; settle(new Error("La lecture a été interrompue.")); } });
+        finished.catch(() => { if (!controller.signal.aborted) { this.failure = "audio stream error"; settle(new Error("Playback was interrupted.")); } });
       });
       if (!controller.signal.aborted) { this.failure = ""; this.onStatus("idle"); }
     } catch (error) {
       if (!controller.signal.aborted) {
         this.element?.pause();
-        const message = error instanceof Error ? error.message : "La voix est indisponible.";
+        const message = error instanceof Error ? error.message : "The voice is unavailable.";
         this.onStatus("error", message);
         throw new Error(message);
       }
