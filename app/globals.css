@@ -114,6 +114,8 @@ footer { border-top: 1px solid var(--border); min-height: 100px; display: flex; 
 footer p { font-size: 12px; line-height: 1.7; }
 footer p span, .privacy-note { color: var(--muted); font-size: 11px; }
 .privacy-note { margin-left: auto; }
+.page-language { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.page-language .language-picker { margin: 0; min-height: 36px; max-width: 150px; border: 1px solid var(--surface-border); border-radius: 14px; background: var(--surface); font-size: 13px; }
 @media (max-width: 600px) {
   .conversation { padding: 0 24px; padding-bottom: env(safe-area-inset-bottom); }
   .topbar { min-height: 82px; }
@@ -125,6 +127,9 @@ footer p span, .privacy-note { color: var(--muted); font-size: 11px; }
   .voice-symbol { width: 70px; height: 70px; margin-bottom: 25px; }
   footer { min-height: 87px; }
   .privacy-note { max-width: 100px; text-align: right; line-height: 1.6; }
+  /* The name still reaches assistive tech: hidden visually, never removed from the label. */
+  .page-language span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .page-language .language-picker { max-width: 120px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 

@@ -17,12 +17,15 @@ const serverLocale = () => "en" as const;
 // preview proved nothing about real speech. Choose the other person's language, then invite them.
 export function Conversation({ email }: { email: string | null }) {
   const locale = useSyncExternalStore(subscribeLocale, getLocale, serverLocale);
-  const t = translator("en");
+  // The page opens in English, as a link handed to anyone does; the reader can switch it.
+  // Their choice is also the best first guess at the language they will speak.
+  const [pageLanguage, setPageLanguage] = useState<Language | null>(null);
+  const t = translator(pageLanguage ?? "en");
   // Only the destination is chosen here: asking for your own language before anyone has spoken
   // was a guess the transcription makes better. It stays on Auto until the conversation starts.
   const [peerLanguage, setPeerLanguage] = useState<Language>("en");
 
-  return <main className="conversation">
+  return <main className="conversation" lang={pageLanguage ?? "en"}>
     <header className="topbar">
       <Link className="wordmark" href="/" aria-label="Trad0, home">Trad0<span className="brand-dot">.</span></Link>
       <div className="topbar-actions"><span className="edition">FIRST WORDS · V0</span><ThemeToggle /></div>
@@ -40,16 +43,26 @@ export function Conversation({ email }: { email: string | null }) {
       </div>
       <div className="translation-area">
         <div className="voice-symbol" aria-hidden="true"><span /><span /><span /><span /><span /></div>
-        <h1>A conversation.<br /><em>No barrier.</em></h1>
-        <p className="intro">Two phones, two languages. You speak, the other person reads the translation and hears it — in your voice.</p>
+        <h1>{t("homeTitle")}<br /><em>{t("homeTitleEm")}</em></h1>
+        <p className="intro">{t("homeIntro")}</p>
       </div>
       <div className="controls">
         <p className="session-status" role="status"><span className="status-dot" />{t("autoLanguage")} ↔ {languageNames[peerLanguage]}</p>
-        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={locale} languageAuto peerLanguageAuto={false} />
+        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={pageLanguage ?? locale} languageAuto peerLanguageAuto={false} t={t} />
         {email && <AccountStatus email={email} />}
       </div>
     </section>
 
-    <footer><span className="footer-mark" aria-hidden="true">↔</span><p>Just the two of you.<br /><span>No account for your guest. No installation.</span></p><span className="privacy-note">No microphone on this page</span></footer>
+    <footer>
+      <span className="footer-mark" aria-hidden="true">↔</span>
+      <p>{t("footerLine")}<br /><span>{t("footerSub")}</span></p>
+      <label className="page-language" htmlFor="page-language">
+        <span>{t("pageLanguage")}</span>
+        <select id="page-language" className="language-picker" value={pageLanguage ?? "en"}
+          onChange={event => setPageLanguage(event.target.value as Language)}>
+          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
+        </select>
+      </label>
+    </footer>
   </main>;
 }
