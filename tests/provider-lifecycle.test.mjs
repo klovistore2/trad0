@@ -106,6 +106,26 @@ test('mode 2 requests transcription only and does not duplicate the completed tr
  for(const event of [{type:'conversation.item.input_audio_transcription.delta',delta:'Hello.'},{type:'conversation.item.input_audio_transcription.completed',transcript:'Hello.'},{type:'session.output_transcript.delta',delta:'Must not translate here'}])peers[0].channel.onmessage({data:JSON.stringify(event)});
  assert.deepEqual(originals,['Hello.']);assert.deepEqual(translations,[]);
  provider.commitInput();provider.setTargetLanguage('en');
- assert.equal(peers[0].channel.sent.length,1);assert.equal(peers[0].channel.sent[0].type,'input_audio_buffer.commit');
+ assert.equal(peers[0].channel.sent.length,0,'completed audio must not be committed a second time');
  await provider.disconnect();
+});
+
+test('transcription commits once per utterance and survives an empty-buffer response',async()=>{
+ const {provider,peers,tracks}=setup(null,async url=>url.startsWith('/api/')?Response.json({value:'ephemeral'}):new Response('sdp'));
+ const originals=[];provider.onOriginalTranscript(event=>originals.push(event.delta));
+ await provider.connect({targetLanguage:'it',transcriptionOnly:true});
+ provider.commitInput();assert.equal(peers[0].channel.sent.length,0);
+ const emit=event=>peers[0].channel.onmessage({data:JSON.stringify(event)});
+ emit({type:'conversation.item.input_audio_transcription.delta',delta:'First'});
+ provider.commitInput();assert.equal(peers[0].channel.sent.length,1);
+ emit({type:'conversation.item.input_audio_transcription.delta',delta:' sentence.'});
+ provider.commitInput();assert.equal(peers[0].channel.sent.length,1);
+ emit({type:'conversation.item.input_audio_transcription.completed',transcript:'First sentence.'});
+ provider.commitInput();assert.equal(peers[0].channel.sent.length,1);
+ peers[0].channel.onmessage({data:JSON.stringify({type:'error',error:{code:'input_audio_buffer_commit_empty'}})});
+ peers[0].channel.onmessage({data:JSON.stringify({type:'conversation.item.input_audio_transcription.delta',delta:'Still listening.'})});
+ assert.deepEqual(originals,['First',' sentence.','Still listening.']);assert.equal(tracks[0].stopCount,0);
+ provider.commitInput();assert.equal(peers[0].channel.sent.length,2,'next utterance can commit');
+ peers[0].channel.onmessage({data:JSON.stringify({type:'error',error:{code:'other_failure'}})});
+ assert.equal(tracks[0].stopCount,1);
 });

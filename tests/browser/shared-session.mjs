@@ -186,7 +186,7 @@ try {
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.getByRole('button',{name:'À moi de parler'}).waitFor();
  await b.evaluate(()=>window.testChannel.onmessage({data:JSON.stringify({type:'session.output_transcript.delta',delta:'Ceci est un test de traduction.'})}));
- await a.getByText('Ceci est un test de traduction.',{exact:true}).waitFor();
+ await Promise.all([a.getByText('Ceci est un test de traduction.',{exact:true}).waitFor(),a.getByText(/Traduction en cours/).waitFor()]);
  // Both language menus synchronize and update the active translation without replacing the mic.
  await b.locator('#peer-language').selectOption('es');
  await expect(a.locator('#my-language')).toHaveValue('es');

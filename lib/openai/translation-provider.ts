@@ -8,6 +8,8 @@ export class OpenAITranslationProvider implements TranslationProvider {
   private controller = new AbortController();
   private timer?: ReturnType<typeof setTimeout>;
   private transcriptionOnly = false;
+  private inputNeedsCommit = false;
+  private inputCommitPending = false;
   private audioTrack: (track: MediaStreamTrack | null) => void = () => {};
   onTranslatedAudio(cb: typeof this.audioTrack) { this.audioTrack = cb; }
   private pendingLanguage?: string;
@@ -71,8 +73,21 @@ export class OpenAITranslationProvider implements TranslationProvider {
         if (transcriptionOnly) {
           try {
             const input = JSON.parse(data);
-            if (input.type === "conversation.item.input_audio_transcription.delta" && typeof input.delta === "string") this.original({ delta: input.delta, quality: "unknown" });
-            if (input.type === "error") this.fail("provider_error", "Transcription interrupted. Try again.");
+            if (input.type === "conversation.item.input_audio_transcription.delta" && typeof input.delta === "string") {
+              if (!this.inputCommitPending) this.inputNeedsCommit = true;
+              this.original({ delta: input.delta, quality: "unknown" });
+            }
+            if (input.type === "conversation.item.input_audio_transcription.completed") {
+              // Final deltas after a commit belong to that same buffer. Their pause
+              // timer must not commit again and disconnect an otherwise healthy mic.
+              this.inputCommitPending = false; this.inputNeedsCommit = false;
+            }
+            // A redundant commit is recoverable; it must not close a healthy mic.
+            if (input.type === "error") {
+              if (input.error?.code === "input_audio_buffer_commit_empty") {
+                this.inputCommitPending = false; this.inputNeedsCommit = false;
+              } else this.fail("provider_error", "Transcription interrupted. Try again.");
+            }
           } catch { /* Ignore malformed events. */ }
           return;
         }
@@ -120,7 +135,10 @@ export class OpenAITranslationProvider implements TranslationProvider {
   }
 
   commitInput() {
-    if (this.transcriptionOnly && this.channel?.readyState === "open") this.channel.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+    if (this.transcriptionOnly && this.inputNeedsCommit && !this.inputCommitPending && this.channel?.readyState === "open") {
+      this.inputNeedsCommit = false; this.inputCommitPending = true;
+      this.channel.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+    }
   }
 
   async disconnect() {

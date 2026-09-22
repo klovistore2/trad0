@@ -15,7 +15,7 @@ try {
  }
  if(!ready)throw new Error('Test server did not start');
  await new Promise((resolve,reject)=>{
-  const test=spawn(process.execPath,['tests/browser/shared-session.mjs'],{env:{...process.env,TEST_BASE_URL:'http://localhost:3100'},stdio:'inherit'});
+  const test=spawn(process.execPath,[process.env.TEST_BROWSER_SCRIPT || 'tests/browser/shared-session.mjs'],{env:{...process.env,TEST_BASE_URL:'http://localhost:3100'},stdio:'inherit'});
   test.on('error',reject);test.on('exit',code=>code===0?resolve():reject(new Error(`Browser test exited ${code}`)));
  });
 } finally {server.kill('SIGTERM');}

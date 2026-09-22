@@ -58,6 +58,11 @@ export class PeerAudioLink {
       const context = new AudioContext(); this.outgoingContext = context;
       const analyser = context.createAnalyser(); analyser.fftSize = 512; this.outgoingAnalyser = analyser;
       context.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+      // Pull the remote track through a running audio graph. Without a rendering
+      // sink Chromium can receive RTP without decoding any samples to forward.
+      // The local sink is silent: only the other phone plays the translation.
+      const silent = context.createGain(); silent.gain.value = 0;
+      analyser.connect(silent).connect(context.destination);
       if (this.ready) void context.resume();
     }
     try { await this.sender?.replaceTrack(track); }
@@ -71,11 +76,13 @@ export class PeerAudioLink {
     if (!response.ok) throw new Error("Audio connection unavailable.");
   }
   private async create(iceServers: RTCIceServer[]) {
-    this.connection?.close(); this.answered = false;
+    this.connection?.close(); this.sender = undefined; this.answered = false;
     const pc = new RTCPeerConnection({ iceServers }); this.connection = pc;
-    const transceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
-    this.sender = transceiver.sender;
-    if (this.outgoing) await this.sender.replaceTrack(this.outgoing);
+    if (this.slot === 0) {
+      const transceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
+      this.sender = transceiver.sender;
+      if (this.outgoing) await this.sender.replaceTrack(this.outgoing);
+    }
     pc.ontrack = event => {
       if (this.controller.signal.aborted || this.connection !== pc) return;
       this.remote = new MediaStream([event.track]);
@@ -123,6 +130,13 @@ export class PeerAudioLink {
           this.remoteEpoch = remote.epoch;
           const pc = await this.create(data.iceServers);
           await pc.setRemoteDescription(remote.description);
+          // Reuse the offered audio transceiver. addTransceiver before applying
+          // an offer creates an unassociated sender that cannot send in this answer.
+          const transceiver = pc.getTransceivers().find(item => item.receiver.track.kind === "audio");
+          if (!transceiver) throw new Error("Missing offered audio track.");
+          transceiver.direction = "sendrecv";
+          this.sender = transceiver.sender;
+          await this.sender.replaceTrack(this.outgoing);
           await this.description(pc, await pc.createAnswer());
         } else if (this.slot === 0 && !this.answered && remote.targetEpoch === this.epoch && remote.description?.type === "answer") {
           await this.connection?.setRemoteDescription(remote.description); this.answered = true;
