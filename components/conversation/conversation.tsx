@@ -28,19 +28,17 @@ export function Conversation({ email }: { email: string | null }) {
   return <main className="conversation" lang={pageLanguage ?? "en"}>
     <header className="topbar">
       <Link className="wordmark" href="/" aria-label="Trad0, home">Trad0<span className="brand-dot">.</span></Link>
-      <div className="topbar-actions"><span className="edition">FIRST WORDS · V0</span><ThemeToggle /></div>
+      <div className="topbar-actions"><ThemeToggle /></div>
     </header>
 
     <section className="conversation-body" aria-label="Start a conversation">
-      <div className="language-menus">
-        <div className="language-choice">
-          <label htmlFor="peer-language">{t("theySpeak")}</label>
-          <select id="peer-language" className="language-picker" value={peerLanguage}
-            onChange={event => setPeerLanguage(event.target.value as Language)}>
-            {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
-          </select>
-        </div>
-      </div>
+      <label className="translate-to" htmlFor="peer-language">
+        <span>{t("translateTo")}</span>
+        <select id="peer-language" className="language-picker" value={peerLanguage}
+          onChange={event => setPeerLanguage(event.target.value as Language)}>
+          {LANGUAGES.map(code => <option key={code} value={code} lang={code}>{languageNames[code]}</option>)}
+        </select>
+      </label>
       <div className="translation-area">
         <div className="voice-symbol" aria-hidden="true"><span /><span /><span /><span /><span /></div>
         <h1>{t("homeTitle")}<br /><em>{t("homeTitleEm")}</em></h1>
