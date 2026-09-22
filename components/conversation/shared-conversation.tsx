@@ -66,9 +66,11 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           {session.voiceStatus === "playing" && <p className="quiet-note" role="status">♫ {t("playing")}</p>}
           <OwnWords original={session.translation.original} translation={session.translation.translation}
             mine={room.me.language} theirs={room.peer.language} t={t} />
-          {room.diagnostics && <><PipelineDiagnostics room={room} read={session.readPipelineState} />
-            <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()}
-              voiceStatus={session.voiceStatus} received={session.received} me={room.me} peer={room.peer} /></>}
+          {/* Always visible while the app is being tested on real devices. Put this back behind
+              room.diagnostics before anyone but the author uses it. */}
+          <PipelineDiagnostics room={room} read={session.readPipelineState} />
+          <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()}
+            voiceStatus={session.voiceStatus} received={session.received} me={room.me} peer={room.peer} />
         </div>
         {!room.me.hasAccount && <GuestVoiceOffer id={id} seconds={session.spokenSeconds} t={t} />}
         <div className="controls">

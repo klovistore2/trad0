@@ -385,7 +385,9 @@ sobriété de l'écran de conversation. Ils se déplient tous les deux **sur l'�
 sous « Mes mots », et non plus dans les paramètres : leurs valeurs ne bougent que pendant un échange.
 Le premier montre les deux directions, modèles, voix, contexte, liaison directe et mesures
 disponibles, avec l'estimation de ton visible dès la ligne repliée. Le second reprend le diagnostic
-audio historique. `APP_DIAGNOSTICS` masque désormais les deux.
+audio historique. Ils sont actuellement affichés **sans condition**, à la demande explicite de
+l'auteur qui teste seul sur appareils : `APP_DIAGNOSTICS` ne les masque plus. Les remettre derrière
+`room.diagnostics` dans `shared-conversation.tsx` avant toute mise à disposition d'autres personnes.
 
 Distinguer attente de fin de phrase, LLM, publication, transport et démarrage audio. L’âge d’un événement
 est calculé par PostgreSQL : ne pas soustraire les horloges de deux téléphones. Les mesures sortantes
