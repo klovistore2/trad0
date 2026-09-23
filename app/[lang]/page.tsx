@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { userBalance } from "@/lib/billing/credits";
+import { canStartConversation } from "@/lib/billing/credits";
 import { Conversation } from "@/components/conversation/conversation";
 import { homeMetadata } from "@/lib/i18n/home-metadata";
 import { LANGUAGES, isLanguage } from "@/types/session";
@@ -23,6 +23,6 @@ export default async function LocalisedHome({ params }: { params: Promise<{ lang
   const lang = await read(params);
   if (lang === "en") redirect("/"); // English lives at the root: no second address for one page.
   const account = await auth();
-  const balance = account?.user?.id ? await userBalance(account.user.id) : null;
-  return <Conversation email={account?.user?.email ?? null} pageLanguage={lang} outOfCredits={balance !== null && balance <= 0} />;
+  const blocked = account?.user?.id ? !await canStartConversation(account.user.id, account.user.email) : false;
+  return <Conversation email={account?.user?.email ?? null} pageLanguage={lang} outOfCredits={blocked} />;
 }

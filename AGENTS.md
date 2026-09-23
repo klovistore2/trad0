@@ -361,7 +361,9 @@ dans la langue de chacune (créateur / invité) ; micros fermés, boutons de par
 message, file de lecture vidée, aucune minute facturée pendant l'arrêt. Le serveur refuse aussi
 (HTTP 402) jetons de transcription et de traduction directe, `/api/translate`, `/api/elevenlabs/speak`,
 `/api/audio/tone`, le clonage et la création d'une conversation ; l'accueil l'annonce au lieu du
-bouton. Un solde illisible (panne de base) ne bloque jamais. La conversation reprend d'elle-même
+bouton. Un solde illisible (panne de base) ne bloque jamais. **Un compte admin (`ADMIN_MAIL`) n'est
+jamais bloqué**, ni en conversation (pour son invité non plus) ni à la création : il reste décompté
+pour que son compteur garde un sens (`payerBalance` renvoie `null`, `canStartConversation`). La conversation reprend d'elle-même
 si le solde redevient positif. **Menu DEV** : « Reset credits » (`POST /api/sessions/[id]/credits`,
 accepté seulement si le créateur est admin) ramène le solde au montant de bienvenue par une ligne
 d'ajustement `grant`, sans jamais redonner le bonus de bienvenue. Test navigateur dédié :

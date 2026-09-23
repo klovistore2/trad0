@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { createSession } from "@/lib/session/store";
 import { checkOrigin, failure, HttpError, json, readJson } from "@/lib/server/http";
 import { isLanguage } from "@/types/session";
-import { userBalance } from "@/lib/billing/credits";
+import { canStartConversation } from "@/lib/billing/credits";
 
 export async function POST(request: Request) {
   try {
@@ -11,8 +11,7 @@ export async function POST(request: Request) {
     const account = await auth();
     if (!account?.user?.id) throw new HttpError(401, "Connectez-vous pour créer une conversation.");
     // No credits, no new conversation. Unknown (billing outage) never blocks.
-    const balance = await userBalance(account.user.id);
-    if (balance !== null && balance <= 0) throw new HttpError(402, "No credits left.");
+    if (!await canStartConversation(account.user.id, account.user.email)) throw new HttpError(402, "No credits left.");
     const body = await readJson(request);
     if (!isLanguage(body.peerLanguage) || !isLanguage(body.language)) throw new HttpError(400, "Cette langue n’est pas disponible.");
     if (typeof body.languageAuto !== "boolean" || typeof body.peerLanguageAuto !== "boolean") throw new HttpError(400, "Invalid language mode.");

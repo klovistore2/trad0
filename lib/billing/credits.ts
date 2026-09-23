@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/neon/db";
 import { HttpError } from "@/lib/server/http";
+import { isAdmin } from "@/lib/auth/admin";
 
 import { CREDIT_PRICES, type CreditUse } from "./prices";
 export { CREDIT_PRICES, type CreditUse };
@@ -37,26 +38,34 @@ export async function charge(sessionId: string, use: CreditUse) {
 // forward rather than billing the gap.
 export async function chargeActiveMinute(sessionId: string) {
   try {
+    // Nothing is billed while a conversation is stopped for lack of credits.
+    const balance = await payerBalance(sessionId);
+    if (balance !== null && balance <= 0) return;
     const claimed = await db()`UPDATE adu_sessions
       SET billed_at=CASE WHEN billed_at IS NULL THEN now() ELSE GREATEST(billed_at+interval '1 minute', now()-interval '15 seconds') END
       WHERE id=${sessionId} AND closed=false AND expires_at>now()
         AND (billed_at IS NULL OR billed_at<=now()-interval '1 minute')
         AND (SELECT count(*) FROM adu_participants WHERE session_id=${sessionId} AND last_seen>now()-interval '15 seconds')=2
-        AND (SELECT COALESCE(SUM(l.amount),0) FROM adu_credit_ledger l JOIN adu_participants p ON p.user_id=l.user_id
-          WHERE p.session_id=${sessionId} AND p.slot=0)>0
       RETURNING id`;
     if (claimed.length) await charge(sessionId, "minute");
   } catch (error) { console.error("Minute billing failed", error instanceof Error ? error.message : "unknown"); }
 }
 
-// Balance of whoever pays for this conversation: its creator. Null when it cannot be read, in
-// which case nothing is blocked: a billing outage must not silence a conversation.
+// Balance that can stop this conversation: its creator's. Null means nothing is blocked: when it
+// cannot be read (a billing outage must not silence a conversation) and for an admin account,
+// which is still billed so its counter stays meaningful, but is never stopped.
 export async function payerBalance(sessionId: string) {
   try {
-    const rows = await db()`SELECT COALESCE((SELECT SUM(amount) FROM adu_credit_ledger WHERE user_id=p.user_id),0)::int AS balance
-      FROM adu_participants p WHERE p.session_id=${sessionId} AND p.slot=0 AND p.user_id IS NOT NULL`;
-    return rows.length ? rows[0].balance as number : null;
+    const rows = await db()`SELECT u.email, COALESCE((SELECT SUM(amount) FROM adu_credit_ledger WHERE user_id=p.user_id),0)::int AS balance
+      FROM adu_participants p JOIN adu_users u ON u.id=p.user_id WHERE p.session_id=${sessionId} AND p.slot=0`;
+    return rows.length && !isAdmin(rows[0].email) ? rows[0].balance as number : null;
   } catch { return null; }
+}
+// Whether this account may start a conversation: an admin always may.
+export async function canStartConversation(userId: string, email: unknown) {
+  if (isAdmin(email)) return true;
+  const balance = await userBalance(userId);
+  return balance === null || balance > 0;
 }
 export async function userBalance(userId: string) {
   try {
