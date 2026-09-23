@@ -96,7 +96,7 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
  const before=globalThis.fetch;const oldKey=process.env.OPENAI_API_KEY;const oldUrl=process.env.NEXT_PUBLIC_APP_URL;
  process.env.OPENAI_API_KEY='test-only';process.env.NEXT_PUBLIC_APP_URL='http://localhost:3000';
  let checked=false,calls=0,content=JSON.stringify({tone:'sad',strength:'medium'});
- const charges=[];const billing={charge:async(session,use)=>{charges.push([session,use]);}};
+ const charges=[];const billing={charge:async(session,use)=>{charges.push([session,use]);},requireCredits:async()=>{}};
  const route=createLoader({'@/lib/session/auth':{member:async()=>{checked=true;return {slot:0,user_id:'account'};}},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
  globalThis.fetch=async(_url,init)=>{
   calls++;assert.ok(checked);const body=JSON.parse(init.body);
@@ -122,6 +122,12 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
   const guest=createLoader({'@/lib/session/auth':{member:async()=>({slot:1,user_id:null})},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
   const refused=await guest.POST(request());assert.equal(refused.status,403,'a guest without an account is refused');assert.equal(calls,beforeDenied);
   assert.equal(charges.length,1);
+  // Out of credits: refused before any provider call, and nothing is billed.
+  const mocks={'@/lib/session/auth':{member:async()=>({slot:0,user_id:'account'})}};const load=createLoader(mocks);
+  const {HttpError}=load('lib/server/http.ts');
+  mocks['@/lib/billing/credits']={...billing,requireCredits:async()=>{throw new HttpError(402,'No credits left.');}};
+  const broke=load('app/api/audio/tone/route.ts');const beforeBroke=calls;
+  assert.equal((await broke.POST(request())).status,402);assert.equal(calls,beforeBroke);assert.equal(charges.length,1);
  }finally{
   globalThis.fetch=before;
   if(oldKey===undefined)delete process.env.OPENAI_API_KEY;else process.env.OPENAI_API_KEY=oldKey;

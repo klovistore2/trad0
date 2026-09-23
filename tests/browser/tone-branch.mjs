@@ -94,6 +94,7 @@ try {
  accountEmail=`tone-branch-${Date.now()}@example.test`;
  const accountId=randomUUID();
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${accountId},${accountEmail},'google')`;
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${accountId},'welcome',300)`;
  const a=await client({id:accountId,email:accountEmail});
  await a.goto('/fr');
  const created=await a.request.post('/api/sessions',{headers:{origin:baseURL},data:{language:'fr',peerLanguage:'en',languageAuto:false,peerLanguageAuto:false}});
@@ -103,6 +104,7 @@ try {
  // Tone analysis is an account feature: the speaking phone signs in, as a guest would.
  speakerEmail=`tone-speaker-${Date.now()}@example.test`;const speakerId=randomUUID();
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${speakerId},${speakerEmail},'google')`;
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${speakerId},'welcome',300)`;
  const b=await client({id:speakerId,email:speakerEmail});await b.goto(`/join/${sessionId}`);
  await b.getByRole('button',{name:'Not now'}).click();
  await b.getByRole('button',{name:'Start talking'}).waitFor();

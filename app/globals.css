@@ -256,6 +256,9 @@ button:disabled { opacity: .5; cursor: wait; }
 .settings .language-picker { max-width: 100%; }
 
 /* One row per decision: a large target, the choice in plain words, its cost underneath. */
+.add-credits { margin: 12px 0 4px; }
+.add-credits .primary-button { width: 100%; }
+.credit-reset { display: flex; align-items: center; gap: 12px; padding: 0 12px 8px; }
 .credit-line { display: flex; justify-content: space-between; gap: 12px; margin: 6px 0; font-size: 15px; }
 .credit-line b { font-variant-numeric: tabular-nums; }
 .setting-note { color: var(--muted); font-size: 13px; line-height: 1.5; }

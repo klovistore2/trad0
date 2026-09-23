@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/neon/db";
+import { grantWelcome } from "@/lib/billing/credits";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -11,5 +12,8 @@ export async function upsertOAuthUser(email: unknown, provider: string) {
   const address = email.trim();
   const rows = await db()`INSERT INTO adu_users(id,email,provider) VALUES(${randomUUID()},${address},${provider})
     ON CONFLICT (lower(email)) DO UPDATE SET email=EXCLUDED.email RETURNING id`;
-  return (rows[0]?.id as string | undefined) ?? null;
+  const id = (rows[0]?.id as string | undefined) ?? null;
+  // Once per account: also reaches accounts created before the offer, at their next sign in.
+  if (id) await grantWelcome(id);
+  return id;
 }

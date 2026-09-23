@@ -1,10 +1,12 @@
 import { member } from "@/lib/session/auth";
+import { requireCredits } from "@/lib/billing/credits";
 import { checkOrigin, failure, HttpError, json, readJson } from "@/lib/server/http";
 export async function POST(request: Request) {
   try {
     checkOrigin(request); const body = await readJson(request);
     if (typeof body.sessionId !== "string") throw new HttpError(400, "Invalid session.");
     await member(body.sessionId);
+    await requireCredits(body.sessionId);
     const key = process.env.OPENAI_API_KEY?.trim();
     if (!key) throw new HttpError(503, "Transcription is unavailable.");
     const model = process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL?.trim() || "gpt-realtime-whisper";

@@ -82,6 +82,7 @@ try {
  accountEmail=`browser-test-${Date.now()}@example.test`;
  const accountId=randomUUID();
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${accountId},${accountEmail},'google')`;
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${accountId},'welcome',300)`;
  const anonymous=await client();await anonymous.goto('/');
  // The home page opens no microphone, and without an account it offers signing in, not creating.
  await expect(anonymous.getByRole('button',{name:'Start talking'})).toHaveCount(0);
@@ -310,6 +311,7 @@ try {
  guestEmail=`browser-guest-${Date.now()}@example.test`;
  const guestId=randomUUID();
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${guestId},${guestEmail},'google')`;
+ await neon(process.env.DATABASE_URL)`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${guestId},'welcome',300)`;
  await b.context().addCookies(await signedInContext({id:guestId,email:guestEmail}));
  await b.goto(`/session/${sessionId}`);
  await b.waitForURL(`**/session/${sessionId}`);

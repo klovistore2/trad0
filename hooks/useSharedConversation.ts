@@ -78,7 +78,7 @@ export function useSharedConversation(id: string, signedIn = false) {
   // Last sentence measured end to end, so every latency change can be judged on facts.
   const timing = useRef({ transport: 0, request: 0, playback: 0 });
   const refreshNow = useRef<() => void>(() => {});
-  const stopped = useRef<"never started" | "running" | "paused by you" | "peer away" | "session ended">("never started");
+  const stopped = useRef<"never started" | "running" | "paused by you" | "peer away" | "no credits" | "session ended">("never started");
   const transport = useRef<NeonPeerTransport | null>(null);
   const publisher = useRef<ConversationPipeline | null>(null);
   const voice = useRef<ElevenLabsVoiceProvider | null>(null);
@@ -337,9 +337,14 @@ export function useSharedConversation(id: string, signedIn = false) {
         roomRef.current = data; setRoom(data);
         // Nobody is listening any more: close the microphone rather than let them talk into the void.
         // The session stays open, so the controls come back when the other person returns.
-        if (data.peer && !data.peer.online && running.current) {
-          running.current = false; setEnabled(false); stopped.current = "peer away";
-          turns.flush(); recorder.current?.pause(); toneCapture.current?.stop(); translationRef.current.stop();
+        // Out of credits: the whole conversation stops for both, until the balance is topped up.
+        // Queued speech would only be refused by the server, listener included.
+        if (data.creditsExhausted) queue.current = [];
+        if ((data.creditsExhausted || (data.peer && !data.peer.online)) && running.current) {
+          running.current = false; setEnabled(false); stopped.current = data.creditsExhausted ? "no credits" : "peer away";
+          // A last sentence or queued speech would only be refused by the server once credits are out.
+          if (!data.creditsExhausted) turns.flush();
+          recorder.current?.pause(); toneCapture.current?.stop(); translationRef.current.stop();
         }
         const wanted = desiredMode(data.me);
         const unsupportedDirect = data.peer?.language && !supportsDirectOutput(data.peer.language);

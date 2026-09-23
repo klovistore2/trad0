@@ -4,7 +4,7 @@ import { checkOrigin, failure, HttpError, json } from "@/lib/server/http";
 import { deleteVoice, elevenHeaders } from "@/lib/elevenlabs/server";
 import { FINAL_TIER, VOICE_CONSENT, validSamples } from "@/lib/voice/consent";
 import { saveProfile } from "@/lib/voice/profile";
-import { charge } from "@/lib/billing/credits";
+import { charge, requireCredits } from "@/lib/billing/credits";
 
 export const maxDuration = 60;
 export async function POST(request: Request) {
@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     if (typeof id !== "string" || !validSamples(samples, seconds)) throw new HttpError(400, "Parlez un peu plus longtemps avant de créer votre voix.");
     sessionId = id; const me = await member(id); slot = me.slot;
     if (!me.user_id) throw new HttpError(403, "Sign in with Google before enabling voice cloning.");
+    await requireCredits(id);
     const sql = db();
     // Consent is read from the row, never implied by this request carrying audio. The lease
     // returns the clone being replaced so it can be deleted once the swap has committed.

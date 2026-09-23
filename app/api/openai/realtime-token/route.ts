@@ -35,6 +35,9 @@ export async function POST(request: Request) {
       const { targetLanguageForSession } = await import("@/lib/session/store");
       targetLanguage = await targetLanguageForSession(body.sessionId);
     } catch { return json({ error: "Rejoignez une conversation active pour continuer." }, 403); }
+    const { payerBalance } = await import("@/lib/billing/credits");
+    const balance = await payerBalance(body.sessionId);
+    if (balance !== null && balance <= 0) return json({ error: "No credits left." }, 402);
   }
   try {
     const response = await fetch("https://api.openai.com/v1/realtime/translations/client_secrets", {

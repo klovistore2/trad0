@@ -1,7 +1,7 @@
 import { member } from "@/lib/session/auth";
 import { TONE_MODELS, TONES } from "@/lib/audio/speech-options";
 import { checkOrigin, failure, HttpError, json } from "@/lib/server/http";
-import { charge } from "@/lib/billing/credits";
+import { charge, requireCredits } from "@/lib/billing/credits";
 export const maxDuration = 15;
 export async function POST(request: Request) {
   try {
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     if (typeof sessionId !== "string" || !TONE_MODELS.includes(model as typeof TONE_MODELS[number]) || !(audio instanceof File)) throw new HttpError(400, "Invalid tone request.");
     // Tone analysis is paid per request: only a participant signed in with an account may use it.
     if (!(await member(sessionId)).user_id) throw new HttpError(403, "Sign in to match your tone.");
+    await requireCredits(sessionId);
     const bytes = Buffer.from(await audio.arrayBuffer());
     // Only our bounded, mono 16-bit 16kHz WAV format. No decoder, URLs or file storage.
     if (bytes.length < 11244 || bytes.length > 256044 || bytes.toString("ascii", 0, 4) !== "RIFF"

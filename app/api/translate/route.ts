@@ -1,5 +1,6 @@
 import { member } from "@/lib/session/auth";
 import { targetLanguageForSession } from "@/lib/session/store";
+import { requireCredits } from "@/lib/billing/credits";
 import { checkOrigin, failure, HttpError, json, readJson } from "@/lib/server/http";
 import { isLanguage } from "@/types/session";
 import type { ContextTranslation, ContextTurn } from "@/lib/translation/memory";
@@ -9,6 +10,7 @@ export async function POST(request: Request) {
     checkOrigin(request); const body = await readJson(request);
     if (typeof body.sessionId !== "string" || typeof body.text !== "string" || !body.text.trim() || body.text.length > 4000) throw new HttpError(400, "Invalid text.");
     const me = await member(body.sessionId);
+    await requireCredits(body.sessionId);
     const targetLanguage = await targetLanguageForSession(body.sessionId);
     if (!Array.isArray(body.context) || body.context.length > 12) throw new HttpError(400, "Invalid context.");
     const context: ContextTurn[] = [];

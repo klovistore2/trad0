@@ -4,10 +4,14 @@ import { useState } from "react";
 import { VoiceConsent } from "./voice-consent";
 import type { Participant } from "@/types/session";
 import type { SpeechOptions } from "@/lib/audio/speech-options";
+import { AddCredits } from "@/components/account/add-credits";
+import { creditEstimate } from "@/lib/billing/prices";
+import { FINAL_TIER } from "@/lib/voice/consent";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, me, credits, speechSeconds, onConsent, onRefresh, onUseClone, onClose, speechOptions, onSpeechOptions }: {
+export function SettingsPanel({ id, me, credits, toneWindowSeconds, speechSeconds, onConsent, onRefresh, onUseClone, onClose, speechOptions, onSpeechOptions }: {
   credits?: { sessionUsed: number; balance: number } | null;
+  toneWindowSeconds: number;
   speechOptions: SpeechOptions;
   onSpeechOptions: (options: SpeechOptions) => void;
   id: string;
@@ -21,6 +25,10 @@ export function SettingsPanel({ id, me, credits, speechSeconds, onConsent, onRef
   const router = useRouter();
   const [closing, setClosing] = useState(false);
   const [message, setMessage] = useState("");
+  // Only the payer's own options are known here: tone if ticked, and the clones still to come.
+  const tone = speechOptions.emotion && me.hasAccount;
+  const estimate = credits && creditEstimate({ balance: credits.balance, tone, toneWindowSeconds,
+    clonesToCome: me.hasAccount && me.consented ? Math.max(0, FINAL_TIER - me.voiceTier) : 0 });
   return <section className="settings">
     <h1>{"Settings"}</h1>
     <button className="primary-button" onClick={onClose}>{"Back to the conversation"}</button>
@@ -36,9 +44,14 @@ export function SettingsPanel({ id, me, credits, speechSeconds, onConsent, onRef
 
     {credits && <div className="settings-group">
       <h2>{"Credits"}</h2>
-      <p className="credit-line">{"This conversation"}<b>{credits.sessionUsed}</b></p>
-      <p className="credit-line">{"Balance"}<b>{credits.balance}</b></p>
-      <p className="setting-note">{"You pay for the whole conversation, including your guest's voice and tone. Buying credits is coming soon."}</p>
+      <p className="credit-line">{"Credits left"}<b>{credits.balance}</b></p>
+      {estimate && <p className="credit-line">{"Conversation time left"}<b>{`≈ ${estimate.minutes} min`}</b></p>}
+      {estimate && <p className="setting-note">{`Estimate for your options: ${estimate.perMinute} credits per minute`
+        + (tone ? `, tone matching included (one analysis every ${toneWindowSeconds} s of your speech, if you speak half the time)` : "")
+        + (estimate.cloneCost ? `, and ${estimate.cloneCost} set aside for your voice clone` : "") + "."}</p>}
+      <p className="credit-line">{"Used in this conversation"}<b>{credits.sessionUsed}</b></p>
+      <AddCredits label={"Add credits"} soon={"Payment is coming soon."} />
+      <p className="setting-note">{"You pay for the whole conversation, including your guest's voice and tone."}</p>
     </div>}
 
     <div className="settings-group settings-danger">

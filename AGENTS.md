@@ -327,7 +327,7 @@ Déploiement prévu sur Vercel ; pas de serveur applicatif audio permanent à ma
 | `components/conversation/` | Conversation, réglages, consentement, invitations et diagnostics |
 | `components/site/`, `app/about`, `app/faq` | Pages de présentation et FAQ publiques, en anglais, sans micro |
 | `app/[lang]/` | Mêmes pages sous le préfixe de langue (`/fr`, `/fr/about`, `/es/faq`), `/en/...` redirigé |
-| `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `013_credits.sql` |
+| `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `014_welcome_credits.sql` |
 
 Conserver les interfaces `TranslationProvider`, `VoiceProvider` et `PeerTransport` : les événements
 spécifiques à un fournisseur ne doivent pas se propager dans toute l’interface utilisateur.
@@ -353,7 +353,27 @@ minute commencée pendant laquelle les deux personnes sont en ligne (réclamée 
 scrutation de l'état, sans facturer les pauses), 1 par analyse de ton réussie, 50 par clone créé ou
 affiné. La facturation ne doit jamais casser la conversation : une écriture échouée est journalisée
 et abandonnée. Le créateur voit « cette conversation » et son solde dans les paramètres.
-**Pas encore** : blocage à solde nul, crédits offerts, achat Stripe, parrainage.
+**Crédits de bienvenue** : 300 par défaut (`WELCOME_CREDITS`, `0` pour désactiver), accordés une
+seule fois par compte lors d'une connexion Google (`grantWelcome`, index unique sur le type
+`welcome`) ; un compte créé avant l'offre les reçoit à sa prochaine connexion.
+**Solde à zéro (ou moins)** : la conversation s'arrête pour les deux personnes, avec un message
+dans la langue de chacune (créateur / invité) ; micros fermés, boutons de parole remplacés par le
+message, file de lecture vidée, aucune minute facturée pendant l'arrêt. Le serveur refuse aussi
+(HTTP 402) jetons de transcription et de traduction directe, `/api/translate`, `/api/elevenlabs/speak`,
+`/api/audio/tone`, le clonage et la création d'une conversation ; l'accueil l'annonce au lieu du
+bouton. Un solde illisible (panne de base) ne bloque jamais. La conversation reprend d'elle-même
+si le solde redevient positif. **Menu DEV** : « Reset credits » (`POST /api/sessions/[id]/credits`,
+accepté seulement si le créateur est admin) ramène le solde au montant de bienvenue par une ligne
+d'ajustement `grant`, sans jamais redonner le bonus de bienvenue. Test navigateur dédié :
+`TEST_BROWSER_SCRIPT=tests/browser/credits.mjs node scripts/browser-test-server.mjs`.
+**Ajouter des crédits** : un seul composant, `components/account/add-credits.tsx`, affiché sur
+l'accueil quand le solde est épuisé et dans les paramètres du créateur ; il annonce pour l'instant
+que le paiement arrive, et c'est là que Stripe Checkout sera branché. Les paramètres montrent aussi
+les crédits restants et une **estimation du temps de conversation restant** (`creditEstimate` dans
+`lib/billing/prices.ts`, prix partagés avec le serveur) : minute + ton si coché (une analyse par
+fenêtre, en supposant que le payeur parle la moitié du temps) − clones encore à venir. Le ton ou le
+clone d'un invité connecté, aussi payés par le créateur, ne sont pas dans l'estimation.
+**Pas encore** : achat Stripe, parrainage.
 
 ### Routes existantes
 
@@ -369,6 +389,7 @@ et abandonnée. Le créateur voit « cette conversation » et son solde dans les
 | `GET /api/sessions/[id]/audio-link`, `POST /api/sessions/[id]/audio-link` | Signalisation WebRTC et configuration ICE |
 | `POST /api/sessions/[id]/account` | Rattacher son compte à sa place invitée |
 | `POST /api/sessions/[id]/voice-range` | Enregistrer son registre détecté |
+| `POST /api/sessions/[id]/credits` | DEV : remettre le solde du créateur admin au montant de bienvenue |
 | `GET /api/auth/[...nextauth]`, `POST /api/auth/[...nextauth]` | Auth.js et Google |
 | `POST /api/openai/realtime-token`, `POST /api/openai/transcription-token` | Jetons éphémères des deux circuits |
 | `POST /api/translate` | Traduction textuelle avec contexte |
@@ -421,6 +442,7 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `DATABASE_URL` | Neon |
 | `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js et Google ; URI de retour OAuth à configurer pour chaque origine |
 | `CRON_SECRET` | Autorisation de purge et prérequis de clonage |
+| `WELCOME_CREDITS` | Crédits offerts une fois par compte à la connexion ; 300 par défaut, `0` désactive |
 | `NEXT_PUBLIC_APP_URL` | Origine réelle du site ; HTTPS sur téléphone, jamais localhost dans un QR partagé avec un téléphone |
 | `WEBRTC_ICE_SERVERS` | Tableau JSON STUN/TURN remis aux participants authentifiés ; identifiants dédiés à ce service |
 | `ADMIN_MAIL` | Adresse(s) Google, séparées par des virgules, qui voient le menu DEV ; `@domaine` couvre un domaine (serveur de test : `@example.test`) |

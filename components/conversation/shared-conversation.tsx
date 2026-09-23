@@ -14,6 +14,7 @@ import { PipelineDiagnostics } from "./pipeline-diagnostics";
 import { AudioDiagnostics } from "./audio-diagnostics";
 import { OwnWords } from "./own-words";
 import { LanguageMenus } from "./language-menus";
+import { CreditReset } from "./credit-reset";
 
 export function SharedConversation({ id, signedIn = false }: { id: string; signedIn?: boolean }) {
   const session = useSharedConversation(id, signedIn);
@@ -31,6 +32,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
     return () => clearTimeout(timer);
   }, [session.ended, router, home]);
   const away = !room?.peer?.online;
+  const noCredits = !!room?.creditsExhausted;
   // The sentence being read, or the latest one when nothing is: large, with the one before it for
   // context and every newer sentence still waiting to be read below it.
   const lines = session.incoming;
@@ -59,7 +61,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
       {session.ended ? <><h1>{t("conversationEnded")}</h1><p className="intro">{t("backHome")}</p><Link href={home}>Trad0</Link></>
       : !room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
       : !room.peer ? <ShareSession id={id} />
-      : settings ? <SettingsPanel id={id} me={room.me} credits={room.credits} speechSeconds={session.speechSeconds}
+      : settings ? <SettingsPanel id={id} me={room.me} credits={room.credits} toneWindowSeconds={session.toneTuning.windowSeconds} speechSeconds={session.speechSeconds}
           speechOptions={session.speechOptions} onSpeechOptions={session.setSpeechOptions}
           onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
           onClose={() => setSettings(false)} />
@@ -91,6 +93,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
             mine={room.me.language} theirs={room.peer.language} t={t} />
           {/* Only for the accounts listed in ADMIN_MAIL; everyone else sees the conversation alone. */}
           {room.diagnostics && <PipelineDiagnostics room={room} read={session.readPipelineState} tuning={session.toneTuning} onTuning={session.setToneTuning}>
+            <CreditReset id={id} onReset={session.refresh} />
             <AudioDiagnostics read={session.readAudioState} onTestTone={() => void session.playTestTone()}
               voiceStatus={session.voiceStatus} received={session.received} me={room.me} peer={room.peer} />
           </PipelineDiagnostics>}
@@ -100,7 +103,9 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? t("peerOnline") : t("peerOffline")}</p>
           {session.message && <p className="error-message" role="alert">{session.message}</p>}
           {session.connectionLost && <p className="quiet-note" role="status">{t("reconnecting")}</p>}
-          {!session.enabled
+          {noCredits
+            ? <p className="error-message" role="alert">{room.me.slot === 0 ? t("creditsOutHost") : t("creditsOutGuest")}</p>
+            : !session.enabled
             ? <button className="primary-button" disabled={session.starting || away} onClick={() => void session.start()}>{session.starting
                 ? t("connecting")
                 : away ? t("peerOffline")

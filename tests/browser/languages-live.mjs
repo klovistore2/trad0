@@ -186,6 +186,7 @@ async function direction(speaker,listener,id,source,target,preference) {
 }
 try {
  await sql`INSERT INTO adu_users(id,email,provider) VALUES(${account.id},${account.email},'google')`;
+ await sql`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${account.id},'welcome',300)`;
  for(const language of languages) {
   const source=language==='fr'?'en':'fr';
   const a=await client(true),b=await client(false);let id;

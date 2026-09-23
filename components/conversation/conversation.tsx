@@ -19,7 +19,7 @@ const serverLocale = () => "en" as const;
 
 // The home page never opens a microphone: a conversation needs two devices, and a scripted
 // preview proved nothing about real speech. Choose the other person's language, then invite them.
-export function Conversation({ email, pageLanguage }: { email: string | null; pageLanguage: Language }) {
+export function Conversation({ email, pageLanguage, outOfCredits = false }: { email: string | null; pageLanguage: Language; outOfCredits?: boolean }) {
   const locale = useSyncExternalStore(subscribeLocale, getLocale, serverLocale);
   const router = useRouter();
   // The page language is the address, not a piece of state: /fr is a page a reader can be sent.
@@ -59,7 +59,7 @@ export function Conversation({ email, pageLanguage }: { email: string | null; pa
       </div>
       <div className="controls">
         <p className="session-status" role="status"><span className="status-dot" />{t("autoLanguage")} ↔ {languageLabel(peerLanguage, pageLanguage)}</p>
-        <StartSharedSession signedIn={!!email} peerLanguage={peerLanguage} language={pageLanguage === "en" ? locale : pageLanguage} languageAuto peerLanguageAuto={false} t={t} returnTo={homePath(pageLanguage)} />
+        <StartSharedSession signedIn={!!email} outOfCredits={outOfCredits} peerLanguage={peerLanguage} language={pageLanguage === "en" ? locale : pageLanguage} languageAuto peerLanguageAuto={false} t={t} returnTo={homePath(pageLanguage)} />
         {email && <AccountStatus email={email} />}
       </div>
     </section>

@@ -4,7 +4,8 @@ import { db } from "@/lib/neon/db";
 import { guestHash, member, validId } from "./auth";
 import { HttpError } from "@/lib/server/http";
 import { saveProfileRange } from "@/lib/voice/profile";
-import { chargeActiveMinute, creditSummary } from "@/lib/billing/credits";
+import { chargeActiveMinute, creditSummary, payerBalance } from "@/lib/billing/credits";
+import { isAdmin } from "@/lib/auth/admin";
 import type { Language, Participant, SharedSession } from "@/types/session";
 
 // The creator starts with an account; guests can attach one later to reuse a saved voice.
@@ -32,12 +33,6 @@ export async function joinSession(id: string) {
     ON CONFLICT DO NOTHING`;
   await member(id);
 }
-// ADMIN_MAIL: comma-separated addresses; an entry starting with "@" covers a whole domain.
-function isAdmin(email: unknown) {
-  if (typeof email !== "string") return false;
-  return (process.env.ADMIN_MAIL ?? "").split(",").map(entry => entry.trim().toLowerCase()).filter(Boolean)
-    .some(entry => entry.startsWith("@") ? email.endsWith(entry) : email === entry);
-}
 export async function sessionState(id: string): Promise<SharedSession> {
   const me = await member(id); const sql = db();
   await sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`;
@@ -52,9 +47,10 @@ export async function sessionState(id: string): Promise<SharedSession> {
   // conversation. Checked here so no address ever reaches the browser.
   const diagnostics = rows.some(row => (row.slot === me.slot || row.slot === 0) && isAdmin(row.email));
   for (const row of rows) delete row.email;
-  // Only the creator pays, so only the creator sees the counter.
+  // Only the creator pays, so only the creator sees the counter; both are stopped at zero.
   const credits = me.slot === 0 ? await creditSummary(id, me.user_id) : null;
-  return { diagnostics, credits, models: { realtime: process.env.OPENAI_REALTIME_TRANSLATION_MODEL || "gpt-realtime-translate", transcription: process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL || "gpt-realtime-whisper", translation: process.env.OPENAI_TEXT_TRANSLATION_MODEL || "gpt-4.1-mini" }, id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
+  const balance = await payerBalance(id);
+  return { diagnostics, credits, creditsExhausted: balance !== null && balance <= 0, models: { realtime: process.env.OPENAI_REALTIME_TRANSLATION_MODEL || "gpt-realtime-translate", transcription: process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL || "gpt-realtime-whisper", translation: process.env.OPENAI_TEXT_TRANSLATION_MODEL || "gpt-4.1-mini" }, id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
 }
 
 // Taking the floor is unilateral; the database serializes simultaneous requests.
