@@ -4,6 +4,7 @@ import { checkOrigin, failure, HttpError, json } from "@/lib/server/http";
 import { deleteVoice, elevenHeaders } from "@/lib/elevenlabs/server";
 import { FINAL_TIER, VOICE_CONSENT, validSamples } from "@/lib/voice/consent";
 import { saveProfile } from "@/lib/voice/profile";
+import { charge } from "@/lib/billing/credits";
 
 export const maxDuration = 60;
 export async function POST(request: Request) {
@@ -68,6 +69,8 @@ export async function POST(request: Request) {
     // Only now is the previous clone unreferenced: never delete before the swap has committed.
     if (me.user_id) await saveProfile(me.user_id, data.voice_id, status, tier);
     if (previousVoiceId && previousVoiceId !== data.voice_id) await deleteVoice(previousVoiceId).catch(() => {});
+    // Billed to the conversation's creator, whoever's voice it is.
+    await charge(id, "clone");
     return json({ status, tier });
   } catch (error) {
     if (locked && sessionId !== undefined && slot !== undefined) {

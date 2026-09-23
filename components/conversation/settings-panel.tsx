@@ -6,7 +6,8 @@ import type { Participant } from "@/types/session";
 import type { SpeechOptions } from "@/lib/audio/speech-options";
 
 // Everything that is not the conversation itself lives here, so the call screen stays bare.
-export function SettingsPanel({ id, me, speechSeconds, onConsent, onRefresh, onUseClone, onClose, speechOptions, onSpeechOptions }: {
+export function SettingsPanel({ id, me, credits, speechSeconds, onConsent, onRefresh, onUseClone, onClose, speechOptions, onSpeechOptions }: {
+  credits?: { sessionUsed: number; balance: number } | null;
   speechOptions: SpeechOptions;
   onSpeechOptions: (options: SpeechOptions) => void;
   id: string;
@@ -32,6 +33,13 @@ export function SettingsPanel({ id, me, speechSeconds, onConsent, onRefresh, onU
         <span>Match my tone of voice<em>No added delay: a few seconds of your speech are analysed now and then to estimate how you are speaking. Separate from your own voice.</em></span>
       </label>}
     </div>
+
+    {credits && <div className="settings-group">
+      <h2>{"Credits"}</h2>
+      <p className="credit-line">{"This conversation"}<b>{credits.sessionUsed}</b></p>
+      <p className="credit-line">{"Balance"}<b>{credits.balance}</b></p>
+      <p className="setting-note">{"You pay for the whole conversation, including your guest's voice and tone. Buying credits is coming soon."}</p>
+    </div>}
 
     <div className="settings-group settings-danger">
       <h2>{"End"}</h2>

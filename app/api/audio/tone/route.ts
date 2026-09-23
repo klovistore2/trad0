@@ -1,6 +1,7 @@
 import { member } from "@/lib/session/auth";
 import { TONE_MODELS, TONES } from "@/lib/audio/speech-options";
 import { checkOrigin, failure, HttpError, json } from "@/lib/server/http";
+import { charge } from "@/lib/billing/credits";
 export const maxDuration = 15;
 export async function POST(request: Request) {
   try {
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
     if (choice?.finish_reason !== "stop" || typeof choice.message?.content !== "string") throw new HttpError(502, "Invalid tone estimate.");
     const result = JSON.parse(choice.message.content);
     if (!TONES.includes(result.tone) || !["low", "medium", "high"].includes(result.strength)) throw new HttpError(502, "Invalid tone estimate.");
+    await charge(sessionId, "tone");
     return json({ tone: result.tone, strength: result.strength, status: "estimated", model, analysisMs: Math.round(performance.now() - started) });
   } catch (error) { return failure(error); }
 }

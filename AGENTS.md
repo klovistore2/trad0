@@ -327,7 +327,7 @@ Déploiement prévu sur Vercel ; pas de serveur applicatif audio permanent à ma
 | `components/conversation/` | Conversation, réglages, consentement, invitations et diagnostics |
 | `components/site/`, `app/about`, `app/faq` | Pages de présentation et FAQ publiques, en anglais, sans micro |
 | `app/[lang]/` | Mêmes pages sous le préfixe de langue (`/fr`, `/fr/about`, `/es/faq`), `/en/...` redirigé |
-| `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `012_dutch_language.sql` |
+| `migrations/` | Schéma additif et réexécutable ; dernière migration actuelle : `013_credits.sql` |
 
 Conserver les interfaces `TranslationProvider`, `VoiceProvider` et `PeerTransport` : les événements
 spécifiques à un fournisseur ne doivent pas se propager dans toute l’interface utilisateur.
@@ -342,6 +342,18 @@ Transport par requêtes courtes : événements et parole environ toutes les **50
 environ toutes les **3 s** ; signalisation audio environ toutes les 1 à 3 s. Ces délais s’ajoutent
 au réseau et aux requêtes serveur. La publication des événements est sérialisée et réessayée avec
 le même identifiant ; l’unicité de l’identifiant empêche leur double insertion.
+
+### Crédits, version 1 (23 septembre 2026)
+
+**Le créateur de la conversation paie tout**, y compris le clonage et le ton de l'invité.
+`adu_credit_ledger` est un registre en ajout seul (montant négatif pour un usage), sans clé
+étrangère vers les sessions pour survivre à leur purge ; le solde est la somme. `lib/billing/credits.ts`
+centralise les prix, **provisoires** tant que les coûts réels ne sont pas mesurés : 10 crédits par
+minute commencée pendant laquelle les deux personnes sont en ligne (réclamée atomiquement pendant la
+scrutation de l'état, sans facturer les pauses), 1 par analyse de ton réussie, 50 par clone créé ou
+affiné. La facturation ne doit jamais casser la conversation : une écriture échouée est journalisée
+et abandonnée. Le créateur voit « cette conversation » et son solde dans les paramètres.
+**Pas encore** : blocage à solde nul, crédits offerts, achat Stripe, parrainage.
 
 ### Routes existantes
 

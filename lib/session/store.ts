@@ -4,6 +4,7 @@ import { db } from "@/lib/neon/db";
 import { guestHash, member, validId } from "./auth";
 import { HttpError } from "@/lib/server/http";
 import { saveProfileRange } from "@/lib/voice/profile";
+import { chargeActiveMinute, creditSummary } from "@/lib/billing/credits";
 import type { Language, Participant, SharedSession } from "@/types/session";
 
 // The creator starts with an account; guests can attach one later to reuse a saved voice.
@@ -45,12 +46,15 @@ export async function sessionState(id: string): Promise<SharedSession> {
   await sql`UPDATE adu_sessions SET expires_at=LEAST(now()+interval '1 hour', created_at+interval '6 hours')
     WHERE id=${id} AND closed=false AND expires_at>now() AND expires_at<now()+interval '55 minutes'
       AND expires_at<created_at+interval '6 hours'`;
+  await chargeActiveMinute(id);
   const rows = await sql`SELECT slot, lower(u.email) as email, user_id IS NOT NULL as "hasAccount", preferred_mode as "preferredMode", active_mode as "activeMode", language, language_auto as "languageAuto", language_detected as "languageDetected", language_revision as "languageRevision", language_attempts as "languageAttempts", voice_status as "voiceStatus", voice_range as "voiceRange", voice_tier as "voiceTier", use_clone as "useClone", consent_at IS NOT NULL as consented, last_seen>now()-interval '15 seconds' as online FROM adu_participants p LEFT JOIN adu_users u ON u.id=p.user_id WHERE session_id=${id} ORDER BY slot`;
   // Diagnostics follow the admin account, and its test partner when the admin created the
   // conversation. Checked here so no address ever reaches the browser.
   const diagnostics = rows.some(row => (row.slot === me.slot || row.slot === 0) && isAdmin(row.email));
   for (const row of rows) delete row.email;
-  return { diagnostics, models: { realtime: process.env.OPENAI_REALTIME_TRANSLATION_MODEL || "gpt-realtime-translate", transcription: process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL || "gpt-realtime-whisper", translation: process.env.OPENAI_TEXT_TRANSLATION_MODEL || "gpt-4.1-mini" }, id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
+  // Only the creator pays, so only the creator sees the counter.
+  const credits = me.slot === 0 ? await creditSummary(id, me.user_id) : null;
+  return { diagnostics, credits, models: { realtime: process.env.OPENAI_REALTIME_TRANSLATION_MODEL || "gpt-realtime-translate", transcription: process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL || "gpt-realtime-whisper", translation: process.env.OPENAI_TEXT_TRANSLATION_MODEL || "gpt-4.1-mini" }, id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
 }
 
 // Taking the floor is unilateral; the database serializes simultaneous requests.

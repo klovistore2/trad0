@@ -59,7 +59,7 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
       {session.ended ? <><h1>{t("conversationEnded")}</h1><p className="intro">{t("backHome")}</p><Link href={home}>Trad0</Link></>
       : !room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
       : !room.peer ? <ShareSession id={id} />
-      : settings ? <SettingsPanel id={id} me={room.me} speechSeconds={session.speechSeconds}
+      : settings ? <SettingsPanel id={id} me={room.me} credits={room.credits} speechSeconds={session.speechSeconds}
           speechOptions={session.speechOptions} onSpeechOptions={session.setSpeechOptions}
           onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
           onClose={() => setSettings(false)} />
