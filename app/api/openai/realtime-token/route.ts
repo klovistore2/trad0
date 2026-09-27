@@ -29,12 +29,14 @@ export async function POST(request: Request) {
   const transcriptionModel = process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL?.trim() || "gpt-realtime-whisper";
   if (!key || !model) return json({ error: "La traduction n’est pas encore configurée." }, 503);
   // The output language is the other participant's, read from the conversation, never from the body.
-  const { targetLanguageForSession } = await import("@/lib/session/store");
-  const targetLanguage = await targetLanguageForSession(sessionId).catch(() => null);
-  if (!targetLanguage) return json({ error: "Rejoignez une conversation active pour continuer." }, 403);
-  const { payerBalance } = await import("@/lib/billing/credits");
-  const balance = await payerBalance(sessionId);
+  // One round trip for the caller, the other participant and the creator's credits.
+  const { speakerContext } = await import("@/lib/session/auth");
+  const { blockingBalance } = await import("@/lib/billing/credits");
+  const context = await speakerContext(sessionId).catch(() => null);
+  if (!context?.peer) return json({ error: "Rejoignez une conversation active pour continuer." }, 403);
+  const balance = blockingBalance(context.payerEmail, context.payerBalance);
   if (balance !== null && balance <= 0) return json({ error: "No credits left." }, 402);
+  const targetLanguage = context.peer.language;
   try {
     const response = await fetch("https://api.openai.com/v1/realtime/translations/client_secrets", {
       method: "POST",

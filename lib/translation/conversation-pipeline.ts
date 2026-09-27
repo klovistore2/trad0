@@ -7,7 +7,9 @@ import type { StringKey } from "@/lib/i18n/strings";
 
 const TRANSLATE_ATTEMPTS = 2;
 const TRANSLATE_RETRY_MS = 400;
-export type PipelineTiming = { waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
+// requestMs is the whole /api/translate round trip seen by this phone, retry included: it minus the
+// LLM and database times is network and server overhead.
+export type PipelineTiming = { waitMs: number; requestMs: number; translationMs: number; dbMs: number; publishMs: number; contextTurns: number; model: string };
 export class ConversationPipeline {
   readonly memory = new ConversationMemory();
   mode: ConversationMode = "direct";
@@ -60,8 +62,10 @@ export class ConversationPipeline {
       if (this.controller.signal.aborted) return;
       // Clamp text context to fit the route's total request budget; keep the latest turns.
       const context = this.memory.recent().map(turn => ({ ...turn, original: turn.original.slice(-700), translation: turn.translation?.slice(-300) }));
+      const requestStarted = performance.now();
       const response = await this.translate(JSON.stringify({ sessionId: this.options.sessionId, text: original, context, recentTranslations: this.memory.recentTranslations() }));
       const data = await response.json();
+      const requestMs = Math.round(performance.now() - requestStarted);
       if (!response.ok) throw new Error(`translate ${response.status}`);
       if (this.controller.signal.aborted) return;
       const actualLanguage = { ...language, targetLanguage: data.targetLanguage as Language };
@@ -72,7 +76,7 @@ export class ConversationPipeline {
       if (this.controller.signal.aborted) return;
       this.speech = speechMetadata ?? null;
       const publishStarted = performance.now();
-      const timing = { waitMs, translationMs: data.translationMs, contextTurns: data.contextTurns, model: data.model, publishMs: 0 };
+      const timing = { waitMs, requestMs, translationMs: data.translationMs, dbMs: data.dbMs ?? 0, contextTurns: data.contextTurns, model: data.model, publishMs: 0 };
       await this.options.send({ ...event, text: data.text, original, kind: "translation", mode: "context", ...actualLanguage, timing, speech: speechMetadata });
       this.timing = { ...timing, publishMs: Math.round(performance.now() - publishStarted) };
     }).catch(() => {

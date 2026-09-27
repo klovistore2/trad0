@@ -1,10 +1,10 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/neon/db";
-import { guestHash, member, validId } from "./auth";
+import { guestHash, member, speakerContext, validId } from "./auth";
 import { HttpError } from "@/lib/server/http";
 import { saveProfileRange } from "@/lib/voice/profile";
-import { chargeActiveMinute, creditSummary, payerBalance } from "@/lib/billing/credits";
+import { blockingBalance, chargeActiveMinute, CREDIT_PRICES, creditSummary } from "@/lib/billing/credits";
 import { isAdmin } from "@/lib/auth/admin";
 import type { Language, Participant, SharedSession } from "@/types/session";
 
@@ -33,24 +33,31 @@ export async function joinSession(id: string) {
     ON CONFLICT DO NOTHING`;
   await member(id);
 }
+// Polled every 3 s by both phones. Two round trips instead of nine: the caller's place with the
+// creator's balance, then everything else at once, since none of it waits for the rest. Read
+// alongside its own last_seen update, a participant still counts as online from its previous poll.
 export async function sessionState(id: string): Promise<SharedSession> {
-  const me = await member(id); const sql = db();
-  await sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`;
-  // A conversation ends an hour after it goes quiet, not an hour after it started: each poll
-  // pushes the deadline, written at most every five minutes, within six hours in total.
-  await sql`UPDATE adu_sessions SET expires_at=LEAST(now()+interval '1 hour', created_at+interval '6 hours')
-    WHERE id=${id} AND closed=false AND expires_at>now() AND expires_at<now()+interval '55 minutes'
-      AND expires_at<created_at+interval '6 hours'`;
-  await chargeActiveMinute(id);
-  const rows = await sql`SELECT slot, lower(u.email) as email, user_id IS NOT NULL as "hasAccount", preferred_mode as "preferredMode", active_mode as "activeMode", language, language_auto as "languageAuto", language_detected as "languageDetected", language_revision as "languageRevision", language_attempts as "languageAttempts", voice_status as "voiceStatus", voice_range as "voiceRange", voice_tier as "voiceTier", use_clone as "useClone", consent_at IS NOT NULL as consented, last_seen>now()-interval '15 seconds' as online FROM adu_participants p LEFT JOIN adu_users u ON u.id=p.user_id WHERE session_id=${id} ORDER BY slot`;
+  const me = await speakerContext(id); const sql = db();
+  const balance = blockingBalance(me.payerEmail, me.payerBalance);
+  const [, , billed, rows, credits] = await Promise.all([
+    sql`UPDATE adu_participants SET last_seen=now() WHERE session_id=${id} AND slot=${me.slot}`,
+    // A conversation ends an hour after it goes quiet, not an hour after it started: each poll
+    // pushes the deadline, written at most every five minutes, within six hours in total.
+    sql`UPDATE adu_sessions SET expires_at=LEAST(now()+interval '1 hour', created_at+interval '6 hours')
+      WHERE id=${id} AND closed=false AND expires_at>now() AND expires_at<now()+interval '55 minutes'
+        AND expires_at<created_at+interval '6 hours'`,
+    // Nothing is billed while a conversation is stopped for lack of credits.
+    balance !== null && balance <= 0 ? false : chargeActiveMinute(id),
+    sql`SELECT slot, lower(u.email) as email, user_id IS NOT NULL as "hasAccount", preferred_mode as "preferredMode", active_mode as "activeMode", language, language_auto as "languageAuto", language_detected as "languageDetected", language_revision as "languageRevision", language_attempts as "languageAttempts", voice_status as "voiceStatus", voice_range as "voiceRange", voice_tier as "voiceTier", use_clone as "useClone", consent_at IS NOT NULL as consented, last_seen>now()-interval '15 seconds' as online FROM adu_participants p LEFT JOIN adu_users u ON u.id=p.user_id WHERE session_id=${id} ORDER BY slot`,
+    // Only the creator pays, so only the creator sees the counter; both are stopped at zero.
+    me.slot === 0 ? creditSummary(id, me.user_id) : null,
+  ]);
   // Diagnostics follow the admin account, and its test partner when the admin created the
   // conversation. Checked here so no address ever reaches the browser.
   const diagnostics = rows.some(row => (row.slot === me.slot || row.slot === 0) && isAdmin(row.email));
   for (const row of rows) delete row.email;
-  // Only the creator pays, so only the creator sees the counter; both are stopped at zero.
-  const credits = me.slot === 0 ? await creditSummary(id, me.user_id) : null;
-  const balance = await payerBalance(id);
-  return { diagnostics, credits, creditsExhausted: balance !== null && balance <= 0, models: { realtime: process.env.OPENAI_REALTIME_TRANSLATION_MODEL || "gpt-realtime-translate", transcription: process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL || "gpt-realtime-whisper", translation: process.env.OPENAI_TEXT_TRANSLATION_MODEL || "gpt-4.1-mini" }, id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
+  const remaining = balance === null ? null : balance - (billed ? CREDIT_PRICES.minute : 0);
+  return { diagnostics, credits, creditsExhausted: remaining !== null && remaining <= 0, models: { realtime: process.env.OPENAI_REALTIME_TRANSLATION_MODEL || "gpt-realtime-translate", transcription: process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL || "gpt-realtime-whisper", translation: process.env.OPENAI_TEXT_TRANSLATION_MODEL || "gpt-4.1-mini" }, id, expiresAt: String(me.expires_at), floor: me.floor_slot, me: rows.find(row => row.slot === me.slot) as Participant, peer: (rows.find(row => row.slot !== me.slot) as Participant | undefined) ?? null };
 }
 
 // Taking the floor is unilateral; the database serializes simultaneous requests.
@@ -72,9 +79,3 @@ export async function setVoiceRange(id: string, range: "low" | "high") {
   if (me.user_id) await saveProfileRange(me.user_id, range);
 }
 
-export async function targetLanguageForSession(id: string) {
-  const me = await member(id);
-  const rows = await db()`SELECT language FROM adu_participants WHERE session_id=${id} AND slot<>${me.slot}`;
-  if (!rows[0]) throw new HttpError(409, "Attendez que l’autre personne rejoigne la conversation.");
-  return rows[0].language as Language;
-}

@@ -9,7 +9,7 @@ export type PipelineState = {
   reason: string; contextTurns: number; timing: PipelineTiming | null;
   receivedTiming: { transport: number; request: number; playback: number };
   speechOptions: SpeechOptions; outgoingSpeech: SpeechMetadata | null; incomingSpeech: SpeechMetadata | null;
-  synthesis: { model: string; stability: string; style: string; headersMs: number; playback: string } | null;
+  synthesis: { model: string; stability: string; style: string; headersMs: number; dbMs: number; playback: string; prefetched: boolean } | null;
   audioLatency: { request: number; total: number } | null;
 };
 const toneLabel = (speech: SpeechMetadata | null | undefined) => speech ? `${speech.tone.status} · ${speech.tone.tone} · ${speech.tone.strength} · ${speech.tone.model}` : "—";
@@ -52,14 +52,14 @@ export function PipelineDiagnostics({ room, read, tuning, onTuning, children }: 
       <dt>My last tone request</dt><dd>{state?.outgoingSpeech?.tone.status === "estimated" ? `${state.outgoingSpeech.tone.analysisMs} ms` : "—"}</dd>
       <dt>Incoming tone</dt><dd>{toneLabel(state?.incomingSpeech)}</dd>
       <dt>Incoming actual ElevenLabs model</dt><dd>{state?.synthesis?.model || "—"}</dd>
-      <dt>Incoming playback</dt><dd>{state?.synthesis?.playback || "—"}</dd>
+      <dt>Incoming playback</dt><dd>{state?.synthesis?.playback ? `${state.synthesis.playback} · ${state.synthesis.prefetched ? "prepared during the previous sentence" : "requested on arrival"}` : "—"}</dd>
       <dt>Incoming stability / style</dt><dd>{state?.synthesis?.stability && !["default", "unknown"].includes(state.synthesis.stability) ? `${state.synthesis.stability} / ${state.synthesis.style} · tone tag` : state?.synthesis?.stability || "—"}</dd>
-      <dt>ElevenLabs response headers (server)</dt><dd>{state?.synthesis?.headersMs ?? "—"} ms</dd>
+      <dt>Speech request, server side: ElevenLabs headers / database</dt><dd>{state?.synthesis ? `${state.synthesis.headersMs} / ${state.synthesis.dbMs} ms` : "—"}</dd>
       <dt>Incoming speech request → playback started</dt><dd>{state?.audioLatency?.total || "—"} ms</dd>
       <dt>My clone</dt><dd>{room.me.hasAccount ? room.me.consented ? `${room.me.voiceStatus} · tier ${room.me.voiceTier}` : "Awaiting consent" : "Account required"}</dd>
       <dt>Original turns in memory</dt><dd>{state?.contextTurns ?? 0}</dd>
       <dt>Context used / last outgoing sentence</dt><dd>{state?.timing?.contextTurns ?? "—"}</dd>
-      <dt>Sentence wait / LLM / publish</dt><dd>{state?.timing ? `${state.timing.waitMs} / ${state.timing.translationMs} / ${state.timing.publishMs} ms` : "—"}</dd>
+      <dt>Sentence wait / translate request (LLM · database) / publish</dt><dd>{state?.timing ? `${state.timing.waitMs} / ${state.timing.requestMs} (${state.timing.translationMs} · ${state.timing.dbMs}) / ${state.timing.publishMs} ms` : "—"}</dd>
       <dt>Incoming transport / speech request / audio start</dt><dd>{state ? `${state.receivedTiming.transport} / ${state.receivedTiming.request} / ${state.receivedTiming.playback} ms` : "—"}</dd>
       <dt>Direct audio connection</dt><dd>{state?.directAudio}</dd>
       <dt>Fallback / failure</dt><dd>{state?.reason || "None"}</dd>

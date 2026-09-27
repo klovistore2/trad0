@@ -42,10 +42,10 @@ test('relayed speech uses the other participant’s ready clone, never a client 
     return new Response(new Uint8Array([0,1,2,3]), {status:200});
   };
   const load = createLoader({
-    '@/lib/session/auth': {member: async id => {assert.equal(id,'session');return {slot:0};}},
-    '@/lib/neon/db': {db: () => async (strings,...values) => {
-      assert.match(strings.join('?'),/slot<>/); assert.deepEqual(values,['session',0]);
-      return [{voice_id:'peer-clone',voice_status:'ready',use_clone:true}];
+    // The listener's context carries the other participant's voice, read by the server alone.
+    '@/lib/session/auth': {speakerContext: async id => {
+      assert.equal(id,'session');
+      return {slot:0,peer:{slot:1,voice_id:'peer-clone',voice_status:'ready',use_clone:true},payerEmail:null,payerBalance:0};
     }},
   });
   try {
@@ -85,8 +85,7 @@ test('a standard voice is matched to the speaker’s detected range, never to a 
   };
   const speak = async voiceRange => {
     const load = createLoader({
-      '@/lib/session/auth': {member: async () => ({slot:0})},
-      '@/lib/neon/db': {db: () => async () => [{voice_id:null,voice_status:'none',voice_range:voiceRange,use_clone:true}]},
+      '@/lib/session/auth': {speakerContext: async () => ({slot:0,peer:{slot:1,voice_id:null,voice_status:'none',voice_range:voiceRange,use_clone:true},payerEmail:null,payerBalance:0})},
     });
     return load('app/api/elevenlabs/speak/route.ts').POST(request({sessionId:'session',text:'Bonjour'}));
   };
@@ -110,7 +109,7 @@ test('relayed speech refuses empty or oversized text before reaching the provide
   const previousUrl = process.env.NEXT_PUBLIC_APP_URL; process.env.NEXT_PUBLIC_APP_URL=origin;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {throw new Error('provider must not be reached');};
-  const load = createLoader({'@/lib/session/auth': {member: async () => ({slot:0})}, '@/lib/neon/db': {db: () => async () => []}});
+  const load = createLoader({'@/lib/session/auth': {speakerContext: async () => ({slot:0,peer:null,payerEmail:null,payerBalance:0})}});
   try {
     const route = load('app/api/elevenlabs/speak/route.ts');
     assert.equal((await route.POST(request({sessionId:'session',text:'   '}))).status,400);
@@ -126,8 +125,7 @@ test('nothing is spoken without a conversation: the relay is not free speech for
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => {throw new Error('provider must not be reached');};
   const load = createLoader({
-    '@/lib/session/auth': {member: async () => {throw new Error('no session to check');}},
-    '@/lib/neon/db': {db: () => async () => {throw new Error('database must not be reached');}},
+    '@/lib/session/auth': {speakerContext: async () => {throw new Error('no session to check');}},
   });
   try {
     const route = load('app/api/elevenlabs/speak/route.ts');
@@ -347,9 +345,8 @@ test('a speaker who turns their clone off is spoken with the standard voice, and
     return new Response(new Uint8Array([0,1]), {status:200});
   };
   const load = createLoader({
-    '@/lib/session/auth': {member: async () => ({slot:0})},
     // The clone is still stored; only its use is switched off.
-    '@/lib/neon/db': {db: () => async () => [{voice_id:'peer-clone',voice_status:'ready',voice_range:'low',use_clone:false}]},
+    '@/lib/session/auth': {speakerContext: async () => ({slot:0,peer:{slot:1,voice_id:'peer-clone',voice_status:'ready',voice_range:'low',use_clone:false},payerEmail:null,payerBalance:0})},
   });
   try {
     const response = await load('app/api/elevenlabs/speak/route.ts').POST(request({sessionId:'session',text:'Bonjour'}));

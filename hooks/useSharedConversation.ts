@@ -15,7 +15,7 @@ import { ToneTracker } from "@/lib/audio/tone-analysis";
 import { DEFAULT_SPEECH_OPTIONS, DEFAULT_TONE_TUNING, isSpeechOptions, isToneTuning, type SpeechOptions, type SpeechMetadata, type ToneTuning } from "@/lib/audio/speech-options";
 import { FINAL_TIER, VOICE_CONSENT, cloneRefused, dueTier } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
-import type { VoiceStatus } from "@/types/voice";
+import type { SpeechRequest, VoiceStatus } from "@/types/voice";
 import type { StringKey } from "@/lib/i18n/strings";
 
 // A cloning attempt that failed for a passing reason is tried again after a minute, then less often.
@@ -198,6 +198,16 @@ export function useSharedConversation(id: string, signedIn = false) {
     flashTimer.current = setTimeout(() => setMessage(current => current === text ? "" : current), 5000);
   }, []);
   const canPlay = useCallback(() => sound.current && soundReadyRef.current && !!voice.current, []);
+  // What this phone asks the voice to say for one received sentence.
+  const speechFor = useCallback((event: ReceivedEvent): SpeechRequest => ({
+    id: event.id, sessionId: id, text: event.text + " ", speech: event.speech,
+    language: event.targetLanguage || roomRef.current?.me.language || "en",
+  }), [id]);
+  // The next queued sentence is prepared while the current one plays: no wait between sentences.
+  const prefetchNext = useCallback(() => {
+    const next = queue.current[0];
+    if (next && canPlay()) voice.current?.prefetch(speechFor(next));
+  }, [canPlay, speechFor]);
   const playQueue = useCallback(async () => {
     if (speaking.current || !canPlay()) return;
     speaking.current = true;
@@ -209,7 +219,10 @@ export function useSharedConversation(id: string, signedIn = false) {
         incomingSpeech.current = event.speech ?? null;
         setSpeakingTurn(event.turnId);
         try {
-          await voice.current?.speakStream({ sessionId: id, speech: event.speech, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
+          const { text, ...request } = speechFor(event);
+          const playing = voice.current?.speakStream({ ...request, textStream: (async function* () { yield text; })() });
+          prefetchNext();
+          await playing;
         } catch {
           // A system-suspended context is not an error the listener should read: re-arm quietly.
           if (voice.current && voice.current.contextState !== "running") {
@@ -227,7 +240,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       directAudio.current?.setIncomingEnabled(roomRef.current?.peer?.activeMode !== "context");
       syncMicrophone();
     }
-  }, [id, syncMicrophone, canPlay, flash]);
+  }, [syncMicrophone, canPlay, flash, speechFor, prefetchNext]);
 
   // A tier must not wait for the floor to be handed back: someone can hold it for minutes.
   useEffect(() => {
@@ -321,6 +334,7 @@ export function useSharedConversation(id: string, signedIn = false) {
           else {
             if (queue.current.length >= 20) { setMessage("playbackBehind"); queue.current = []; }
             queue.current.push(event);
+            if (speaking.current) prefetchNext();
           }
           void playQueue();
         }
@@ -487,7 +501,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       running.current = false; queue.current = []; speaking.current = false;
       publisher.current = null; transport.current = null; voice.current = null;
     };
-  }, [id, signedIn, playQueue, syncMicrophone, canPlay, activeSpeechOptions]);
+  }, [id, signedIn, playQueue, syncMicrophone, canPlay, activeSpeechOptions, prefetchNext]);
 
   async function unlockSound() {
     await Promise.all([voice.current?.unlock(), directAudio.current?.unlock()]);

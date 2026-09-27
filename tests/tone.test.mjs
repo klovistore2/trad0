@@ -96,8 +96,8 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
  const before=globalThis.fetch;const oldKey=process.env.OPENAI_API_KEY;const oldUrl=process.env.NEXT_PUBLIC_APP_URL;
  process.env.OPENAI_API_KEY='test-only';process.env.NEXT_PUBLIC_APP_URL='http://localhost:3000';
  let checked=false,calls=0,content=JSON.stringify({tone:'sad',strength:'medium'});
- const charges=[];const billing={charge:async(session,use)=>{charges.push([session,use]);},requireCredits:async()=>{}};
- const route=createLoader({'@/lib/session/auth':{member:async()=>{checked=true;return {slot:0,user_id:'account'};}},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
+ const charges=[];const billing={charge:async(session,use)=>{charges.push([session,use]);},requirePayer:()=>{}};
+ const route=createLoader({'@/lib/session/auth':{speakerContext:async()=>{checked=true;return {slot:0,user_id:'account',payerEmail:null,payerBalance:0};}},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
  globalThis.fetch=async(_url,init)=>{
   calls++;assert.ok(checked);const body=JSON.parse(init.body);
   assert.equal(body.store,false);assert.deepEqual(body.modalities,['text']);
@@ -117,15 +117,15 @@ test('tone endpoint authenticates bounded WAV, sends audio only and validates un
   content=JSON.stringify({tone:'[shout]',strength:'high'});
   assert.equal((await route.POST(request())).status,502);
   assert.equal(charges.length,1,'invalid requests and malformed estimates are never billed');
-  const denied=createLoader({'@/lib/session/auth':{member:async()=>{throw new Error('denied');}},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
+  const denied=createLoader({'@/lib/session/auth':{speakerContext:async()=>{throw new Error('denied');}},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
   const beforeDenied=calls;await denied.POST(request());assert.equal(calls,beforeDenied);
-  const guest=createLoader({'@/lib/session/auth':{member:async()=>({slot:1,user_id:null})},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
+  const guest=createLoader({'@/lib/session/auth':{speakerContext:async()=>({slot:1,user_id:null,payerEmail:null,payerBalance:0})},'@/lib/billing/credits':billing})('app/api/audio/tone/route.ts');
   const refused=await guest.POST(request());assert.equal(refused.status,403,'a guest without an account is refused');assert.equal(calls,beforeDenied);
   assert.equal(charges.length,1);
   // Out of credits: refused before any provider call, and nothing is billed.
-  const mocks={'@/lib/session/auth':{member:async()=>({slot:0,user_id:'account'})}};const load=createLoader(mocks);
+  const mocks={'@/lib/session/auth':{speakerContext:async()=>({slot:0,user_id:'account',payerEmail:null,payerBalance:0})}};const load=createLoader(mocks);
   const {HttpError}=load('lib/server/http.ts');
-  mocks['@/lib/billing/credits']={...billing,requireCredits:async()=>{throw new HttpError(402,'No credits left.');}};
+  mocks['@/lib/billing/credits']={...billing,requirePayer:()=>{throw new HttpError(402,'No credits left.');}};
   const broke=load('app/api/audio/tone/route.ts');const beforeBroke=calls;
   assert.equal((await broke.POST(request())).status,402);assert.equal(calls,beforeBroke);assert.equal(charges.length,1);
  }finally{
@@ -141,8 +141,7 @@ test('speech relay uses validated tone tags and a model the browser cannot choos
  let payload,calls=0;
  globalThis.fetch=async(_url,init)=>{calls++;payload=JSON.parse(init.body);return new Response(new Uint8Array([1,2]));};
  const route=createLoader({
-  '@/lib/session/auth':{member:async()=>({slot:0})},
-  '@/lib/neon/db':{db:()=>async()=>[{voice_id:'clone',voice_status:'ready',use_clone:true}]},
+  '@/lib/session/auth':{speakerContext:async()=>({slot:0,peer:{slot:1,voice_id:'clone',voice_status:'ready',use_clone:true},payerEmail:null,payerBalance:0})},
   '@/lib/elevenlabs/server':{elevenHeaders:()=>({}),fallbackVoice:async()=>{throw new Error('must use clone');}},
  })('app/api/elevenlabs/speak/route.ts');
  const request=body=>new Request('http://localhost:3000/api/elevenlabs/speak',{method:'POST',headers:{origin:'http://localhost:3000','Content-Type':'application/json'},body:JSON.stringify(body)});

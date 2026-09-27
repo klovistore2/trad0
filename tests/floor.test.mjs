@@ -83,3 +83,32 @@ test("a refused claim fails without carrying the server's wording", async () => 
   // The transport runs in its own VM context, so its errors are not instances of this Error.
   await assert.rejects(() => peer.takeFloor(), error => /^floor 403$/.test(String(error?.message)));
 });
+
+function loadModule(fetchImpl) {
+  const exports = {};
+  runInNewContext(source, { exports, require: () => ({}), fetch: fetchImpl, AbortController, Date, setTimeout: () => 1, clearTimeout: () => {} });
+  return exports;
+}
+
+test("a failing poll backs off to 5 s at most, and a healthy one polls every 500 ms", () => {
+  const { pollDelay } = loadModule(async () => ({}));
+  assert.deepEqual([0, 1, 2, 3, 4, 10].map(pollDelay), [500, 1000, 2000, 4000, 5000, 5000]);
+});
+
+test("a subtitle overtaken by a newer one is not sent; a finished sentence always is", async () => {
+  const sent = []; let release;
+  const { NeonPeerTransport } = loadModule(async (_url, init) => {
+    sent.push(JSON.parse(init.body).id);
+    // The first send stays in flight while the next subtitles queue behind it.
+    if (sent.length === 1) await new Promise(resolve => { release = resolve; });
+    return { ok: true, json: async () => ({ ok: true }) };
+  });
+  const peer = new NeonPeerTransport(() => {});
+  const partial = (id, text) => peer.send({ id, turnId: "t1", text, committed: false });
+  const first = partial("p1", "Hel");
+  await new Promise(resolve => setImmediate(resolve));
+  partial("p2", "Hello th"); partial("p3", "Hello there");
+  const done = peer.send({ id: "c1", turnId: "t1", text: "Hello there.", committed: true });
+  release(); await first; await done;
+  assert.deepEqual(sent, ["p1", "c1"], "p2 and p3 were overtaken before their turn came");
+});

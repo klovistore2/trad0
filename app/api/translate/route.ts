@@ -1,6 +1,5 @@
-import { member } from "@/lib/session/auth";
-import { targetLanguageForSession } from "@/lib/session/store";
-import { requireCredits } from "@/lib/billing/credits";
+import { speakerContext } from "@/lib/session/auth";
+import { requirePayer } from "@/lib/billing/credits";
 import { checkOrigin, failure, HttpError, json, readJson } from "@/lib/server/http";
 import { isLanguage } from "@/types/session";
 import type { ContextTranslation, ContextTurn } from "@/lib/translation/memory";
@@ -9,9 +8,13 @@ export async function POST(request: Request) {
   try {
     checkOrigin(request); const body = await readJson(request);
     if (typeof body.sessionId !== "string" || typeof body.text !== "string" || !body.text.trim() || body.text.length > 4000) throw new HttpError(400, "Invalid text.");
-    const me = await member(body.sessionId);
-    await requireCredits(body.sessionId);
-    const targetLanguage = await targetLanguageForSession(body.sessionId);
+    // One round trip for the caller, the other participant and the creator's credits.
+    const dbStarted = performance.now();
+    const me = await speakerContext(body.sessionId);
+    const dbMs = Math.round(performance.now() - dbStarted);
+    requirePayer(me);
+    if (!me.peer) throw new HttpError(409, "Attendez que l’autre personne rejoigne la conversation.");
+    const targetLanguage = me.peer.language;
     if (!Array.isArray(body.context) || body.context.length > 12) throw new HttpError(400, "Invalid context.");
     const context: ContextTurn[] = [];
     for (const turn of body.context) {
@@ -47,6 +50,6 @@ export async function POST(request: Request) {
     if (choice?.finish_reason !== "stop" || typeof choice.message?.content !== "string") throw new HttpError(502, "The translation was incomplete. Try again.");
     const output = JSON.parse(choice.message.content);
     if (typeof output.translation !== "string" || !output.translation.trim() || output.translation.length > 4000) throw new HttpError(502, "The translation was incomplete. Try again.");
-    return json({ text: output.translation, targetLanguage, model, contextTurns: context.length, translationMs: Math.round(performance.now() - started) });
+    return json({ text: output.translation, targetLanguage, model, contextTurns: context.length, translationMs: Math.round(performance.now() - started), dbMs });
   } catch (error) { return failure(error); }
 }

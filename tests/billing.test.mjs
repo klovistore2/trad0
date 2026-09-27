@@ -21,3 +21,16 @@ test('remaining time estimate: 300 credits ≈ 20 min with clones to come, tone 
  assert.equal(creditEstimate({balance:300,tone:true,toneWindowSeconds:6,clonesToCome:2}).minutes,13,'a longer window means fewer analyses');
  assert.equal(creditEstimate({balance:40,tone:false,toneWindowSeconds:3,clonesToCome:2}).minutes,0,'never negative');
 });
+
+test('one rule stops a conversation: a creator at zero, never an admin, never an unknown payer',()=>{
+ const {requirePayer,blockingBalance}=createLoader()('lib/billing/credits.ts');
+ const previous=process.env.ADMIN_MAIL;process.env.ADMIN_MAIL='@example.test';
+ try{
+  assert.throws(()=>requirePayer({payerEmail:'host@example.org',payerBalance:0}),error=>error.status===402);
+  assert.throws(()=>requirePayer({payerEmail:'host@example.org',payerBalance:-10}),error=>error.status===402);
+  assert.doesNotThrow(()=>requirePayer({payerEmail:'host@example.org',payerBalance:1}));
+  assert.doesNotThrow(()=>requirePayer({payerEmail:'admin@example.test',payerBalance:-350}),'an admin is billed, never stopped');
+  assert.doesNotThrow(()=>requirePayer({payerEmail:null,payerBalance:0}),'no creator account blocks nothing');
+  assert.equal(blockingBalance('admin@example.test',-5),null);assert.equal(blockingBalance('host@example.org',-5),-5);
+ }finally{ if(previous===undefined)delete process.env.ADMIN_MAIL;else process.env.ADMIN_MAIL=previous; }
+});

@@ -1,6 +1,8 @@
 import type { PeerEvent, PeerTransport, ReceivedEvent } from "@/types/session";
 import type { StringKey } from "@/lib/i18n/strings";
 
+export const pollDelay = (failures: number) => failures ? Math.min(5000, 500 * 2 ** failures) : 500;
+
 export class NeonPeerTransport implements PeerTransport {
   private sessionId = "";
   private controller = new AbortController();
@@ -11,6 +13,11 @@ export class NeonPeerTransport implements PeerTransport {
   private sending = Promise.resolve();
   private floor: (slot: number | null) => void = () => {};
   private claimedAt = 0;
+  // The newest subtitle waiting for each sentence: an older one still queued would only be
+  // overwritten on the other screen, so it is dropped rather than sent over a slow network.
+  private latest = new Map<string, string>();
+  // Failed polls in a row: retries space out during an outage instead of hammering every 500 ms.
+  private failures = 0;
   // Problems are reported as keys: the page shows them in the reader's language.
   constructor(private onError: (message: StringKey) => void) {}
   onFloor(cb: (slot: number | null) => void) { this.floor = cb; }
@@ -37,15 +44,21 @@ export class NeonPeerTransport implements PeerTransport {
       if (typeof data.cursor === "string") this.cursor = data.cursor;
       // A poll issued before our own claim landed carries a stale floor: ignore it.
       if ("floor" in data && startedAt > this.claimedAt) this.floor(data.floor);
+      this.failures = 0;
     } catch {
-      if (!this.controller.signal.aborted) this.onError("errorConnection");
+      if (!this.controller.signal.aborted) { this.failures++; this.onError("errorConnection"); }
     } finally {
-      if (!this.controller.signal.aborted) this.timer = setTimeout(() => void this.poll(), 500);
+      // 500 ms while healthy; 1, 2, 4 then 5 s at most while polls keep failing.
+      if (!this.controller.signal.aborted) this.timer = setTimeout(() => void this.poll(), pollDelay(this.failures));
     }
   }
   send(event: PeerEvent): Promise<void> {
+    this.latest.set(event.turnId, event.id);
     this.sending = this.sending.then(async () => {
       if (this.controller.signal.aborted) return;
+      // A finished sentence is always sent; a subtitle only if nothing newer of it is waiting.
+      if (event.committed) this.latest.delete(event.turnId);
+      else if (this.latest.get(event.turnId) !== event.id) return;
       // Retrying the same event ID is idempotent on the server.
       for (let attempt = 0; attempt < 2; attempt++) {
         try {

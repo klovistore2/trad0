@@ -4,8 +4,11 @@ import {createLoader} from './load-ts.mjs';
 const origin='http://localhost:3000';
 const request=(body,path='/api/translate',method='POST')=>new Request(origin+path,{method,headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)});
 const mocks={
- '@/lib/session/auth':{member:async()=>({slot:1,language:'en',user_id:null})},
- '@/lib/session/store':{targetLanguageForSession:async()=>'th'},
+ '@/lib/session/auth':{
+  member:async()=>({slot:1,language:'en',user_id:null}),
+  // One read for the caller, the other participant and the creator's credits (no account: never blocks).
+  speakerContext:async()=>({slot:1,language:'en',user_id:null,peer:{slot:0,language:'th'},payerEmail:null,payerBalance:0}),
+ },
 };
 function environment(t){
  const names=['NEXT_PUBLIC_APP_URL','OPENAI_API_KEY','CRON_SECRET'];const previous=names.map(name=>process.env[name]);
@@ -69,11 +72,11 @@ test('attaching an account restores only existing profile consent, never grants 
 test('a reloaded page gets recent finished sentences and goes on from the newest event, not the whole history',async t=>{
  environment(t);const queries=[];
  const {GET}=createLoader({
-  '@/lib/session/auth':{member:async()=>({slot:0,floor_slot:null})},
+  '@/lib/session/auth':{member:async()=>({slot:0,floor_slot:null}),guestHash:async()=>'hash',validId:()=>true},
   '@/lib/neon/db':{db:()=>async(strings,...values)=>{
    const sql=strings.join('?');queries.push({sql,values});
    if(sql.includes('MAX(seq)'))return [{cursor:'57'}];
-   return [{seq:'40',id:'e',turnId:'t',text:'Hello.',committed:true,ageMs:600_000,metadata:{kind:'translation',mode:'context'}}];
+   return [{floorSlot:null,seq:'40',id:'e',turnId:'t',text:'Hello.',committed:true,ageMs:600_000,metadata:{kind:'translation',mode:'context'}}];
   }},
  })('app/api/sessions/[id]/events/route.ts');
  const params=Promise.resolve({id:'room'});
@@ -86,4 +89,35 @@ test('a reloaded page gets recent finished sentences and goes on from the newest
  const live=await (await GET(new Request(origin+'/api/sessions/room/events?after=57'),{params})).json();
  assert.equal(live.cursor,undefined);assert.match(queries[0].sql,/seq>/);assert.ok(queries[0].values.includes('57'));
  assert.equal((await GET(new Request(origin+'/api/sessions/room/events?after=abc'),{params})).status,400);
+});
+test('the live poll checks membership and reads new events in one round trip, and refuses a stranger',async t=>{
+ environment(t);const queries=[];let member=true;
+ const {GET}=createLoader({
+  '@/lib/session/auth':{member:()=>assert.fail('the live poll needs no separate membership query'),guestHash:async()=>'hash',validId:()=>true},
+  '@/lib/neon/db':{db:()=>async(strings,...values)=>{
+   queries.push({sql:strings.join('?'),values});
+   if(!member)return [];
+   // Nothing new still returns the participant's row, with empty event columns.
+   return [{floorSlot:1,seq:null,id:null,turnId:null,text:null,committed:null,metadata:null,ageMs:null}];
+  }},
+ })('app/api/sessions/[id]/events/route.ts');
+ const params=Promise.resolve({id:'room'});
+ const quiet=await (await GET(new Request(origin+'/api/sessions/room/events?after=12'),{params})).json();
+ assert.deepEqual(quiet,{events:[],floor:1});
+ assert.equal(queries.length,1);assert.match(queries[0].sql,/guest_hash/);assert.match(queries[0].sql,/seq>/);
+ member=false;
+ assert.equal((await GET(new Request(origin+'/api/sessions/room/events?after=12'),{params})).status,403);
+});
+test('publishing checks membership and inserts in one statement, idempotent on retry',async t=>{
+ environment(t);const queries=[];let member=1;
+ const {POST}=createLoader({
+  '@/lib/session/auth':{member:()=>assert.fail('no separate membership query'),guestHash:async()=>'hash',validId:()=>true},
+  '@/lib/neon/db':{db:()=>async(strings,...values)=>{queries.push({sql:strings.join('?'),values});return [{member}];}},
+ })('app/api/sessions/[id]/events/route.ts');
+ const params=Promise.resolve({id:'room'});
+ const event={id:'11111111-1111-4111-8111-111111111111',turnId:'22222222-2222-4222-8222-222222222222',text:'Hello.',committed:true};
+ assert.equal((await POST(request(event,'/api/sessions/room/events'),{params})).status,200);
+ assert.equal(queries.length,1);assert.match(queries[0].sql,/INSERT INTO adu_events/);assert.match(queries[0].sql,/ON CONFLICT\(id\) DO NOTHING/);
+ member=0;
+ assert.equal((await POST(request(event,'/api/sessions/room/events'),{params})).status,403);
 });

@@ -1,4 +1,4 @@
-import type { VoiceProvider, VoiceStatus } from "@/types/voice";
+import type { SpeechRequest, VoiceProvider, VoiceStatus } from "@/types/voice";
 
 // A short WAV built in memory: used to prime playback during a gesture, and as a local test beep.
 export function wav(seconds: number, frequency: number, rate = 8000) {
@@ -38,7 +38,13 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   private failure = "";
   private voiceSource = "";
   private latency = { request: 0, total: 0 };
-  private synthesis = { model: "", stability: "", style: "", headersMs: 0, playback: "" };
+  private synthesis = { model: "", stability: "", style: "", headersMs: 0, dbMs: 0, playback: "", prefetched: false };
+  // The next sentence, prepared while the current one plays so it starts without waiting for the
+  // provider. One synthesis downloads at a time for this listener: the next one starts once the
+  // current audio is fully received, which also keeps within the provider's concurrency limit.
+  private next?: SpeechRequest;
+  private prepared?: { id: string; controller: AbortController; response: Promise<Response> };
+  private downloading?: AbortController;
   constructor(private onStatus: (status: VoiceStatus, message?: string) => void = () => {}) {}
 
   private audio() {
@@ -121,10 +127,40 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     await this.play(wav(0.4, 440));
   }
   stop() {
+    this.halt();
+    this.prepared?.controller.abort(); this.prepared = undefined; this.next = undefined;
+  }
+  // Stops the sentence being played, keeping the next one prepared.
+  private halt() {
     this.active?.abort();
     this.active = undefined;
     this.element?.pause();
     this.onStatus("idle");
+  }
+  prefetch(request: SpeechRequest) {
+    if (!/[\p{L}\p{N}]/u.test(request.text)) return;
+    this.next = request;
+    this.startNext();
+  }
+  private startNext() {
+    const next = this.next;
+    if (!next || this.downloading || this.prepared?.id === next.id) return;
+    this.prepared?.controller.abort();
+    const controller = new AbortController();
+    const response = this.request(next, controller.signal);
+    response.catch(() => {}); // Settled when played, or abandoned.
+    this.prepared = { id: next.id, controller, response };
+  }
+  private downloaded(download: AbortController) {
+    if (this.downloading !== download) return;
+    this.downloading = undefined;
+    this.startNext();
+  }
+  private request({ sessionId, text, language, speech }: Omit<SpeechRequest, "id">, signal: AbortSignal) {
+    return fetch("/api/elevenlabs/speak", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, text, language, speech }), signal,
+    });
   }
   dispose() {
     this.stop();
@@ -133,10 +169,12 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     this.element = undefined;
   }
 
-  async speakStream({ textStream, language, sessionId, signal, speech }: Parameters<VoiceProvider["speakStream"]>[0]) {
-    this.stop();
+  async speakStream({ textStream, language, sessionId, signal, speech, id }: Parameters<VoiceProvider["speakStream"]>[0]) {
+    this.halt();
     const controller = new AbortController();
     this.active = controller;
+    // Held from the start, so a prefetch asked for meanwhile waits for this sentence's audio.
+    this.downloading = controller;
     const cancel = () => controller.abort();
     signal?.addEventListener("abort", cancel, { once: true });
     if (signal?.aborted) controller.abort();
@@ -144,17 +182,20 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       if (controller.signal.aborted) return;
       const startedAt = Date.now();
       this.latency = { request: 0, total: 0 };
-      this.synthesis = { model: "", stability: "", style: "", headersMs: 0, playback: "" };
+      this.synthesis = { model: "", stability: "", style: "", headersMs: 0, dbMs: 0, playback: "", prefetched: false };
       await this.unlock();
       this.onStatus("loading");
       let text = "";
       for await (const chunk of textStream) text += chunk;
       // Nothing to pronounce (a lone "…" or "?" between fast sentences): skip, never an error.
       if (!/[\p{L}\p{N}]/u.test(text) || controller.signal.aborted) { this.onStatus("idle"); return; }
-      const response = await fetch("/api/elevenlabs/speak", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, text, language, speech }), signal: controller.signal,
-      });
+      // The synthesis prepared while the previous sentence played, when it is this one.
+      const prepared = id !== undefined && this.prepared?.id === id ? this.prepared : undefined;
+      if (prepared) controller.signal.addEventListener("abort", () => prepared.controller.abort(), { once: true });
+      else this.prepared?.controller.abort();
+      this.prepared = undefined;
+      if (this.next?.id === id) this.next = undefined;
+      const response = await (prepared?.response ?? this.request({ sessionId, text, language, speech }, controller.signal));
       if (!response.ok) {
         const detail = await response.json().catch(() => ({}));
         this.failure = `speech HTTP ${response.status}`;
@@ -162,17 +203,20 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       }
       this.voiceSource = response.headers.get("x-voice-source") || "unknown";
       const Source = response.body ? streamingSource(response.headers.get("content-type")) : null;
-      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", style: response.headers.get("x-tts-style") || "0", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0, playback: Source ? "progressive" : "download" };
+      this.synthesis = { model: response.headers.get("x-tts-model") || "unknown", stability: response.headers.get("x-tts-stability") || "unknown", style: response.headers.get("x-tts-style") || "0", headersMs: Number(response.headers.get("x-tts-headers-ms")) || 0, dbMs: Number(response.headers.get("x-db-ms")) || 0, playback: Source ? "progressive" : "download", prefetched: !!prepared };
       this.latency = { request: Date.now() - startedAt, total: 0 };
       let element: HTMLAudioElement;
       let finished: Promise<void> = Promise.resolve();
       if (Source && response.body) {
         const streamed = await this.stream(Source, response.body, controller.signal);
+        // The next sentence is prepared once this one's audio has fully arrived.
+        streamed.finished.then(() => this.downloaded(controller), () => this.downloaded(controller));
         if (controller.signal.aborted) return;
         if (!streamed.playing) { this.failure = "empty audio"; this.onStatus("idle"); return; }
         ({ element, finished } = streamed);
       } else {
         const blob = await response.blob();
+        this.downloaded(controller);
         if (controller.signal.aborted) return;
         // An empty answer is a sentence with nothing to say, not a failure: move on silently.
         if (!blob.size) { this.failure = "empty audio"; this.onStatus("idle"); return; }
@@ -202,6 +246,11 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
         this.onStatus("error", message);
         throw new Error(message);
       }
-    } finally { signal?.removeEventListener("abort", cancel); }
+    } finally {
+      signal?.removeEventListener("abort", cancel);
+      // Skipped, failed or stopped before its audio arrived: the next sentence need not wait.
+      // A no-op once the audio has arrived, or once another sentence has taken over.
+      this.downloaded(controller);
+    }
   }
 }

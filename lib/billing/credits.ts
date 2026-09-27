@@ -33,33 +33,44 @@ export async function charge(sessionId: string, use: CreditUse) {
   } catch (error) { console.error("Credit charge failed", use, error instanceof Error ? error.message : "unknown"); }
 }
 
-// Called on every state poll. Bills one started minute while both people are online, claimed
-// atomically so two phones polling together never bill it twice. After a pause the clock jumps
-// forward rather than billing the gap.
+// Called on every state poll, unless the conversation is stopped for lack of credits. Bills one
+// started minute while both people are online, claimed atomically so two phones polling together
+// never bill it twice. After a pause the clock jumps forward rather than billing the gap.
+// Claim and charge are one statement: one round trip, and never a claimed minute left unbilled.
+// Returns whether a minute was billed.
 export async function chargeActiveMinute(sessionId: string) {
   try {
-    // Nothing is billed while a conversation is stopped for lack of credits.
-    const balance = await payerBalance(sessionId);
-    if (balance !== null && balance <= 0) return;
-    const claimed = await db()`UPDATE adu_sessions
-      SET billed_at=CASE WHEN billed_at IS NULL THEN now() ELSE GREATEST(billed_at+interval '1 minute', now()-interval '15 seconds') END
-      WHERE id=${sessionId} AND closed=false AND expires_at>now()
-        AND (billed_at IS NULL OR billed_at<=now()-interval '1 minute')
-        AND (SELECT count(*) FROM adu_participants WHERE session_id=${sessionId} AND last_seen>now()-interval '15 seconds')=2
+    const billed = await db()`WITH claimed AS (UPDATE adu_sessions
+        SET billed_at=CASE WHEN billed_at IS NULL THEN now() ELSE GREATEST(billed_at+interval '1 minute', now()-interval '15 seconds') END
+        WHERE id=${sessionId} AND closed=false AND expires_at>now()
+          AND (billed_at IS NULL OR billed_at<=now()-interval '1 minute')
+          AND (SELECT count(*) FROM adu_participants WHERE session_id=${sessionId} AND last_seen>now()-interval '15 seconds')=2
+        RETURNING id)
+      INSERT INTO adu_credit_ledger(user_id,session_id,kind,amount)
+        SELECT p.user_id, ${sessionId}, 'minute', ${-CREDIT_PRICES.minute} FROM claimed
+        JOIN adu_participants p ON p.session_id=claimed.id AND p.slot=0 AND p.user_id IS NOT NULL
       RETURNING id`;
-    if (claimed.length) await charge(sessionId, "minute");
-  } catch (error) { console.error("Minute billing failed", error instanceof Error ? error.message : "unknown"); }
+    return billed.length > 0;
+  } catch (error) { console.error("Minute billing failed", error instanceof Error ? error.message : "unknown"); return false; }
 }
 
 // Balance that can stop this conversation: its creator's. Null means nothing is blocked: when it
-// cannot be read (a billing outage must not silence a conversation) and for an admin account,
-// which is still billed so its counter stays meaningful, but is never stopped.
+// cannot be read (a billing outage must not silence a conversation), without a creator account,
+// and for an admin account, which is still billed so its counter stays meaningful, but never stopped.
+export function blockingBalance(email: unknown, balance: number) {
+  return typeof email === "string" && !isAdmin(email) ? balance : null;
+}
 export async function payerBalance(sessionId: string) {
   try {
     const rows = await db()`SELECT u.email, COALESCE((SELECT SUM(amount) FROM adu_credit_ledger WHERE user_id=p.user_id),0)::int AS balance
       FROM adu_participants p JOIN adu_users u ON u.id=p.user_id WHERE p.session_id=${sessionId} AND p.slot=0`;
-    return rows.length && !isAdmin(rows[0].email) ? rows[0].balance as number : null;
+    return rows.length ? blockingBalance(rows[0].email, rows[0].balance as number) : null;
   } catch { return null; }
+}
+// The same rule on a balance read with the rest of a request's context (speakerContext).
+export function requirePayer(context: { payerEmail: string | null; payerBalance: number }) {
+  const balance = blockingBalance(context.payerEmail, context.payerBalance);
+  if (balance !== null && balance <= 0) throw new HttpError(402, "No credits left.");
 }
 // Whether this account may start a conversation: an admin always may.
 export async function canStartConversation(userId: string, email: unknown) {

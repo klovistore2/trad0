@@ -398,6 +398,23 @@ environ toutes les **3 s** ; signalisation audio environ toutes les 1 à 3 s. Ce
 au réseau et aux requêtes serveur. La publication des événements est sérialisée et réessayée avec
 le même identifiant ; l’unicité de l’identifiant empêche leur double insertion.
 
+**Allers-retours Neon (27 septembre 2026).** Chaque requête Neon est un aller-retour réseau :
+mesuré à ~110 ms depuis un poste de développement en Europe vers `us-east-1` (quatre requêtes dans
+une transaction coûtent autant qu'une seule), beaucoup moins depuis Vercel dans la même région.
+Un serveur local fait donc payer chaque requête au prix fort. Depuis cette date :
+- `speakerContext` (`lib/session/auth.ts`) lit en **une** requête la place de l'appelant, l'autre
+  participant et le solde du créateur ; `requirePayer` applique la règle de blocage sans relire la
+  base. Traduction, synthèse, jetons et ton l'utilisent (avant : 3 à 4 requêtes à la suite).
+- La scrutation des événements (toutes les 500 ms) et leur publication vérifient l'appartenance et
+  lisent ou écrivent dans la **même** requête (avant : deux). Sur le chemin d'une phrase de mode 2
+  (traduction, publication, scrutation de l'auditeur, synthèse), on passe de 11 allers-retours base
+  à la suite à 4.
+- `sessionState` (toutes les 3 s) fait 2 allers-retours au lieu de 9 : le contexte, puis le reste
+  en parallèle ; la minute facturée est réclamée et débitée dans **une** instruction atomique.
+- Un sous-titre partiel déjà dépassé par un plus récent de la même phrase n'est plus envoyé ; une
+  phrase terminée l'est toujours. Une scrutation en échec réessaie après 1, 2, 4 puis 5 s au plus,
+  au lieu de 500 ms en continu.
+
 ### Crédits, version 1 (23 septembre 2026)
 
 **Le créateur de la conversation paie tout**, y compris le clonage et le ton de l'invité.
@@ -504,7 +521,7 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `OPENAI_TEXT_TRANSLATION_MODEL` | LLM du mode 2 ; défaut `gpt-4.1-mini`, compatible Chat Completions et JSON structuré |
 | `OPENAI_LANGUAGE_DETECTION_MODEL` | Classification initiale ; défaut `gpt-4.1-nano` |
 | `ELEVENLABS_API_KEY` | Synthèse et clonage. Le modèle de synthèse est fixé dans le code (`eleven_v3_conversational`) ; `ELEVENLABS_TTS_MODEL` n'est plus lu par la route de synthèse |
-| `ELEVENLABS_FALLBACK_VOICE_ID`, `ELEVENLABS_VOICE_LOW`, `ELEVENLABS_VOICE_HIGH` | Choix facultatifs de voix standard |
+| `ELEVENLABS_FALLBACK_VOICE_ID`, `ELEVENLABS_VOICE_LOW`, `ELEVENLABS_VOICE_HIGH` | Choix facultatifs de voix standard ; sans elles, chaque instance serveur froide interroge `/v2/voices` à sa première phrase. À définir avant Vercel |
 | `DATABASE_URL` | Neon |
 | `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js et Google ; URI de retour OAuth à configurer pour chaque origine |
 | `CRON_SECRET` | Autorisation de purge et prérequis de clonage |
@@ -523,7 +540,11 @@ sans tenir compte de la casse **côté serveur** dans `sessionState` : l'adresse
 navigateur, qui ne reçoit que `diagnostics: true`. L'invité d'une conversation créée par un admin
 voit aussi le menu : c'est le partenaire de test. Les autres ne voient rien, y compris en local.
 
-Distinguer attente de fin de phrase, LLM, publication, transport et démarrage audio. L’âge d’un événement
+Distinguer attente de fin de phrase, LLM, publication, transport et démarrage audio. Depuis le
+27 septembre 2026, le menu DEV montre aussi la durée totale de la requête de traduction vue du
+téléphone, avec ses parts LLM et base (`dbMs`) : l'écart est réseau et serveur. Côté auditeur, il
+montre le temps de base de la synthèse (`X-DB-Ms`) et si la phrase avait été préparée pendant la
+précédente. Mesurer d'abord sur deux téléphones, là où les conversations ont lieu. L’âge d’un événement
 est calculé par PostgreSQL : ne pas soustraire les horloges de deux téléphones. Les mesures sortantes
 et entrantes peuvent concerner des phrases différentes ; **ne pas les additionner en une latence totale**.
 
@@ -542,8 +563,12 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
   après un échec (voir section 2) et le mode 1 revient une fois reconnectée ; ce n'est pas une ICE
   restart : l'audio en cours est perdu. Sur un réseau qui exige TURN sans TURN configuré, les essais
   échouent en silence toutes les 60 s au plus et le mode 2 reste en service.
-- **Latence du mode 2** : réponse LLM complète, appels sérialisés, scrutation, lecture qui attend la fin
-  de la phrase précédente (pas de préchargement) et redémarrage fournisseur à la bascule. La file LLM n’a pas encore de plafond explicite.
+- **Latence du mode 2** : réponse LLM complète, appels sérialisés, scrutation et redémarrage
+  fournisseur à la bascule. Depuis le 27 septembre 2026, la phrase suivante est **préchargée** pendant
+  la lecture de la précédente, une seule synthèse téléchargée à la fois par téléphone (la limite de
+  requêtes simultanées d'ElevenLabs dépend de l'offre) : cela supprime l'attente entre deux phrases
+  qui se suivent, pas celle de la première. Une phrase préparée puis abandonnée (son coupé, écran
+  masqué) a tout de même été synthétisée. La file LLM n’a pas encore de plafond explicite.
   Mesurer en conversation réelle avant de changer modèle, accès base ou stratégie de diffusion.
 - **Écho entre appareils** : le haut-parleur de B peut revenir dans le micro de A. L’annulation locale
   d’écho ne connaît pas le son émis par l’autre téléphone. La mémoire actuelle ne filtre aucun doublon.
@@ -654,6 +679,12 @@ payant) non relancé. `languages-live.mjs` était déjà cassé avant ce lot : i
 `#translation-mode`, un menu retiré plus tôt, et lisait `aria-pressed` sur le bouton son.
 Un parcours ne doit pas attendre le corps d'une réponse que la page ne lit pas : Chromium ne la
 termine jamais et `response.text()` bloque sans délai.
+
+Quatrième lot du même jour (allers-retours Neon regroupés, préchargement de la phrase suivante,
+sous-titres dépassés abandonnés, espacement des nouveaux essais, mesures du menu DEV) : **98 tests
+unitaires**, lint, TypeScript, build isolé, parcours Chromium `shared-session.mjs` et `credits.mjs`
+réussis. Aucune mesure de latence sur téléphone ni sur Vercel : les gains annoncés sont des
+décomptes de requêtes et la mesure locale de ~110 ms par requête Neon, pas une latence observée.
 
 ## Consigne technique gérée par Next.js
 

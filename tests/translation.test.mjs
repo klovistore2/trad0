@@ -7,12 +7,12 @@ import { createLoader } from "./load-ts.mjs";
 // target language and the payer's balance from the session, never from the request.
 const room = { language: "en", balance: null, refused: false };
 const { POST } = createLoader({
-  "@/lib/session/store": { targetLanguageForSession: async id => {
+  "@/lib/session/auth": { speakerContext: async id => {
     assert.equal(id, "room");
     if (room.refused) throw new Error("not a participant");
-    return room.language;
+    // One read gives the other participant and the creator's balance; no creator account never blocks.
+    return { slot: 0, peer: { slot: 1, language: room.language }, payerEmail: room.balance === null ? null : "payer@example.org", payerBalance: room.balance ?? 0 };
   } },
-  "@/lib/billing/credits": { payerBalance: async () => room.balance },
 })("app/api/openai/realtime-token/route.ts");
 
 const request = (body = { sessionId: "room", targetLanguage: "en" }, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/openai/realtime-token", {
