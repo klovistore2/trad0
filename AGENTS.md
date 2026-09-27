@@ -521,7 +521,7 @@ Lire `.env.example` ; ne jamais copier des valeurs secrètes dans ce document.
 | `OPENAI_TEXT_TRANSLATION_MODEL` | LLM du mode 2 ; défaut `gpt-4.1-mini`, compatible Chat Completions et JSON structuré |
 | `OPENAI_LANGUAGE_DETECTION_MODEL` | Classification initiale ; défaut `gpt-4.1-nano` |
 | `ELEVENLABS_API_KEY` | Synthèse et clonage. Le modèle de synthèse est fixé dans le code (`eleven_v3_conversational`) ; `ELEVENLABS_TTS_MODEL` n'est plus lu par la route de synthèse |
-| `ELEVENLABS_FALLBACK_VOICE_ID`, `ELEVENLABS_VOICE_LOW`, `ELEVENLABS_VOICE_HIGH` | Choix facultatifs de voix standard ; sans elles, chaque instance serveur froide interroge `/v2/voices` à sa première phrase. À définir avant Vercel |
+| `ELEVENLABS_FALLBACK_VOICE_ID`, `ELEVENLABS_VOICE_LOW`, `ELEVENLABS_VOICE_HIGH` | Voix standard facultatives ; sans elles, chaque instance serveur froide interroge `/v2/voices` à sa première phrase et prend la première voix prédéfinie marquée male / female / neutral. `.env.example` donne ce choix automatique au 27 septembre 2026 (Roger, Bella, River, accent américain) : à définir avant Vercel, ou à remplacer par des voix natives choisies à l'écoute |
 | `DATABASE_URL` | Neon |
 | `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` | Auth.js et Google ; URI de retour OAuth à configurer pour chaque origine |
 | `CRON_SECRET` | Autorisation de purge et prérequis de clonage |
