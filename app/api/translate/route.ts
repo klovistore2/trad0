@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const me = await speakerContext(body.sessionId);
     const dbMs = Math.round(performance.now() - dbStarted);
     requirePayer(me);
-    if (!me.peer) throw new HttpError(409, "Attendez que l’autre personne rejoigne la conversation.");
+    if (!me.peer) throw new HttpError(409, "Wait for the other person to join the conversation.");
     const targetLanguage = me.peer.language;
     if (!Array.isArray(body.context) || body.context.length > 12) throw new HttpError(400, "Invalid context.");
     const context: ContextTurn[] = [];

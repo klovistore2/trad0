@@ -15,17 +15,17 @@ export async function POST(request: Request) {
     if (body.speech !== undefined && !isSpeechMetadata(body.speech)) throw new HttpError(400, "Invalid speech options.");
     const speech = isSpeechMetadata(body.speech) ? body.speech : undefined;
     const text = typeof body.text === "string" ? body.text.trim() : "";
-    if (!text || text.length > 4000) throw new HttpError(400, "Texte invalide.");
+    if (!text || text.length > 4000) throw new HttpError(400, "Invalid text.");
     const language = typeof body.language === "string" && /^[a-z]{2}$/.test(body.language) ? body.language : undefined;
     // Speech is paid for by a conversation's creator: without a live conversation, nothing is spoken.
-    if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
+    if (typeof body.sessionId !== "string") throw new HttpError(400, "Invalid session.");
     // One round trip for the listener, the speaker's voice and the creator's credits.
     const dbStarted = performance.now();
     const me = await speakerContext(body.sessionId);
     const dbMs = Math.round(performance.now() - dbStarted);
     requirePayer(me);
     const peer = me.peer;
-    if (!peer) throw new HttpError(409, "L’autre personne n’a pas encore rejoint.");
+    if (!peer) throw new HttpError(409, "The other person has not joined yet.");
     // The receiver hears the other participant's voice; a client supplied ID is never accepted.
     const voiceId = peer.voice_status === "ready" && peer.use_clone ? peer.voice_id ?? undefined : undefined;
     // The speaker's own range, so the receiver hears a fitting voice before any clone exists.

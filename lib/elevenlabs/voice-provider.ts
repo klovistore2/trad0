@@ -169,7 +169,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     this.element = undefined;
   }
 
-  async speakStream({ textStream, language, sessionId, signal, speech, id }: Parameters<VoiceProvider["speakStream"]>[0]) {
+  async speakStream({ text, language, sessionId, signal, speech, id }: Parameters<VoiceProvider["speakStream"]>[0]) {
     this.halt();
     const controller = new AbortController();
     this.active = controller;
@@ -185,8 +185,6 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
       this.synthesis = { model: "", stability: "", style: "", headersMs: 0, dbMs: 0, playback: "", prefetched: false };
       await this.unlock();
       this.onStatus("loading");
-      let text = "";
-      for await (const chunk of textStream) text += chunk;
       // Nothing to pronounce (a lone "…" or "?" between fast sentences): skip, never an error.
       if (!/[\p{L}\p{N}]/u.test(text) || controller.signal.aborted) { this.onStatus("idle"); return; }
       // The synthesis prepared while the previous sentence played, when it is this one.

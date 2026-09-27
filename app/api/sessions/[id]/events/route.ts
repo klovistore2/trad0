@@ -5,9 +5,9 @@ import { checkOrigin, failure, HttpError, json, readJson } from "@/lib/server/ht
 export async function POST(request: Request, context: RouteContext<"/api/sessions/[id]/events">) {
   try {
     checkOrigin(request); const { id } = await context.params;
-    if (!validId(id)) throw new HttpError(404, "Cette conversation n’existe pas.");
+    if (!validId(id)) throw new HttpError(404, "This conversation does not exist.");
     const event = await readJson(request);
-    if (!isPeerEvent(event)) throw new HttpError(400, "Message invalide.");
+    if (!isPeerEvent(event)) throw new HttpError(400, "Invalid message.");
     const metadata = JSON.stringify({ kind: event.kind, original: event.original, mode: event.mode, sourceLanguage: event.sourceLanguage, targetLanguage: event.targetLanguage, timing: event.timing, speech: event.speech });
     // Membership and insertion in one round trip: every sentence and subtitle goes through here.
     const hash = await guestHash();
@@ -16,7 +16,7 @@ export async function POST(request: Request, context: RouteContext<"/api/session
       saved AS (INSERT INTO adu_events(id,session_id,sender,turn_id,text,committed,metadata)
         SELECT ${event.id},${id},me.slot,${event.turnId},${event.text},${event.committed},${metadata}::jsonb FROM me ON CONFLICT(id) DO NOTHING)
       SELECT count(*)::int AS member FROM me`;
-    if (!isMember) throw new HttpError(403, "Cette conversation est terminée ou inaccessible.");
+    if (!isMember) throw new HttpError(403, "This conversation has ended or is not yours.");
     return json({ ok: true });
   } catch (error) { return failure(error); }
 }
@@ -40,8 +40,8 @@ export async function GET(request: Request, context: RouteContext<"/api/sessions
         WHERE session_id=${id} AND sender<>${me.slot} AND committed AND seq<=${cursor}::bigint ORDER BY seq DESC LIMIT 40) recent ORDER BY seq::bigint`;
       return reply(recent, me.floor_slot, cursor as string);
     }
-    if (!/^\d{1,18}$/.test(after)) throw new HttpError(400, "Requête invalide.");
-    if (!validId(id)) throw new HttpError(404, "Cette conversation n’existe pas.");
+    if (!/^\d{1,18}$/.test(after)) throw new HttpError(400, "Invalid request.");
+    if (!validId(id)) throw new HttpError(404, "This conversation does not exist.");
     // The live poll runs every 500 ms on both phones: membership, floor and new events come in one
     // round trip. A participant with nothing new still gets one row, with empty event columns.
     // The age is computed by the database, so measuring latency never compares two device clocks.
@@ -52,7 +52,7 @@ export async function GET(request: Request, context: RouteContext<"/api/sessions
         (EXTRACT(EPOCH FROM (now()-e.created_at))*1000)::int AS "ageMs"
       FROM me LEFT JOIN LATERAL (SELECT * FROM adu_events WHERE session_id=${id} AND sender<>me.slot AND seq>${after}::bigint ORDER BY seq LIMIT 100) e ON true
       ORDER BY e.seq`;
-    if (!rows[0]) throw new HttpError(403, "Cette conversation est terminée ou inaccessible.");
+    if (!rows[0]) throw new HttpError(403, "This conversation has ended or is not yours.");
     const floor = rows[0].floorSlot;
     for (const row of rows) delete row.floorSlot;
     return reply(rows.filter(row => row.seq !== null), floor);

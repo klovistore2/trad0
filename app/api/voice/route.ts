@@ -6,9 +6,9 @@ import { checkOrigin, failure, HttpError, json, readJson } from "@/lib/server/ht
 export async function DELETE(request: Request) {
   try {
     checkOrigin(request); const body = await readJson(request);
-    if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
+    if (typeof body.sessionId !== "string") throw new HttpError(400, "Invalid session.");
     const me = await member(body.sessionId, true);
-    if (me.voice_status === "learning") throw new HttpError(409, "La création est en cours. Terminez la session pour annuler son utilisation.");
+    if (me.voice_status === "learning") throw new HttpError(409, "A voice is being created. End the session to cancel its use.");
     if (me.voice_id) await deleteVoice(me.voice_id);
     // A reset drops the model and starts the tiers over; consent is only cleared on a withdrawal.
     const reset = body.reset === true;

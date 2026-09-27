@@ -40,7 +40,7 @@ async function sweepSessionVoices(id: string) {
   // Also find a clone whose creation succeeded remotely after a local timeout.
   const params = new URLSearchParams({ search: `adu-${id}-`, page_size: "100" });
   const response = await fetch(`https://api.elevenlabs.io/v2/voices?${params}`, { headers: elevenHeaders(), signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new HttpError(502, "La suppression des voix doit être réessayée.");
+  if (!response.ok) throw new HttpError(502, "Deleting voices must be retried.");
   const data = await response.json();
   for (const voice of data.voices ?? []) {
     if (voice.labels?.app === "a-deux-session" && voice.labels?.session === id && typeof voice.voice_id === "string") await deleteVoice(voice.voice_id);

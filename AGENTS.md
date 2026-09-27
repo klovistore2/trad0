@@ -17,7 +17,7 @@ L’objectif à terme est une conversation avec presque aucun geste, sans devoir
 **Ce n’est pas encore le fonctionnement actuel** : un tour de parole explicite protège aujourd’hui
 contre la captation croisée. Construire et valider son remplacement avant de le retirer.
 
-Ce document décrit le dépôt au **22 septembre 2026**. Il remplace l’ancien cahier des charges et ses
+Ce document décrit le dépôt au **27 septembre 2026**. Il remplace l’ancien cahier des charges et ses
 jalons contradictoires. Distinguer ce qui est implémenté, ce qui est testé et ce qui reste une cible.
 Mettre ce fichier à jour lorsqu’une décision d’architecture ou un comportement important change.
 
@@ -583,8 +583,9 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
   de transcription. Les horloges de parole sont des estimations à partir des fragments, pas une mesure
   acoustique exacte. Correction manuelle du registre vocal non implémentée.
 - **Interface** : traductions complètes mais non relues par des locuteurs natifs, diagnostics à
-  retirer ou masquer pour la production. Le texte des erreurs côté serveur reste mixte (français et
-  anglais) : il n'est plus affiché, mais vaut encore d'être unifié pour les journaux. Refus du dialogue mémorisé localement, pas une préférence
+  retirer ou masquer pour la production. Les erreurs renvoyées par le serveur sont en anglais
+  depuis le 27 septembre 2026 (avant : mélange de français et d'anglais) ; elles ne servent qu'aux
+  journaux et aux diagnostics, jamais à l'écran. Refus du dialogue mémorisé localement, pas une préférence
   de refus explicite et universelle sur le compte.
 - **Protection des coûts** : pas de quotas ni de limitation de débit distribuée. Le contrôle d’origine
   ne suffit pas contre les abus. Depuis le 27 septembre 2026, le jeton de traduction directe et le
@@ -608,7 +609,7 @@ TypeScript strict, code lisible, changements ciblés ; garder l’application ex
 ```sh
 npm run lint
 npm run typecheck
-node --test --test-isolation=none tests/*.test.mjs
+npm test            # node --test --test-isolation=none tests/*.test.mjs
 npm run build
 ```
 
@@ -616,7 +617,7 @@ Pour le parcours navigateur isolé (Chromium installé, Google configuré pour l
 
 ```sh
 NEXT_TEST_BUILD=1 NEXT_PUBLIC_APP_URL=http://localhost:3100 npm run build
-node scripts/browser-test-server.mjs
+npm run test:browser   # node scripts/browser-test-server.mjs : serveur de test puis shared-session
 ```
 
 Le build de test utilise `.next-test`, distinct de `.next`. Dans l’environnement où Turbopack échoue
@@ -685,6 +686,14 @@ sous-titres dépassés abandonnés, espacement des nouveaux essais, mesures du m
 unitaires**, lint, TypeScript, build isolé, parcours Chromium `shared-session.mjs` et `credits.mjs`
 réussis. Aucune mesure de latence sur téléphone ni sur Vercel : les gains annoncés sont des
 décomptes de requêtes et la mesure locale de ~110 ms par requête Neon, pas une latence observée.
+
+Cinquième lot du même jour (hygiène) : paquet renommé `trad0` ; `npm test` avec
+`--test-isolation=none` et `npm run test:browser` passant par le serveur de test ;
+`languages-live.mjs` réparé (préférence de mode par `PATCH /mode`, icône barrée au lieu
+d'`aria-pressed`) mais non relancé, car payant ; avertissement de lint levé ; code mort retiré
+(branche de clone invité, `validSample`, flux de texte à valeur unique : `speakStream` reçoit
+`text`) ; erreurs serveur en anglais ; `note.tt` retiré du suivi (gardé en local, ignoré).
+**98 tests unitaires**, lint sans avertissement, TypeScript et build isolé réussis.
 
 ## Consigne technique gérée par Next.js
 

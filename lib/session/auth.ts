@@ -10,7 +10,7 @@ export async function guestHash(create = false) {
   const store = await cookies();
   let token = store.get("adu_guest")?.value;
   if (!token || !/^[a-f0-9]{64}$/.test(token)) {
-    if (!create) throw new HttpError(401, "Rejoignez la conversation pour continuer.");
+    if (!create) throw new HttpError(401, "Join the conversation to continue.");
     token = randomBytes(32).toString("hex");
     store.set("adu_guest", token, { httpOnly: true, sameSite: "lax", secure: process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://") ?? false, maxAge: 86400, path: "/" });
   }
@@ -18,12 +18,12 @@ export async function guestHash(create = false) {
 }
 export type Membership = { slot: number; language: Language; voice_id: string | null; voice_status: string; expires_at: string; floor_slot: number | null; user_id: string | null };
 export async function member(id: string, allowClosed = false): Promise<Membership> {
-  if (!validId(id)) throw new HttpError(404, "Cette conversation n’existe pas.");
+  if (!validId(id)) throw new HttpError(404, "This conversation does not exist.");
   const hash = await guestHash();
   const rows = await db()`SELECT p.slot, p.language, p.voice_id, p.voice_status, p.user_id, s.expires_at, s.floor_slot
     FROM adu_participants p JOIN adu_sessions s ON s.id=p.session_id
     WHERE s.id=${id} AND p.guest_hash=${hash} AND (${allowClosed} OR (s.closed=false AND s.expires_at>now()))`;
-  if (!rows[0]) throw new HttpError(403, "Cette conversation est terminée ou inaccessible.");
+  if (!rows[0]) throw new HttpError(403, "This conversation has ended or is not yours.");
   return rows[0] as Membership;
 }
 
@@ -33,7 +33,7 @@ export type SpeakerContext = Membership & { peer: Peer | null; payerEmail: strin
 // and the creator's balance. Each Neon query is a network round trip (about 110 ms from a
 // developer machine in Europe), so member, then credits, then the peer used to add up per sentence.
 export async function speakerContext(id: string): Promise<SpeakerContext> {
-  if (!validId(id)) throw new HttpError(404, "Cette conversation n’existe pas.");
+  if (!validId(id)) throw new HttpError(404, "This conversation does not exist.");
   const hash = await guestHash();
   const rows = await db()`SELECT p.slot, p.language, p.voice_id, p.voice_status, p.user_id, s.expires_at, s.floor_slot,
       o.slot AS peer_slot, o.language AS peer_language, o.voice_id AS peer_voice_id, o.voice_status AS peer_voice_status,
@@ -45,7 +45,7 @@ export async function speakerContext(id: string): Promise<SpeakerContext> {
     LEFT JOIN adu_users u ON u.id=c.user_id
     WHERE s.id=${id} AND p.guest_hash=${hash} AND s.closed=false AND s.expires_at>now()`;
   const row = rows[0];
-  if (!row) throw new HttpError(403, "Cette conversation est terminée ou inaccessible.");
+  if (!row) throw new HttpError(403, "This conversation has ended or is not yours.");
   return {
     slot: row.slot, language: row.language, voice_id: row.voice_id, voice_status: row.voice_status, user_id: row.user_id,
     expires_at: row.expires_at, floor_slot: row.floor_slot,

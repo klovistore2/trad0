@@ -22,7 +22,7 @@ export async function createSession(userId: string, peerLanguage: Language, lang
   return id;
 }
 export async function joinSession(id: string) {
-  if (!validId(id)) throw new HttpError(404, "Le lien n’est pas valide.");
+  if (!validId(id)) throw new HttpError(404, "This link is not valid.");
   const sql = db(); const hash = await guestHash(true);
   // Slot 1 has a unique primary key: concurrent third joiners cannot take a seat.
   // The joiner speaks whatever the creator chose when the conversation was made.

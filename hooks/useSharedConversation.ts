@@ -219,8 +219,7 @@ export function useSharedConversation(id: string, signedIn = false) {
         incomingSpeech.current = event.speech ?? null;
         setSpeakingTurn(event.turnId);
         try {
-          const { text, ...request } = speechFor(event);
-          const playing = voice.current?.speakStream({ ...request, textStream: (async function* () { yield text; })() });
+          const playing = voice.current?.speakStream(speechFor(event));
           prefetchNext();
           await playing;
         } catch {

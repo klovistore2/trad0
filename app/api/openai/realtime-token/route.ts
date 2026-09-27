@@ -10,15 +10,15 @@ export async function POST(request: Request) {
     if (!["http:", "https:"].includes(appUrl.protocol)) throw new Error("Invalid protocol");
     expectedOrigin = appUrl.origin;
   } catch {
-    return json({ error: "L’adresse du site est mal configurée. Vérifiez NEXT_PUBLIC_APP_URL." }, 503);
+    return json({ error: "The site address is misconfigured. Check NEXT_PUBLIC_APP_URL." }, 503);
   }
-  if (!origin || origin !== expectedOrigin) return json({ error: "Origine non autorisée." }, 403);
-  if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Requête invalide." }, 415);
+  if (!origin || origin !== expectedOrigin) return json({ error: "Origin not allowed." }, 403);
+  if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Invalid request." }, 415);
   let body: unknown;
-  try { body = await request.json(); } catch { return json({ error: "Requête invalide." }, 400); }
+  try { body = await request.json(); } catch { return json({ error: "Invalid request." }, 400); }
   // A credential is paid for by a conversation's creator: never handed out without a conversation.
   if (!body || typeof body !== "object" || !("sessionId" in body) || typeof body.sessionId !== "string") {
-    return json({ error: "Session invalide." }, 400);
+    return json({ error: "Invalid session." }, 400);
   }
   const sessionId = body.sessionId;
   const key = process.env.OPENAI_API_KEY?.trim();
@@ -27,13 +27,13 @@ export async function POST(request: Request) {
   // transcription is configured. The conversation screen shows them so a speaker can check what
   // was actually recognised, so this is on by default and overridable like any other model id.
   const transcriptionModel = process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL?.trim() || "gpt-realtime-whisper";
-  if (!key || !model) return json({ error: "La traduction n’est pas encore configurée." }, 503);
+  if (!key || !model) return json({ error: "Translation is not configured yet." }, 503);
   // The output language is the other participant's, read from the conversation, never from the body.
   // One round trip for the caller, the other participant and the creator's credits.
   const { speakerContext } = await import("@/lib/session/auth");
   const { blockingBalance } = await import("@/lib/billing/credits");
   const context = await speakerContext(sessionId).catch(() => null);
-  if (!context?.peer) return json({ error: "Rejoignez une conversation active pour continuer." }, 403);
+  if (!context?.peer) return json({ error: "Join an active conversation to continue." }, 403);
   const balance = blockingBalance(context.payerEmail, context.payerBalance);
   if (balance !== null && balance <= 0) return json({ error: "No credits left." }, 402);
   const targetLanguage = context.peer.language;
@@ -61,12 +61,12 @@ export async function POST(request: Request) {
     });
     if (!response.ok) {
       if (process.env.NODE_ENV === "development") console.error("Translation credential request failed", response.status);
-      return json({ error: response.status === 429 ? "Le service est occupé. Réessayez dans un instant." : "La traduction est indisponible. Vérifiez la configuration du service." }, 502);
+      return json({ error: response.status === 429 ? "The service is busy. Try again in a moment." : "Translation is unavailable. Check the service configuration." }, 502);
     }
     const data: unknown = await response.json();
-    if (!data || typeof data !== "object" || !("value" in data) || typeof data.value !== "string" || !data.value.trim()) return json({ error: "La traduction est indisponible." }, 502);
+    if (!data || typeof data !== "object" || !("value" in data) || typeof data.value !== "string" || !data.value.trim()) return json({ error: "Translation is unavailable." }, 502);
     return json({ value: data.value });
   } catch {
-    return json({ error: "Le service ne répond pas. Réessayez." }, 504);
+    return json({ error: "The service is not responding. Try again." }, 504);
   }
 }

@@ -30,7 +30,3 @@ export function validSamples(files: File[], seconds: number) {
   if (total < 10_000 || total > MAX_SAMPLE_BYTES) return false;
   return files.every(file => SAMPLE_TYPE.test(file.type));
 }
-export function validSample(file: File, seconds: number) {
-  return validSamples([file], seconds);
-}
-

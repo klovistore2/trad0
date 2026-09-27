@@ -11,17 +11,6 @@ const baseURL = process.env.TEST_BASE_URL || 'http://localhost:3100';
 const browser = await chromium.launch({ headless:true, args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] });
 const contexts=[];let sessionId;let accountEmail;let speakerEmail;
 const errors=[];
-// A real, short WAV so the audio element can actually decode, play and fire 'ended'.
-function wavClip(seconds=1.5, frequency=440, rate=8000) {
- const samples=Math.floor(seconds*rate); const buffer=Buffer.alloc(44+samples*2);
- buffer.write('RIFF',0); buffer.writeUInt32LE(36+samples*2,4); buffer.write('WAVEfmt ',8);
- buffer.writeUInt32LE(16,16); buffer.writeUInt16LE(1,20); buffer.writeUInt16LE(1,22);
- buffer.writeUInt32LE(rate,24); buffer.writeUInt32LE(rate*2,28); buffer.writeUInt16LE(2,32); buffer.writeUInt16LE(16,34);
- buffer.write('data',36); buffer.writeUInt32LE(samples*2,40);
- for(let i=0;i<samples;i++) buffer.writeInt16LE(Math.round(Math.sin(i*2*Math.PI*frequency/rate)*6000),44+i*2);
- return buffer;
-}
-const clip=wavClip();
 // Google sign-in cannot be automated, so a signed-in visitor is seeded with the very session
 // cookie Auth.js would have issued. Nothing in the application exists just for this test.
 async function signedInContext(user) {

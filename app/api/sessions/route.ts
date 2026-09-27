@@ -9,11 +9,11 @@ export async function POST(request: Request) {
     checkOrigin(request);
     // Creating a conversation needs an account; joining one never does.
     const account = await auth();
-    if (!account?.user?.id) throw new HttpError(401, "Connectez-vous pour créer une conversation.");
+    if (!account?.user?.id) throw new HttpError(401, "Sign in to create a conversation.");
     // No credits, no new conversation. Unknown (billing outage) never blocks.
     if (!await canStartConversation(account.user.id, account.user.email)) throw new HttpError(402, "No credits left.");
     const body = await readJson(request);
-    if (!isLanguage(body.peerLanguage) || !isLanguage(body.language)) throw new HttpError(400, "Cette langue n’est pas disponible.");
+    if (!isLanguage(body.peerLanguage) || !isLanguage(body.language)) throw new HttpError(400, "This language is not available.");
     if (typeof body.languageAuto !== "boolean" || typeof body.peerLanguageAuto !== "boolean") throw new HttpError(400, "Invalid language mode.");
     return json({ id: await createSession(account.user.id, body.peerLanguage, body.language, body.languageAuto, body.peerLanguageAuto) });
   } catch (error) { return failure(error); }

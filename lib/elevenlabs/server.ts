@@ -3,7 +3,7 @@ import { HttpError } from "@/lib/server/http";
 
 export function elevenHeaders() {
   const key = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!key) throw new HttpError(503, "La voix n’est pas encore configurée.");
+  if (!key) throw new HttpError(503, "Speech is not configured yet.");
   return { "xi-api-key": key };
 }
 const fallbacks = new Map<string, string>();
@@ -24,12 +24,12 @@ export async function fallbackVoice(range?: "low" | "high") {
   const chosen = voices.find(voice => voice?.labels?.gender === wanted)
     ?? voices.find(voice => voice?.labels?.gender === "neutral")
     ?? voices[0];
-  if (typeof chosen?.voice_id !== "string") throw new HttpError(502, "Aucune voix standard disponible. Vérifiez ElevenLabs.");
+  if (typeof chosen?.voice_id !== "string") throw new HttpError(502, "No standard voice available. Check ElevenLabs.");
   fallbacks.set(key, chosen.voice_id);
   return chosen.voice_id;
 }
 
 export async function deleteVoice(voiceId: string) {
   const response = await fetch(`https://api.elevenlabs.io/v1/voices/${encodeURIComponent(voiceId)}`, { method: "DELETE", headers: elevenHeaders(), signal: AbortSignal.timeout(10_000) });
-  if (!response.ok && response.status !== 404) throw new HttpError(502, "La suppression de la voix doit être réessayée.");
+  if (!response.ok && response.status !== 404) throw new HttpError(502, "Deleting the voice must be retried.");
 }

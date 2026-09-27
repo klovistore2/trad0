@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLoader } from './load-ts.mjs';
-import { validSample, dueTier, cloneRefused, SAMPLE_BYTE_BUDGET, MAX_SAMPLE_BYTES } from '../lib/voice/consent.ts';
+import { validSamples, dueTier, cloneRefused, SAMPLE_BYTE_BUDGET, MAX_SAMPLE_BYTES } from '../lib/voice/consent.ts';
 
 const origin = 'http://localhost:3000';
 function request(body, path='/api/elevenlabs/speak', method='POST') { return new Request(`${origin}${path}`, {method,headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)}); }
 
 test('voice samples require supported audio and enough recording time', () => {
   const sample = new File([new Uint8Array(10001)],'voice.webm',{type:'audio/webm;codecs=opus'});
-  assert.equal(validSample(sample,45),true);
-  assert.equal(validSample(sample,3),false);
-  assert.equal(validSample(sample,NaN),false);
-  assert.equal(validSample(new File(['text'],'voice.txt',{type:'text/plain'}),45),false);
+  assert.equal(validSamples([sample],45),true);
+  assert.equal(validSamples([sample],3),false);
+  assert.equal(validSamples([sample],NaN),false);
+  assert.equal(validSamples([new File(['text'],'voice.txt',{type:'text/plain'})],45),false);
+  assert.equal(validSamples([],45),false,'no recording at all');
 });
 
 test('the final voice is made from the speech gathered once the sample nears the upload limit', () => {
@@ -148,7 +149,7 @@ test('cloning without explicit consent cannot reach database or provider', async
   try {
     const form=new FormData();form.set('sessionId','test');
     const response=await load('app/api/voice/clone/route.ts').POST(new Request(`${origin}/api/voice/clone`,{method:'POST',headers:{origin},body:form}));
-    assert.equal(response.status,400);assert.match((await response.json()).error,/consentement/);
+    assert.equal(response.status,400);assert.match((await response.json()).error,/Consent is required/);
   } finally {
     if(oldUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=oldUrl;
     if(oldSecret===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=oldSecret;

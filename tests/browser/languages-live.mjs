@@ -131,12 +131,12 @@ async function direction(speaker,listener,id,source,target,preference) {
  speaker.on('response',responseListener);listener.on('response',responseListener);
  listener.on('response',deliveryListener);
  try {
-  await speaker.getByRole('button',{name:'Settings',exact:true}).click();
-  await speaker.locator('#translation-mode').selectOption(preference);
-  await speaker.getByRole('button',{name:'Back to the conversation'}).click();
+  // No mode menu is left in the interface: the documented route sets this speaker's preference.
+  await api(speaker,`/api/sessions/${id}/mode`,{preference},'PATCH');
   await expect(speaker.locator('.pipeline-diagnostics > summary')).toContainText(result.expectedMode==='context'?'2 ·':'1 ·',{timeout:20000});
   const audio=await fixture(listener,source,id);
-  if(await listener.locator('.sound-icon').getAttribute('aria-pressed')==='true')await listener.locator('.sound-icon').click();
+  // The crossed speaker icon means not armed or muted, whatever the listener's language.
+  if(await listener.locator('.sound-icon path[d="M16 9.5l5 5"]').count())await listener.locator('.sound-icon').click();
   // Start (or claim the free floor) through the same control as a real user.
   await speaker.locator('.controls .primary-button').click();
   await speaker.waitForFunction(()=>{

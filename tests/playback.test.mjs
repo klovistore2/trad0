@@ -26,7 +26,7 @@ function setup() {
   });
   const { ElevenLabsVoiceProvider } = createLoader()('lib/elevenlabs/voice-provider.ts');
   const voice = new ElevenLabsVoiceProvider();
-  const say = (id, text) => voice.speakStream({ id, sessionId: 'room', language: 'fr', textStream: (async function* () { yield text; })() });
+  const say = (id, text) => voice.speakStream({ id, sessionId: 'room', language: 'fr', text });
   return { voice, say, requests, restore: () => Object.assign(globalThis, previous) };
 }
 
