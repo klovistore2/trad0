@@ -38,7 +38,7 @@ export function SettingsPanel({ id, me, credits, toneWindowSeconds, speechSecond
       <VoiceConsent sessionId={id} me={me} seconds={speechSeconds} onConsent={onConsent} onRefresh={onRefresh} onUseClone={onUseClone} />
       {me.hasAccount && <label className="setting-toggle">
         <input type="checkbox" checked={speechOptions.emotion} onChange={event => onSpeechOptions({ ...speechOptions, emotion: event.target.checked })} />
-        <span>Match my tone of voice<em>No added delay: a few seconds of your speech are analysed now and then to estimate how you are speaking. Separate from your own voice.</em></span>
+        <span>Match my tone of voice<em>Slightly slower, as with your own voice: your words take the context route so your tone can be reproduced. A few seconds of your speech are analysed now and then; separate from your own voice.</em></span>
       </label>}
     </div>
 

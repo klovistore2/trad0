@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLoader } from './load-ts.mjs';
-import { validSample } from '../lib/voice/consent.ts';
+import { validSample, dueTier, cloneRefused, SAMPLE_BYTE_BUDGET, MAX_SAMPLE_BYTES } from '../lib/voice/consent.ts';
 
 const origin = 'http://localhost:3000';
 function request(body, path='/api/elevenlabs/speak', method='POST') { return new Request(`${origin}${path}`, {method,headers:{origin,'content-type':'application/json'},body:JSON.stringify(body)}); }
@@ -12,6 +12,23 @@ test('voice samples require supported audio and enough recording time', () => {
   assert.equal(validSample(sample,3),false);
   assert.equal(validSample(sample,NaN),false);
   assert.equal(validSample(new File(['text'],'voice.txt',{type:'text/plain'}),45),false);
+});
+
+test('the final voice is made from the speech gathered once the sample nears the upload limit', () => {
+  assert.equal(dueTier(10,100_000,0),undefined);
+  assert.equal(dueTier(30,300_000,0),1);
+  assert.equal(dueTier(100,1_000_000,1),undefined);
+  assert.equal(dueTier(150,1_500_000,1),2);
+  // Silences held on the floor filled the sample first: it is sent, never refused as too large.
+  assert.equal(dueTier(100,SAMPLE_BYTE_BUDGET,1),2);
+  assert.ok(SAMPLE_BYTE_BUDGET < MAX_SAMPLE_BYTES);
+  assert.equal(dueTier(20,SAMPLE_BYTE_BUDGET,0),undefined,'too little speech for any voice');
+  assert.equal(dueTier(400,SAMPLE_BYTE_BUDGET,2),undefined,'nothing follows the final version');
+});
+
+test('only a refusal that would repeat stops cloning; a passing failure is tried again later', () => {
+  for (const status of [400,403,413,502]) assert.equal(cloneRefused(status),true,String(status));
+  for (const status of [402,409,429,500,503,504]) assert.equal(cloneRefused(status),false,String(status));
 });
 
 test('relayed speech uses the other participant’s ready clone, never a client supplied voice ID', async () => {
@@ -150,6 +167,15 @@ test('sentence publisher delivers streaming subtitles then commits only once', c
   assert.equal(sent.length,2);assert.equal(sent[1].text,'Hello there.');assert.equal(sent[1].committed,true);
   assert.equal(sent[0].turnId,sent[1].turnId);
   context.mock.timers.tick(2000);assert.equal(sent.length,2);
+  publisher.dispose();
+});
+
+test('a Hindi danda closes a sentence at once, like a full stop', context => {
+  context.mock.timers.enable({apis:['setTimeout']});
+  const {TurnPublisher}=createLoader()('lib/realtime/turn-publisher.ts');
+  const sent=[];const publisher=new TurnPublisher(event=>sent.push(event));
+  publisher.append('आप कैसे हैं।');
+  assert.equal(sent.length,1);assert.equal(sent[0].committed,true);
   publisher.dispose();
 });
 

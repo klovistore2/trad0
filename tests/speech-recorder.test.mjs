@@ -129,3 +129,18 @@ test('an unsupported browser degrades to no capture instead of throwing', () => 
     assert.deepEqual(recorder.samples(), []);
   } finally { Date.now = realNow; }
 });
+
+test('the upload size counts silences too: every finished segment and the recording in progress', () => {
+  const { recorder, restore } = setup();
+  try {
+    recorder.listen({});
+    FakeRecorder.last.emit(1000); FakeRecorder.last.emit(500);
+    // A recreated microphone stream closes the first recording as its own segment.
+    recorder.listen({ other: true });
+    FakeRecorder.last.emit(250);
+    assert.equal(recorder.bytes, 1750);
+    assert.equal(recorder.samples().reduce((total, blob) => total + blob.size, 0), 1750);
+    recorder.discard();
+    assert.equal(recorder.bytes, 0);
+  } finally { restore(); }
+});

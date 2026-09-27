@@ -4,7 +4,8 @@ export class NeonPeerTransport implements PeerTransport {
   private sessionId = "";
   private controller = new AbortController();
   private timer?: ReturnType<typeof setTimeout>;
-  private cursor = "0";
+  // None on a fresh page: the server then sends recent finished sentences and where to go on from.
+  private cursor: string | null = null;
   private subscribers = new Set<(event: ReceivedEvent) => void>();
   private sending = Promise.resolve();
   private floor: (slot: number | null) => void = () => {};
@@ -20,7 +21,8 @@ export class NeonPeerTransport implements PeerTransport {
     if (this.controller.signal.aborted) return;
     const startedAt = Date.now();
     try {
-      const response = await fetch(`/api/sessions/${this.sessionId}/events?after=${this.cursor}`, { signal: this.controller.signal, cache: "no-store" });
+      const query = this.cursor === null ? "" : `?after=${this.cursor}`;
+      const response = await fetch(`/api/sessions/${this.sessionId}/events${query}`, { signal: this.controller.signal, cache: "no-store" });
       const data = await response.json();
       if (!response.ok) {
         if ([401, 403, 404].includes(response.status)) { this.onError(data.error || "La conversation est terminée."); this.disconnect(); return; }
@@ -30,6 +32,7 @@ export class NeonPeerTransport implements PeerTransport {
         this.subscribers.forEach(cb => cb(event));
         this.cursor = event.seq;
       }
+      if (typeof data.cursor === "string") this.cursor = data.cursor;
       // A poll issued before our own claim landed carries a stale floor: ignore it.
       if ("floor" in data && startedAt > this.claimedAt) this.floor(data.floor);
     } catch (error) {

@@ -1,6 +1,8 @@
 import type { PeerEvent } from "@/types/session";
 
 // Subtitles are batched; a pause or sentence boundary commits the speech chunk once.
+// Hindi ends a sentence with a danda (।). Thai has no final punctuation: only the pause closes it.
+const SENTENCE_END = /[.!?。！？।॥]\s*$/;
 export class TurnPublisher {
   private turnId = crypto.randomUUID();
   private text = "";
@@ -11,7 +13,7 @@ export class TurnPublisher {
     this.text += delta;
     if (!this.publishTimer) this.publishTimer = setTimeout(() => { this.publishTimer = undefined; this.publish(false); }, 250);
     clearTimeout(this.commitTimer);
-    if (this.text.length >= 3500 || /[.!?。！？]\s*$/.test(this.text)) this.commit();
+    if (this.text.length >= 3500 || SENTENCE_END.test(this.text)) this.commit();
     else this.commitTimer = setTimeout(() => this.commit(), 1000);
   }
   private publish(committed: boolean) {

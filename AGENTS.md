@@ -59,8 +59,10 @@ Un visiteur sans compte n’a donc rien à essayer seul ; c’est assumé, pas u
 
 ## 2. Deux modes de traduction, indépendants par locuteur
 
-Le mode n'est plus un réglage : il découle de la case « utiliser ma voix ». Sans clone, ou clone
-décoché, c'est le mode 1 rapide ; dès que le clone est utilisable et coché, c'est le mode 2.
+Le mode n'est plus un réglage : il découle des deux cases des paramètres. Clone utilisable et coché,
+**ou** « reproduire mon ton » coché (compte requis) : mode 2. Ni l'un ni l'autre : mode 1 rapide.
+Depuis le 27 septembre 2026, le ton compte aussi : avant, sans clone, cocher le ton restait sans
+effet puisque le ton ne s'applique qu'en mode 2. Cocher ou décocher bascule à la fin de la phrase.
 `preferred_mode` reste `auto` pour tout le monde et n'est plus écrit par l'interface ;
 `PATCH /api/sessions/[id]/mode` accepte toujours `direct` et `context`, ce qui sert au parcours
 navigateur pour exercer le circuit contextuel sans clone. `active_mode` indique le circuit utilisé.
@@ -70,11 +72,12 @@ Chaque locuteur a son propre mode : ce n'est pas une préférence globale de ses
 | --- | --- | --- |
 | 1 — `direct` | Micro → OpenAI Realtime Translation → texte et audio traduits | Voix du modèle OpenAI |
 | 2 — `context` | Micro → transcription OpenAI → LLM avec contexte → ElevenLabs | Clone activé et utilisable, sinon voix standard adaptée au registre |
-| `auto` (seul mode réel) | Mode 1 initialement ; mode 2 dès que le clone de ce locuteur est disponible et coché | Dépend du mode actif |
+| `auto` (seul mode réel) | Mode 1 initialement ; mode 2 dès que le clone de ce locuteur est disponible et coché, ou son ton coché | Dépend du mode actif |
 
 Le circuit du mode 2 fonctionne **sans compte et sans consentir au clonage** : sa voix standard reste
-utilisable. Mais **aucune commande d'interface n'y conduit plus** sans clone, puisque le menu de mode
-a été retiré ; seules la langue de sortie et l'échec de la liaison audio y mènent désormais.
+utilisable. Pour un invité sans compte, **aucune commande d'interface n'y conduit**, puisque le menu
+de mode a été retiré et que le ton est réservé aux comptes ; seules la langue de sortie et l'échec de
+la liaison audio l'y mènent.
 Un clone déjà enregistré permet de commencer directement en mode 2. Pendant son affinage,
 un premier clone utilisable reste en service. Une voix en attente de vérification ne déclenche pas
 la bascule automatique.
@@ -87,6 +90,12 @@ Deux exceptions techniques imposent le mode 2, même si le mode direct est préf
   avant la bascule. L'italien peut utiliser le mode direct.
 - **Échec de la liaison audio entre appareils** : repli vers le circuit LLM + ElevenLabs. La détection
   d’échec prend du temps ; ce n’est pas une bascule instantanée ni une reprise garantie de l’audio perdu.
+  **Ce repli est temporaire** depuis le 27 septembre 2026 : avant, il durait jusqu'à la fin de la
+  conversation, si bien qu'un téléphone verrouillé plus de 15 s imposait le mode 2 aux deux pour
+  toujours. `PeerAudioLink` renégocie seul (nouvelle époque, comme après un rechargement) 15 s après
+  l'échec, puis 30 s, puis toutes les 60 s au plus, et tout de suite quand l'autre personne revient
+  en ligne. Les échecs de ces essais restent silencieux ; dès la reconnexion, le message d'échec
+  s'efface et le mode redevient celui que demandent les réglages.
 
 ### Mode 1 : audio OpenAI transmis à l’autre appareil
 
@@ -109,7 +118,12 @@ reçoit les fragments source ; le code actuel utilise une validation manuelle du
 sans détection de tour côté fournisseur (`turn_detection: null`).
 
 `TurnPublisher` clôt une phrase sur ponctuation, pause d’environ une seconde ou limite de taille.
+La danda hindi (`।`) compte comme un point. Le thaï n'a pas de ponctuation finale : ses phrases
+se ferment toujours sur la pause d'une seconde. Ne pas raccourcir ce délai sans mesure sur appareil.
 `ConversationPipeline` sérialise les appels à `/api/translate` pour conserver l’ordre et le contexte.
+Un appel coupé par le réseau ou en erreur 5xx est retenté **une fois**, 400 ms plus tard, dans la même
+file : une phrase dont la traduction échoue n'est jamais entendue. Un refus 4xx (crédits, session
+terminée) n'est pas retenté.
 Cette route appelle OpenAI Chat Completions avec une sortie JSON structurée et `store: false`.
 Le prompt demande de conserver le sens, l’intention, le ton, les noms et les nombres, sans répondre
 à la place du locuteur. Les paroles à traduire sont des données, jamais des instructions à exécuter.
@@ -148,7 +162,9 @@ Depuis le 22 septembre 2026, le ton est **échantillonné** et non plus estimé 
 l'ancien budget d'attente de 1000 ms après traduction était plus court que l'analyse réelle
 (~1 s à chaud, ~2 s à froid côté serveur, plus l'envoi), si bien que presque toutes les phrases
 partaient en `timeout`. Un ton change rarement en moins de trois secondes : chaque phrase reprend
-donc la dernière estimation, **sans aucune attente**. Cocher la case ne coûte plus de délai.
+donc la dernière estimation, **sans aucune attente**. L'analyse n'ajoute aucun délai, mais cocher la
+case fait passer en mode 2 (plus lent que le mode 1) quand le clone n'y conduit pas déjà ; la case
+l'annonce.
 
 Les choix sont conservés sur cet appareil dans `localStorage`, pas sur le compte. Chaque phrase
 fige ses options dans les métadonnées de l'événement ; l'autre appareil les transmet à la synthèse.
@@ -217,6 +233,12 @@ La mémoire existe dès le mode 1, séparément pour chaque navigateur :
 
 Cette mémoire est bornée et volatile. Après rechargement, les événements reçus peuvent reconstruire
 une partie du contexte, mais les propres paroles précédentes ne sont pas restaurées intégralement.
+Depuis le 27 septembre 2026, une page qui (re)charge interroge `/events` sans `after` : le serveur
+renvoie les **40 dernières phrases terminées** de l'autre personne et un `cursor` (le dernier `seq`
+de la session, lu en premier), puis la scrutation reprend de là. Avant, le curseur repartait de zéro
+et rejouait chaque sous-titre partiel, par paquets de 100 toutes les 500 ms, avant d'afficher le
+présent. Une phrase âgée de plus de 20 s (`STALE_SPEECH_MS`, âge calculé par PostgreSQL) est
+affichée mais **jamais lue** : le passé n'est plus prononcé au premier toucher.
 Il n’y a ni résumé roulant, ni recherche vectorielle, ni détection des échos dans cette mémoire.
 
 ## 3. Langues, prise de parole et lecture
@@ -302,11 +324,20 @@ observée dans les fragments de transcription, pas sur le temps passé micro ouv
 - Premier clone vers **30 secondes de parole capturée après consentement**.
 - Affinage vers **150 secondes cumulées**, puis arrêt et abandon des échantillons locaux.
 - Les 30 secondes précédant la proposition de compte ne sont pas un échantillon récupérable.
+- L'enregistrement garde aussi les silences tant que l'on a la parole (64 kbit/s). Dès que
+  l'échantillon atteint **3,2 Mo** (`SAMPLE_BYTE_BUDGET`, sous la limite serveur de 3,5 Mo) avec au
+  moins 25 s de parole, la version finale est créée avec la parole déjà recueillie (`dueTier`).
+  Avant le 27 septembre 2026, l'échantillon pouvait dépasser la limite avant 150 s de parole et
+  être refusé avec le message trompeur « Parlez un peu plus longtemps ».
 
 Un flux micro recréé produit un nouveau segment de fichier. Ne jamais concaténer les conteneurs
 issus de plusieurs exécutions distinctes de `MediaRecorder` ; envoyer les segments complets séparément.
 Conserver le clone en service jusqu’à l’enregistrement de son remplaçant, puis supprimer l’ancien.
 Un refus fournisseur bloque les relances automatiques jusqu’à une nouvelle action de consentement.
+Seuls les refus qui se répéteraient bloquent (`cloneRefused` : 400, 403, 413, 502). Une coupure
+réseau, un bail occupé (409), des crédits épuisés (402) ou une panne passagère sont retentés sans
+message, après 1 min puis un délai doublé jusqu'à 10 min ; avant le 27 septembre 2026, toute erreur
+bloquait le clonage pour la conversation.
 Une vérification demandée par ElevenLabs laisse la voix standard utilisable en mode 2.
 
 Désactiver l’utilisation du clone conserve la voix enregistrée. Retirer le consentement supprime
@@ -489,8 +520,10 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
   Android, Bluetooth ou réseaux mobiles. Les tests Chromium ne prouvent ni la qualité linguistique,
   ni celle du clonage, ni le fonctionnement écran verrouillé. Les suspensions iOS restent un obstacle.
 - **Réseau du mode 1** : avec `WEBRTC_ICE_SERVERS=[]`, seules les connexions directes possibles sur le
-  réseau fonctionneront. Configurer TURN pour les réseaux qui l’exigent. Le repli actuel n’est pas
-  un système complet de reconnexion/ICE restart ; pas de retour automatique garanti vers le mode 1.
+  réseau fonctionneront. Configurer TURN pour les réseaux qui l’exigent. La liaison renégocie seule
+  après un échec (voir section 2) et le mode 1 revient une fois reconnectée ; ce n'est pas une ICE
+  restart : l'audio en cours est perdu. Sur un réseau qui exige TURN sans TURN configuré, les essais
+  échouent en silence toutes les 60 s au plus et le mode 2 reste en service.
 - **Latence du mode 2** : réponse LLM complète, appels sérialisés, scrutation, lecture qui attend la fin
   de la phrase précédente (pas de préchargement) et redémarrage fournisseur à la bascule. La file LLM n’a pas encore de plafond explicite.
   Mesurer en conversation réelle avant de changer modèle, accès base ou stratégie de diffusion.
@@ -587,6 +620,12 @@ en néerlandais. Le blocage italien signalé sur appareil n'a pas été reprodui
 Correctifs du 27 septembre 2026 (routes payantes sans session, consentement local, purge) :
 **82 tests unitaires**, lint, TypeScript et build isolé réussis. Parcours Chromium non relancé ;
 purge non exécutée contre Neon ni ElevenLabs réels.
+
+Correctifs du même jour, second lot (rechargement, mode selon les réglages, liaison audio
+renégociée, nouvel essai de traduction, danda, clonage) : **89 tests unitaires**, lint, TypeScript
+et build isolé réussis. `tests/browser/tone-branch.mjs` adapté (le ton seul fait passer en mode 2)
+mais non relancé. La renégociation de `PeerAudioLink` n'a **aucun test automatique** (WebRTC) :
+à valider sur deux téléphones en verrouillant l'un plus de 15 s.
 
 ## Consigne technique gérée par Next.js
 

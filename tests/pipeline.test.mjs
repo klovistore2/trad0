@@ -30,6 +30,10 @@ test('each speaker selects their own mode; a standard voice does not need clone 
  assert.equal(desiredMode({...me,voiceTier:1,consented:true,voiceStatus:'ready'}),'context');
  assert.equal(desiredMode({...me,voiceTier:1,consented:true,voiceStatus:'learning'}),'context');
  assert.equal(desiredMode({...me,preferredMode:'direct',voiceTier:1,consented:true,voiceStatus:'ready'}),'direct');
+ // Matching the tone takes the context route too, clone or not; with neither, the direct route.
+ assert.equal(desiredMode(me,true),'context');
+ assert.equal(desiredMode({...me,voiceTier:1,consented:true,voiceStatus:'ready',useClone:false},true),'context');
+ assert.equal(desiredMode({...me,voiceTier:1,consented:true,voiceStatus:'ready',useClone:false},false),'direct');
 });
 test('switch waits for a sentence boundary and keeps originals from both speakers',async t=>{
  t.mock.timers.enable({apis:['setTimeout','Date']});
@@ -62,10 +66,31 @@ test('context translations are serialized; a pending translation blocks a mode s
   assert.deepEqual(app.sent.map(event=>event.text),['First sentence.','Second sentence.']);
  }finally{globalThis.fetch=previous;app.instance.dispose();}
 });
-test('failed translation preserves original context without speaking a fabricated result',async()=>{
- const previous=globalThis.fetch;globalThis.fetch=async()=>Response.json({error:'Unavailable'},{status:502});
+test('failed translation is tried twice, then preserves original context without speaking a fabricated result',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const previous=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({error:'Unavailable'},{status:502});};
  const app=pipeline();app.instance.mode='context';app.instance.desired='context';
- try{app.instance.original('À garder.');await tick();assert.equal(app.sent.length,0);assert.equal(app.instance.memory.recent()[0].original,'À garder.');assert.deepEqual(app.errors,['Unavailable']);}
+ try{
+  app.instance.original('À garder.');await tick();assert.equal(calls,1);assert.deepEqual(app.errors,[]);
+  t.mock.timers.tick(400);await tick();await tick();
+  assert.equal(calls,2);assert.equal(app.sent.length,0);assert.equal(app.instance.memory.recent()[0].original,'À garder.');assert.deepEqual(app.errors,['Unavailable']);
+ }finally{globalThis.fetch=previous;app.instance.dispose();}
+});
+test('a dropped translation request is sent again, so the listener still hears the sentence',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const previous=globalThis.fetch;let calls=0;
+ globalThis.fetch=async()=>{if(++calls===1)throw new TypeError('Failed to fetch');return Response.json({text:'To keep.',targetLanguage:'en',model:'fast',translationMs:5,contextTurns:0});};
+ const app=pipeline();app.instance.mode='context';app.instance.desired='context';
+ try{
+  app.instance.original('À garder.');await tick();
+  t.mock.timers.tick(400);await tick();await tick();
+  assert.equal(calls,2);assert.deepEqual(app.sent.map(event=>event.text),['To keep.']);assert.deepEqual(app.errors,[]);
+ }finally{globalThis.fetch=previous;app.instance.dispose();}
+});
+test('a refused translation is not retried: asking again would only be refused again',async()=>{
+ const previous=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({error:'No credits left.'},{status:402});};
+ const app=pipeline();app.instance.mode='context';app.instance.desired='context';
+ try{app.instance.original('Bonjour.');await tick();await tick();assert.equal(calls,1);assert.deepEqual(app.errors,['No credits left.']);}
  finally{globalThis.fetch=previous;app.instance.dispose();}
 });
 test('invitation clock counts speech rather than microphone-open time',t=>{

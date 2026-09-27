@@ -66,3 +66,24 @@ test('attaching an account restores only existing profile consent, never grants 
  assert.match(query.sql,/consent_at=v.consent_at/);assert.doesNotMatch(query.sql,/consent_at=now/);
  assert.deepEqual(query.values,['account','account','room',1]);
 });
+test('a reloaded page gets recent finished sentences and goes on from the newest event, not the whole history',async t=>{
+ environment(t);const queries=[];
+ const {GET}=createLoader({
+  '@/lib/session/auth':{member:async()=>({slot:0,floor_slot:null})},
+  '@/lib/neon/db':{db:()=>async(strings,...values)=>{
+   const sql=strings.join('?');queries.push({sql,values});
+   if(sql.includes('MAX(seq)'))return [{cursor:'57'}];
+   return [{seq:'40',id:'e',turnId:'t',text:'Hello.',committed:true,ageMs:600_000,metadata:{kind:'translation',mode:'context'}}];
+  }},
+ })('app/api/sessions/[id]/events/route.ts');
+ const params=Promise.resolve({id:'room'});
+ const fresh=await (await GET(new Request(origin+'/api/sessions/room/events'),{params})).json();
+ assert.equal(fresh.cursor,'57');assert.equal(fresh.events[0].kind,'translation');assert.equal(fresh.floor,null);
+ const recent=queries.find(query=>query.sql.includes('ORDER BY seq DESC'));
+ assert.match(recent.sql,/AND committed AND seq<=/,'only finished sentences, never every streamed subtitle');
+ assert.ok(recent.values.includes('57'),'nothing newer than the cursor, so nothing is skipped');
+ queries.length=0;
+ const live=await (await GET(new Request(origin+'/api/sessions/room/events?after=57'),{params})).json();
+ assert.equal(live.cursor,undefined);assert.match(queries[0].sql,/seq>/);assert.ok(queries[0].values.includes('57'));
+ assert.equal((await GET(new Request(origin+'/api/sessions/room/events?after=abc'),{params})).status,400);
+});

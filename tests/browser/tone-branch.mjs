@@ -112,13 +112,11 @@ try {
  const fixture=await a.request.post('/api/elevenlabs/speak',{headers:{origin:baseURL},data:{sessionId,language:'en',text:'I told you to leave it alone. Why did you do that again?',speech:{options:{emotion:true},tone:{tone:'angry',strength:'high',status:'estimated',model:'gpt-audio-mini',analysisMs:0},extraWaitMs:0}}});
  assert.equal(fixture.status(),200,'synthetic spoken fixture');
  await b.evaluate(base64=>{window.testFixture=base64;},(await fixture.body()).toString('base64'));
+ // Without a clone the speaker starts in mode 1; matching the tone takes mode 2 by itself.
+ await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('1 ·');
  await b.getByRole('button',{name:'Settings'}).click();
  await b.getByLabel(/Match my tone of voice/).check();
  await b.getByRole('button',{name:'Back to the conversation'}).click();
- // Explicit test preference; tone must never change the product's mode selection.
- await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('1 ·');
- const mode=await b.request.patch(`/api/sessions/${sessionId}/mode`,{headers:{origin:baseURL},data:{preference:'context'}});
- assert.equal(mode.status(),200);
  await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('2 ·',{timeout:15000});
  const uploads=[],responses=[],published=[],syntheses=[];
  b.on('request',request=>{

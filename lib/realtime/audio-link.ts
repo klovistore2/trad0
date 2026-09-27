@@ -1,6 +1,10 @@
 import { wav } from "@/lib/elevenlabs/voice-provider";
 
 type Signal = { epoch: string; targetEpoch: string | null; description: RTCSessionDescriptionInit | null };
+// After a failure the link negotiates again on its own, sooner at first: a phone that was only
+// locked for a while comes back, and the speakers return to the mode their settings ask for.
+const RETRY_MS = 15_000;
+const MAX_RETRY_MS = 60_000;
 // Only the translated OpenAI track is forwarded. No raw microphone ever enters this connection.
 export class PeerAudioLink {
   private epoch = crypto.randomUUID();
@@ -33,9 +37,13 @@ export class PeerAudioLink {
   private disconnectedAt = 0;
   private waitingAt = 0;
   private incomingEnabled = true;
+  // Reported unavailable and not connected since: retries run quietly until one succeeds.
+  private degraded = false;
+  private retryAt = 0;
+  private retries = 0;
   status = "waiting";
   lastFailure = "";
-  constructor(private id: string, private slot: number, private changed: (playing: boolean) => void, private failed: (message: string) => void) {
+  constructor(private id: string, private slot: number, private changed: (playing: boolean) => void, private failed: (message: string) => void, private recovered: () => void = () => {}) {
     this.audio.setAttribute("playsinline", ""); this.audio.autoplay = false;
   }
   async start() { await this.poll(); }
@@ -93,7 +101,10 @@ export class PeerAudioLink {
     pc.onconnectionstatechange = () => {
       if (this.controller.signal.aborted || this.connection !== pc) return;
       this.status = pc.connectionState;
-      if (pc.connectionState === "connected") { this.disconnectedAt = 0; this.waitingAt = 0; this.lastFailure = ""; }
+      if (pc.connectionState === "connected") {
+        this.disconnectedAt = 0; this.waitingAt = 0; this.lastFailure = ""; this.retries = 0;
+        if (this.degraded) { this.degraded = false; this.recovered(); }
+      }
       if (pc.connectionState === "disconnected" && !this.disconnectedAt) this.disconnectedAt = Date.now();
       if (pc.connectionState === "failed") this.fail("Direct audio could not connect. Translation with context is available.");
     };
@@ -113,6 +124,7 @@ export class PeerAudioLink {
   private async poll() {
     if (this.controller.signal.aborted) return;
     try {
+      if (this.degraded && this.status !== "connected" && Date.now() >= this.retryAt) this.restart();
       if (!this.announced) { await this.post(); this.announced = true; }
       const response = await fetch(`/api/sessions/${this.id}/audio-link`, { signal: this.controller.signal, cache: "no-store" });
       if ([401, 403, 404].includes(response.status)) { this.dispose(); return; }
@@ -166,8 +178,19 @@ export class PeerAudioLink {
   }
   private fail(message: string) {
     if (this.status === "unavailable") return;
-    this.status = "unavailable"; this.lastFailure = message; this.failed(message);
+    this.status = "unavailable"; this.lastFailure = message;
+    if (this.degraded) return; // Already reported: a failed retry stays quiet.
+    this.degraded = true; this.retryAt = Date.now() + RETRY_MS; this.failed(message);
   }
+  // A new epoch on either side makes both negotiate again, exactly as after a page reload.
+  private restart() {
+    this.retryAt = Date.now() + Math.min(MAX_RETRY_MS, RETRY_MS * 2 ** ++this.retries);
+    this.connection?.close(); this.connection = undefined; this.sender = undefined;
+    this.epoch = crypto.randomUUID(); this.announced = false; this.answered = false;
+    this.status = "waiting"; this.waitingAt = 0; this.disconnectedAt = 0;
+  }
+  // The other person is back: try at the next poll rather than at the end of the backoff.
+  retrySoon() { this.retryAt = 0; }
   dispose() {
     this.controller.abort(); clearTimeout(this.timer); clearInterval(this.monitor);
     this.audio.pause(); this.audio.srcObject = null; this.connection?.close(); void this.context?.close(); void this.outgoingContext?.close();

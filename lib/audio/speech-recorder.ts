@@ -78,6 +78,11 @@ export class SpeechRecorder {
     return [...this.segments, ...current];
   }
 
+  // Size of what samples() would upload now, silences between words included.
+  get bytes() {
+    return [...this.segments, ...this.chunks].reduce((total, blob) => total + blob.size, 0);
+  }
+
   // Once a final clone exists there is nothing left to improve, so the audio is dropped.
   discard() {
     this.segments = [];

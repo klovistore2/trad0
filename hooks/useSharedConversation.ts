@@ -13,9 +13,16 @@ import { SpeechRecorder } from "@/lib/audio/speech-recorder";
 import { ToneCapture } from "@/lib/audio/tone-capture";
 import { ToneTracker } from "@/lib/audio/tone-analysis";
 import { DEFAULT_SPEECH_OPTIONS, DEFAULT_TONE_TUNING, isSpeechOptions, isToneTuning, type SpeechOptions, type SpeechMetadata, type ToneTuning } from "@/lib/audio/speech-options";
-import { FINAL_TIER, VOICE_CONSENT, VOICE_TIERS } from "@/lib/voice/consent";
+import { FINAL_TIER, VOICE_CONSENT, cloneRefused, dueTier } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
+
+// A cloning attempt that failed for a passing reason is tried again after a minute, then less often.
+const CLONE_RETRY_MS = 60_000;
+const MAX_CLONE_RETRY_MS = 600_000;
+// A sentence older than this was said before the page loaded, or while the phone slept: it is
+// shown, never spoken, so a reload does not replay the past aloud. Live delivery takes a second or two.
+const STALE_SPEECH_MS = 20_000;
 
 export function useSharedConversation(id: string, signedIn = false) {
   const [speechOptions, updateSpeechOptions] = useState<SpeechOptions>(() => {
@@ -73,8 +80,10 @@ export function useSharedConversation(id: string, signedIn = false) {
   const detector = useRef<VoiceRangeDetector | null>(null);
   const recorder = useRef<SpeechRecorder | null>(null);
   const cloning = useRef(false);
-  // A provider that refuses to clone will refuse again: stop asking every ten seconds.
+  // A refusal that asking again cannot change stops automatic attempts until a new agreement;
+  // anything else (network, busy lease, credits, outage) is tried again after a growing delay.
   const cloningBlocked = useRef(false);
+  const cloneRetry = useRef({ at: 0, delay: CLONE_RETRY_MS });
   // Last sentence measured end to end, so every latency change can be judged on facts.
   const timing = useRef({ transport: 0, request: 0, playback: 0 });
   const refreshNow = useRef<() => void>(() => {});
@@ -121,32 +130,42 @@ export function useSharedConversation(id: string, signedIn = false) {
   const cloneIfDue = useCallback(async () => {
     const me = roomRef.current?.me;
     const speech = recorder.current;
-    if (!me?.hasAccount || !me.consented || !speech || cloning.current || cloningBlocked.current) return;
+    if (!me?.hasAccount || !me.consented || !speech || cloning.current || cloningBlocked.current || Date.now() < cloneRetry.current.at) return;
     const seconds = speech.seconds;
-    const target = [...VOICE_TIERS].reverse().find(step => seconds >= step.seconds && step.tier > me.voiceTier);
-    if (!target) return;
+    const tier = dueTier(seconds, speech.bytes, me.voiceTier);
+    if (!tier) return;
     const samples = speech.samples();
     if (!samples.length) return;
     cloning.current = true;
+    // The standard voice keeps speaking meanwhile, so a later attempt needs no message.
+    const later = () => {
+      const { delay } = cloneRetry.current;
+      cloneRetry.current = { at: Date.now() + delay, delay: Math.min(delay * 2, MAX_CLONE_RETRY_MS) };
+      refreshNow.current();
+    };
     try {
       const form = new FormData();
       form.set("sessionId", id);
       form.set("consent", VOICE_CONSENT);
       form.set("seconds", String(Math.round(seconds)));
-      form.set("tier", String(target.tier));
+      form.set("tier", String(tier));
       samples.forEach((blob, index) => {
         const extension = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
         form.append("sample", blob, `voice-${index}.${extension}`);
       });
       const response = await fetch(`/api/voice/clone`, { method: "POST", body: form });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      if (target.tier === FINAL_TIER) { speech.stop(); speech.discard(); recorder.current = new SpeechRecorder(); }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (!cloneRefused(response.status)) { later(); return; }
+        cloningBlocked.current = true;
+        setMessage(typeof data.error === "string" ? data.error : "La voix n’a pas pu être créée.");
+        return;
+      }
+      cloneRetry.current = { at: 0, delay: CLONE_RETRY_MS };
+      if (tier === FINAL_TIER) { speech.stop(); speech.discard(); recorder.current = new SpeechRecorder(); }
       refreshNow.current();
-    } catch (error) {
-      cloningBlocked.current = true;
-      setMessage(error instanceof Error ? error.message : "La voix n’a pas pu être créée.");
-    } finally { cloning.current = false; }
+    } catch { later(); }
+    finally { cloning.current = false; }
   }, [id]);
 
   const syncMicrophone = useCallback(() => {
@@ -291,6 +310,7 @@ export function useSharedConversation(id: string, signedIn = false) {
         committed.add(event.turnId);
         if (committed.size > 500) committed.delete(committed.values().next().value!);
         setReceived(count => count + 1);
+        if (typeof event.ageMs === "number" && event.ageMs > STALE_SPEECH_MS) return;
         if (typeof event.ageMs === "number") timing.current = { transport: event.ageMs, request: 0, playback: 0 };
         if (event.mode === "context") directAudio.current?.setIncomingEnabled(false);
         if (event.mode === "direct") return; // OpenAI audio arrives over the peer media track.
@@ -334,6 +354,8 @@ export function useSharedConversation(id: string, signedIn = false) {
         if (roomRef.current?.me.consented && !data.me.consented) {
           recorder.current?.stop(); recorder.current?.discard(); recorder.current = new SpeechRecorder();
         }
+        // Back from a locked phone or a closed tab: renegotiate direct audio now, not after the backoff.
+        if (roomRef.current?.peer?.online === false && data.peer?.online) directAudio.current?.retrySoon();
         roomRef.current = data; setRoom(data);
         // Nobody is listening any more: close the microphone rather than let them talk into the void.
         // The session stays open, so the controls come back when the other person returns.
@@ -346,7 +368,8 @@ export function useSharedConversation(id: string, signedIn = false) {
           if (!data.creditsExhausted) turns.flush();
           recorder.current?.pause(); toneCapture.current?.stop(); translationRef.current.stop();
         }
-        const wanted = desiredMode(data.me);
+        // Tone matching is an account feature and, like the speaker's own voice, takes mode 2.
+        const wanted = desiredMode(data.me, speechOptionsRef.current.emotion && data.me.hasAccount);
         const unsupportedDirect = data.peer?.language && !supportsDirectOutput(data.peer.language);
         if (unsupportedDirect) modeReason.current = `${data.peer.language.toUpperCase()} output uses mode 2: this language is not documented for OpenAI live translation output.`;
         else if (!directUnavailable.current) modeReason.current = "";
@@ -374,12 +397,13 @@ export function useSharedConversation(id: string, signedIn = false) {
           data = await refreshed.json();
         }
         if (controller.signal.aborted) return;
-        const initialMode = modeForLanguage(desiredMode(data.me), data.peer?.language);
+        const initialMode = modeForLanguage(desiredMode(data.me, speechOptionsRef.current.emotion && data.me.hasAccount), data.peer?.language);
         turns.mode = initialMode; turns.desired = initialMode; setActiveMode(initialMode);
         roomRef.current = data; setRoom(data);
         // A reload starts a new provider; publish its actual mode even if the previous
         // browser left a different active mode in the session row.
         void fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: initialMode }), signal: controller.signal }).catch(() => {});
+        let linkError = "";
         const audio = new PeerAudioLink(id, data.me.slot, playing => {
           if (controller.signal.aborted) return;
           remoteSpeaking.current = playing;
@@ -389,9 +413,16 @@ export function useSharedConversation(id: string, signedIn = false) {
           if (controller.signal.aborted) return;
           modeReason.current = error; setMessage(error);
           if (audio.status === "unavailable") {
+            linkError = error;
             directUnavailable.current = true;
             turns.requestMode("context");
           } else { soundReadyRef.current = false; setSoundReady(false); rearm.current(); }
+        }, () => {
+          if (controller.signal.aborted) return;
+          // Direct audio is back: the mode follows the speaker's settings again, at the next poll.
+          directUnavailable.current = false; modeReason.current = "";
+          setMessage(current => current === linkError ? "" : current);
+          refreshNow.current();
         });
         directAudio.current = audio;
         void audio.start();
@@ -502,6 +533,8 @@ export function useSharedConversation(id: string, signedIn = false) {
       toneCapture.current?.stop();
     }
     syncMicrophone();
+    // Tone matching decides the mode: switch at the next sentence boundary, not at the next poll.
+    refreshNow.current();
   }
   function setToneTuning(next: ToneTuning) {
     if (!isToneTuning(next)) return;
@@ -543,7 +576,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       // Agreeing again is an explicit retry, so cloning gets another chance.
-      cloningBlocked.current = false;
+      cloningBlocked.current = false; cloneRetry.current = { at: 0, delay: CLONE_RETRY_MS };
       refreshNow.current();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
   }, [id]);

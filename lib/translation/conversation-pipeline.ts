@@ -4,7 +4,9 @@ import type { ConversationMode } from "./modes";
 import type { Language, PeerEvent } from "@/types/session";
 import type { SpeechOptions, SpeechMetadata, ToneResult } from "@/lib/audio/speech-options";
 
-export type PipelineTiming = { waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
+const TRANSLATE_ATTEMPTS = 2;
+const TRANSLATE_RETRY_MS = 400;
+export type PipelineTiming ={ waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
 export class ConversationPipeline {
   readonly memory = new ConversationMemory();
   mode: ConversationMode = "direct";
@@ -57,10 +59,7 @@ export class ConversationPipeline {
       if (this.controller.signal.aborted) return;
       // Clamp text context to fit the route's total request budget; keep the latest turns.
       const context = this.memory.recent().map(turn => ({ ...turn, original: turn.original.slice(-700), translation: turn.translation?.slice(-300) }));
-      const response = await fetch("/api/translate", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: this.options.sessionId, text: original, context, recentTranslations: this.memory.recentTranslations() }), signal: this.controller.signal,
-      });
+      const response = await this.translate(JSON.stringify({ sessionId: this.options.sessionId, text: original, context, recentTranslations: this.memory.recentTranslations() }));
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Translation failed. Try again.");
       if (this.controller.signal.aborted) return;
@@ -79,6 +78,19 @@ export class ConversationPipeline {
       if (!this.controller.signal.aborted) this.memory.add(event.turnId, { speaker: this.options.speaker(), original, ...language });
       if (!this.controller.signal.aborted) this.options.onError(error instanceof Error ? error.message : "Translation failed.");
     }).finally(() => { this.pending--; this.scheduleBoundary(); });
+  }
+  // A sentence whose translation fails is never heard at all, so a dropped request or a provider
+  // hiccup (5xx) gets one more try. A refusal (4xx: no credits, session over) would only repeat.
+  private async translate(body: string) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await fetch("/api/translate", { method: "POST", headers: { "Content-Type": "application/json" }, body, signal: this.controller.signal });
+        if (response.status < 500 || attempt === TRANSLATE_ATTEMPTS) return response;
+      } catch (error) {
+        if (this.controller.signal.aborted || attempt === TRANSLATE_ATTEMPTS) throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, TRANSLATE_RETRY_MS));
+    }
   }
   receive(event: PeerEvent, speaker: number) {
     if (!event.committed || !event.sourceLanguage || !event.targetLanguage) return;
