@@ -4,11 +4,12 @@ import { useState } from "react";
 import { accountReturnTo } from "@/lib/auth/return-to";
 
 // Signing in is one button, wherever it appears: there is no page in between to read.
-export function GoogleSignIn({ returnTo = "/", label = "Continue with Google", className = "primary-button" }:
-  { returnTo?: string; label?: string; className?: string }) {
+// `onStart` runs just before leaving for Google, to remember what the person asked for.
+export function GoogleSignIn({ returnTo = "/", label = "Continue with Google", className = "primary-button", onStart }:
+  { returnTo?: string; label?: string; className?: string; onStart?: () => void }) {
   const [busy, setBusy] = useState(false);
   return <button className={className} type="button" disabled={busy}
-    onClick={() => { setBusy(true); void signIn("google", { redirectTo: accountReturnTo(returnTo) }); }}>
+    onClick={() => { setBusy(true); onStart?.(); void signIn("google", { redirectTo: accountReturnTo(returnTo) }); }}>
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
       <path fill="currentColor" d="M17.6 9.2c0-.6-.1-1.2-.2-1.8H9v3.4h4.8a4.1 4.1 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.7-3.9 2.7-6.5Z" />
       <path fill="currentColor" d="M9 18c2.4 0 4.5-.8 6-2.2l-2.9-2.3c-.8.6-1.9.9-3.1.9-2.4 0-4.4-1.6-5.1-3.8H.9v2.3A9 9 0 0 0 9 18Z" />

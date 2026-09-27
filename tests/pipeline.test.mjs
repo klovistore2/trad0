@@ -73,7 +73,7 @@ test('failed translation is tried twice, then preserves original context without
  try{
   app.instance.original('À garder.');await tick();assert.equal(calls,1);assert.deepEqual(app.errors,[]);
   t.mock.timers.tick(400);await tick();await tick();
-  assert.equal(calls,2);assert.equal(app.sent.length,0);assert.equal(app.instance.memory.recent()[0].original,'À garder.');assert.deepEqual(app.errors,['Unavailable']);
+  assert.equal(calls,2);assert.equal(app.sent.length,0);assert.equal(app.instance.memory.recent()[0].original,'À garder.');assert.deepEqual(app.errors,['errorSentence']);
  }finally{globalThis.fetch=previous;app.instance.dispose();}
 });
 test('a dropped translation request is sent again, so the listener still hears the sentence',async t=>{
@@ -90,7 +90,7 @@ test('a dropped translation request is sent again, so the listener still hears t
 test('a refused translation is not retried: asking again would only be refused again',async()=>{
  const previous=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;return Response.json({error:'No credits left.'},{status:402});};
  const app=pipeline();app.instance.mode='context';app.instance.desired='context';
- try{app.instance.original('Bonjour.');await tick();await tick();assert.equal(calls,1);assert.deepEqual(app.errors,['No credits left.']);}
+ try{app.instance.original('Bonjour.');await tick();await tick();assert.equal(calls,1);assert.deepEqual(app.errors,['errorSentence']);}
  finally{globalThis.fetch=previous;app.instance.dispose();}
 });
 test('invitation clock counts speech rather than microphone-open time',t=>{

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OpenAITranslationProvider } from "@/lib/openai/translation-provider";
 import type { SessionStatus, TranslationProvider } from "@/types/translation";
+import type { StringKey } from "@/lib/i18n/strings";
 
-type State = { status: SessionStatus; translation: string; original: string; message: string };
+type State = { status: SessionStatus; translation: string; original: string; message: StringKey | "" };
 const initialState: State = { status: "idle", translation: "", original: "", message: "" };
 
 export function useTranslationSession(options: { targetLanguage?: string; sessionId?: string; onDelta?: (delta: string) => void; onOriginal?: (delta: string) => void; onAudio?: (track: MediaStreamTrack | null) => void; onFailure?: () => void; shouldEnableMicrophone?: () => boolean } = {}) {
@@ -43,7 +44,7 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
     const current: TranslationProvider = new OpenAITranslationProvider();
     provider.current = current;
     setState({ ...initialState, status: "connecting" });
-    current.onStatus((status, message = "") => {
+    current.onStatus((status, message: StringKey | "" = "") => {
       if (provider.current !== current) return;
       if (status === "idle" || status.endsWith("error") || status === "microphone_denied") {
         clearTimeout(settling.current);
@@ -61,7 +62,7 @@ export function useTranslationSession(options: { targetLanguage?: string; sessio
     current.onTranslatedText(event => {
       if (provider.current !== current) return;
       if (event.quality === "unreliable") {
-        setState(previous => ({ ...previous, message: "Je n’ai pas bien compris. Réessayez." }));
+        setState(previous => ({ ...previous, message: "errorNotUnderstood" }));
         return;
       }
       callbacks.current.onDelta?.(event.delta);

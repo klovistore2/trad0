@@ -76,8 +76,10 @@ test("releasing the floor leaves it free for either participant", async () => {
   peer.disconnect();
 });
 
-test("a refused claim surfaces the server message", async () => {
+// The page shows its own message in the reader's language; the server's wording never reaches it.
+test("a refused claim fails without carrying the server's wording", async () => {
   const Transport = load(async () => ({ ok: false, status: 403, json: async () => ({ error: "Cette conversation est terminée ou inaccessible." }) }));
   const peer = new Transport(() => {});
-  await assert.rejects(() => peer.takeFloor(), /terminée ou inaccessible/);
+  // The transport runs in its own VM context, so its errors are not instances of this Error.
+  await assert.rejects(() => peer.takeFloor(), error => /^floor 403$/.test(String(error?.message)));
 });

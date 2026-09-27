@@ -18,7 +18,7 @@ export function PageShell({ language, children }: { language: Language; children
           <Link href={pagePath("about", language)}>{t("navAbout")}</Link>
           <Link href={pagePath("faq", language)}>{t("navFaq")}</Link>
         </nav>
-        <ThemeToggle />
+        <ThemeToggle label={t("themeToggle")} />
       </div>
     </header>
     <section className="conversation-body">{children}</section>

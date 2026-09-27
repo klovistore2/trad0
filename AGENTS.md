@@ -28,8 +28,11 @@ Cas de référence : français ↔ thaï et anglais ↔ thaï ; la logique de tr
 Haut-parleur ou écouteur facultatif, avec le routage audio normal du navigateur et du système.
 
 1. Le créateur se connecte avec **Google uniquement**, puis crée une conversation depuis l’accueil.
-2. L’accueil ne demande que la langue de destination, anglais par défaut, sans Auto : la langue du
-   créateur reste Auto jusqu’à ses premières paroles. Les deux menus complets, avec Auto et correction
+2. L’accueil ne demande que la langue de destination, sans Auto : la langue du
+   créateur reste Auto jusqu’à ses premières paroles. Depuis le 27 septembre 2026, la cible proposée
+   n'est jamais la langue supposée du créateur : le dernier choix fait sur ce téléphone
+   (`trad0-peer-language`), sinon l'anglais, sinon le thaï (cas de référence) pour un anglophone.
+   Avant, un navigateur anglais proposait anglais → anglais. Les deux menus complets, avec Auto et correction
    manuelle, apparaissent dans la conversation. L’accueil n’ouvre aucun micro.
 3. Le créateur partage le QR ou le lien `/join/[code]` ; le code correspond à l’UUID de la session.
 4. L’invité rejoint sans compte. Un troisième participant est refusé.
@@ -43,8 +46,10 @@ Les sessions expirent après **une heure sans activité** (échéance repoussée
 l'état, au plus toutes les cinq minutes), dans la limite de six heures depuis la création. Avant le
 23 septembre 2026, l'heure partait de la création et coupait les conversations longues en plein échange. Fermer un onglet ne ferme pas la session. Le bouton de fin
 ferme la conversation pour les deux personnes et efface ses données temporaires ; les voix de compte
-restent conservées. Le bouton s'appelle donc « End the conversation » : l'ancien libellé
-« End session & delete voices » promettait une suppression qui n'a jamais lieu.
+restent conservées. Le bouton s'appelle donc « End the conversation » (traduit dans la langue de
+chacun) : l'ancien libellé « End session & delete voices » promettait une suppression qui n'a jamais
+lieu. Depuis le 27 septembre 2026, un second appui confirme la fin : un seul appui fermait tout,
+pour les deux, sans retour possible. On revient ensuite à l'accueil dans sa propre langue.
 
 Quand la conversation est fermée ou expirée, l'autre personne voit « Cette conversation est
 terminée » puis revient à l'accueil dans sa langue après trois secondes. Quand l'autre personne
@@ -265,8 +270,18 @@ navigue vers ces adresses et sert aussi de suggestion initiale pour la langue du
 La conversation suit la langue du participant. Les noms de langues des menus sont affichés dans la
 langue de lecture via `Intl.DisplayNames` (`lib/i18n/language-names.ts`), les endonymes de
 `types/session.ts` servant de repli.
-`lib/i18n/strings.ts` fournit les chaînes, avec repli vers l’anglais. Les traductions restent non relues
-et certaines nouvelles chaînes ne sont pas traduites partout. Paramètres et diagnostics sont en anglais.
+`lib/i18n/strings.ts` fournit les chaînes, avec repli vers l’anglais et des marqueurs `{nom}` remplis
+par le traducteur. Depuis le 27 septembre 2026, **tout ce qu'une personne lit** est dans sa langue :
+écran d'invitation (il était en français pour tous, avec l'ancien nom « À deux »), paramètres,
+consentement au clonage, crédits, confirmation de fin et messages d'erreur. Seuls les diagnostics DEV
+restent en anglais. Les quinze langues sont complètes ; `untranslated()` et un test le vérifient.
+Les traductions restent **non relues** par un locuteur natif.
+Les messages sont des **clés** (`StringKey`), jamais du texte : le serveur et les fournisseurs gardent
+leur formulation pour les journaux et les diagnostics, et le compilateur empêche qu'elle atteigne
+l'écran. Avant, les erreurs mélangeaient français et anglais selon leur origine, et deux d'entre elles
+nommaient ElevenLabs. Chaque message dit ce qui se passe ensuite, sans nom de fournisseur ni code.
+Avant de connaître sa place, la page utilise la langue du navigateur (« Connexion… », refus d'un
+troisième participant).
 
 ### Tour de parole et son
 
@@ -306,8 +321,11 @@ le consentement : seul un accord déjà enregistré sur ce compte peut être res
 L’identité Google est associée à `adu_users` par adresse e-mail ; préserver cette correspondance.
 
 **Compte rattaché ET consentement explicite sont requis avant tout enregistrement pour le clonage.**
-Les routes de consentement et de clonage refusent un participant sans compte. Le dialogue apparaît
-pour les participants ayant un compte ; dialogue et paramètres partagent la décision mémorisée dans
+Les routes de consentement et de clonage refusent un participant sans compte. La proposition de voix
+apparaît pour les participants ayant un compte. Depuis le 27 septembre 2026, c'est une **carte dans
+l'écran de conversation**, plus une fenêtre modale : elle attend 10 s de parole (ou le retour d'une
+connexion Google lancée depuis une offre de voix, mémorisé dans `sessionStorage`), au lieu de
+recouvrir l'écran d'invitation dès l'arrivée du créateur. Proposition et paramètres partagent la décision mémorisée dans
 `localStorage`. Le consentement accordé est aussi enregistré dans le profil. Un retrait mémorise un refus,
 sans effacer la décision locale, pour éviter de rouvrir le dialogue. Ne pas confondre cette mémoire
 locale avec un refus explicitement synchronisé sur tous les appareils.
@@ -539,8 +557,9 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
 - **Clonage** : qualité des échantillons et des clones à tester ; pas de filtrage complet par qualité
   de transcription. Les horloges de parole sont des estimations à partir des fragments, pas une mesure
   acoustique exacte. Correction manuelle du registre vocal non implémentée.
-- **Interface** : textes non tous relus/traduits, diagnostics à
-  retirer ou masquer pour la production. Refus du dialogue mémorisé localement, pas une préférence
+- **Interface** : traductions complètes mais non relues par des locuteurs natifs, diagnostics à
+  retirer ou masquer pour la production. Le texte des erreurs côté serveur reste mixte (français et
+  anglais) : il n'est plus affiché, mais vaut encore d'être unifié pour les journaux. Refus du dialogue mémorisé localement, pas une préférence
   de refus explicite et universelle sur le compte.
 - **Protection des coûts** : pas de quotas ni de limitation de débit distribuée. Le contrôle d’origine
   ne suffit pas contre les abus. Depuis le 27 septembre 2026, le jeton de traduction directe et le
@@ -626,6 +645,15 @@ renégociée, nouvel essai de traduction, danda, clonage) : **89 tests unitaires
 et build isolé réussis. `tests/browser/tone-branch.mjs` adapté (le ton seul fait passer en mode 2)
 mais non relancé. La renégociation de `PeerAudioLink` n'a **aucun test automatique** (WebRTC) :
 à valider sur deux téléphones en verrouillant l'un plus de 15 s.
+
+Troisième lot du même jour (interface dans la langue de chacun, messages en clés, proposition de voix
+intégrée, confirmation de fin, langue cible par défaut, bouton son) : **91 tests unitaires**, lint,
+TypeScript, build isolé, et parcours Chromium `shared-session.mjs` et `credits.mjs` réussis (Neon
+réel, fournisseurs simulés), adaptés aux nouveaux libellés. `tone-branch.mjs` (fournisseurs réels,
+payant) non relancé. `languages-live.mjs` était déjà cassé avant ce lot : il pilote
+`#translation-mode`, un menu retiré plus tôt, et lisait `aria-pressed` sur le bouton son.
+Un parcours ne doit pas attendre le corps d'une réponse que la page ne lit pas : Chromium ne la
+termine jamais et `response.text()` bloque sans délai.
 
 ## Consigne technique gérée par Next.js
 

@@ -16,6 +16,7 @@ import { DEFAULT_SPEECH_OPTIONS, DEFAULT_TONE_TUNING, isSpeechOptions, isToneTun
 import { FINAL_TIER, VOICE_CONSENT, cloneRefused, dueTier } from "@/lib/voice/consent";
 import type { Language, ReceivedEvent, SharedSession } from "@/types/session";
 import type { VoiceStatus } from "@/types/voice";
+import type { StringKey } from "@/lib/i18n/strings";
 
 // A cloning attempt that failed for a passing reason is tried again after a minute, then less often.
 const CLONE_RETRY_MS = 60_000;
@@ -47,7 +48,8 @@ export function useSharedConversation(id: string, signedIn = false) {
   const incomingSpeech = useRef<SpeechMetadata | null>(null);
   const [room, setRoom] = useState<SharedSession | null>(null);
   const [ended, setEnded] = useState(false);
-  const [message, setMessage] = useState("");
+  // A key, shown in the reader's own language: no server or provider wording ever reaches the page.
+  const [message, setMessage] = useState<StringKey | "">("");
   // Recent sentences from the other person, oldest first. The voice reads them in order and can
   // lag behind when they talk fast, so the one being read must stay on screen with the newer ones.
   const [incoming, setIncoming] = useState<{ turnId: string; text: string }[]>([]);
@@ -154,11 +156,10 @@ export function useSharedConversation(id: string, signedIn = false) {
         form.append("sample", blob, `voice-${index}.${extension}`);
       });
       const response = await fetch(`/api/voice/clone`, { method: "POST", body: form });
-      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (!cloneRefused(response.status)) { later(); return; }
         cloningBlocked.current = true;
-        setMessage(typeof data.error === "string" ? data.error : "La voix n’a pas pu être créée.");
+        setMessage("errorVoiceCreate");
         return;
       }
       cloneRetry.current = { at: 0, delay: CLONE_RETRY_MS };
@@ -192,7 +193,7 @@ export function useSharedConversation(id: string, signedIn = false) {
 
   // A playback problem concerns one sentence: say so briefly, then clear it if nothing replaced it.
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const flash = useCallback((text: string) => {
+  const flash = useCallback((text: StringKey) => {
     setMessage(text); clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => setMessage(current => current === text ? "" : current), 5000);
   }, []);
@@ -209,14 +210,14 @@ export function useSharedConversation(id: string, signedIn = false) {
         setSpeakingTurn(event.turnId);
         try {
           await voice.current?.speakStream({ sessionId: id, speech: event.speech, language: event.targetLanguage || roomRef.current?.me.language || "en", textStream: (async function* () { yield event.text + " "; })() });
-        } catch (error) {
+        } catch {
           // A system-suspended context is not an error the listener should read: re-arm quietly.
           if (voice.current && voice.current.contextState !== "running") {
             queue.current = []; soundReadyRef.current = false; setSoundReady(false); rearm.current();
             break;
           }
           // One sentence failing must not silence the ones already waiting behind it.
-          flash(error instanceof Error ? error.message : "The sound is unavailable. The text is still shown.");
+          flash("errorVoice");
         }
         const measured = voice.current?.lastLatency;
         if (measured) timing.current = { ...timing.current, request: measured.request, playback: measured.total };
@@ -266,8 +267,8 @@ export function useSharedConversation(id: string, signedIn = false) {
         }
         if (controller.signal.aborted) return;
         setActiveMode(mode);
-        const response = await fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: mode }), signal: controller.signal });
-        if (!response.ok) setMessage("The translation mode changed locally, but could not be shared yet.");
+        // Nothing the reader can act on if this fails: the next switch or reload publishes it again.
+        await fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: mode }), signal: controller.signal }).catch(() => {});
         refreshNow.current();
       },
     });
@@ -280,10 +281,10 @@ export function useSharedConversation(id: string, signedIn = false) {
       }).catch(() => {});
     });
     recorder.current = new SpeechRecorder();
-    const player = new ElevenLabsVoiceProvider((status, error) => {
+    // Playback failures are reported by playQueue, which knows whether the listener must read one.
+    const player = new ElevenLabsVoiceProvider(status => {
       if (controller.signal.aborted) return;
       setVoiceStatus(status === "idle" && remoteSpeaking.current ? "playing" : status);
-      if (error) setMessage(error);
     });
     voice.current = player;
     const committed = new Set<string>();
@@ -318,7 +319,7 @@ export function useSharedConversation(id: string, signedIn = false) {
           // Before the first tap, hold only the latest sentence so it plays instead of a backlog.
           if (!soundReadyRef.current) queue.current = [event];
           else {
-            if (queue.current.length >= 20) { setMessage("La lecture a pris du retard. Le texte reste disponible."); queue.current = []; }
+            if (queue.current.length >= 20) { setMessage("playbackBehind"); queue.current = []; }
             queue.current.push(event);
           }
           void playQueue();
@@ -335,16 +336,17 @@ export function useSharedConversation(id: string, signedIn = false) {
         if (!response.ok) {
           // Only a closed, expired or foreign session is final. Everything else deserves a retry.
           if ([401, 403, 404].includes(response.status)) {
-            setMessage(data.error || "La conversation est terminée.");
+            setMessage("conversationEnded");
             stopped.current = "session ended"; setEnded(true);
             running.current = false; setEnabled(false); player.stop(); directAudio.current?.dispose(); turns.dispose(); translationRef.current.stop();
             toneCapture.current?.stop();
             return;
           }
-          throw new Error(data.error);
+          throw new Error(`session ${response.status}`);
         }
         if (controller.signal.aborted || sequence !== refreshSequence.current) return;
         failures = 0; setConnectionLost(false);
+        setMessage(current => current === "errorConnection" ? "" : current);
         if (data.peer?.language && data.peer.language !== roomRef.current?.peer?.language) {
           turns.flush();
           // An unsupported session.update would kill the old direct connection before
@@ -385,15 +387,17 @@ export function useSharedConversation(id: string, signedIn = false) {
     }
     refreshNow.current = () => { void refresh(); };
     async function join() {
+      let failure: StringKey = "errorRetry";
       try {
         const response = await fetch(`/api/sessions/${id}/join`, { method: "POST", signal: controller.signal });
         let data = await response.json();
-        if (!response.ok) throw new Error(data.error);
+        // A third person, or a closed or expired conversation, is refused for good.
+        if (!response.ok) { failure = [403, 404].includes(response.status) ? "errorJoin" : "errorRetry"; throw new Error(`join ${response.status}`); }
         if (signedIn && !data.me.hasAccount) {
           const linked = await fetch(`/api/sessions/${id}/account`, { method: "POST", signal: controller.signal });
-          if (!linked.ok) throw new Error((await linked.json()).error);
+          if (!linked.ok) throw new Error(`account ${linked.status}`);
           const refreshed = await fetch(`/api/sessions/${id}`, { signal: controller.signal, cache: "no-store" });
-          if (!refreshed.ok) throw new Error("Could not restore your conversation.");
+          if (!refreshed.ok) throw new Error(`session ${refreshed.status}`);
           data = await refreshed.json();
         }
         if (controller.signal.aborted) return;
@@ -403,25 +407,24 @@ export function useSharedConversation(id: string, signedIn = false) {
         // A reload starts a new provider; publish its actual mode even if the previous
         // browser left a different active mode in the session row.
         void fetch(`/api/sessions/${id}/mode`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: initialMode }), signal: controller.signal }).catch(() => {});
-        let linkError = "";
         const audio = new PeerAudioLink(id, data.me.slot, playing => {
           if (controller.signal.aborted) return;
           remoteSpeaking.current = playing;
           if (!speaking.current) setVoiceStatus(playing ? "playing" : "idle");
           syncMicrophone();
-        }, error => {
+        }, reason => {
           if (controller.signal.aborted) return;
-          modeReason.current = error; setMessage(error);
+          modeReason.current = reason;
           if (audio.status === "unavailable") {
-            linkError = error;
+            setMessage("directAudioWeak");
             directUnavailable.current = true;
             turns.requestMode("context");
-          } else { soundReadyRef.current = false; setSoundReady(false); rearm.current(); }
+          } else { setMessage("tapToHear"); soundReadyRef.current = false; setSoundReady(false); rearm.current(); }
         }, () => {
           if (controller.signal.aborted) return;
           // Direct audio is back: the mode follows the speaker's settings again, at the next poll.
           directUnavailable.current = false; modeReason.current = "";
-          setMessage(current => current === linkError ? "" : current);
+          setMessage(current => current === "directAudioWeak" ? "" : current);
           refreshNow.current();
         });
         directAudio.current = audio;
@@ -431,7 +434,7 @@ export function useSharedConversation(id: string, signedIn = false) {
         // Seed the floor once; the 500 ms poll owns it from here.
         if (!floorKnown.current) { floorKnown.current = true; floorRef.current = data.floor; setFloor(data.floor); }
         void peer.connect(id); void refresh();
-      } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Impossible de rejoindre."); }
+      } catch { if (!controller.signal.aborted) setMessage(failure); }
     }
     void join();
     // Autoplay rules need one gesture in the page, but never a specific one: the first
@@ -469,8 +472,8 @@ export function useSharedConversation(id: string, signedIn = false) {
           await unlockSound();
           await translationRef.current.start(turns.mode === "context");
           syncMicrophone();
-        } catch (error) {
-          setMessage(error instanceof Error ? error.message : "Touchez Activer le micro pour reprendre.");
+        } catch {
+          setMessage("errorTranslationStopped");
         }
       })();
     };
@@ -497,7 +500,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       sound.current = true; setSoundOn(true); directAudio.current?.setMuted(false);
       void playQueue();
     }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
+    catch { setMessage("errorSound"); }
   }
   async function start() {
     if (running.current || starting) return;
@@ -514,7 +517,7 @@ export function useSharedConversation(id: string, signedIn = false) {
       running.current = true; setEnabled(true); stopped.current = "running";
       await translation.start(publisher.current?.mode === "context");
       syncMicrophone();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Autorisez le micro puis réessayez."); }
+    } catch { setMessage("errorSound"); }
     finally { setStarting(false); }
   }
   function stop() {
@@ -545,19 +548,19 @@ export function useSharedConversation(id: string, signedIn = false) {
   }
   async function takeFloor() {
     if (claiming || floorRef.current === roomRef.current?.me.slot) return;
-    await changeFloor(() => transport.current?.takeFloor(), "Impossible de prendre la parole.");
+    await changeFloor(() => transport.current?.takeFloor());
   }
   async function releaseFloor() {
     if (claiming || floorRef.current !== roomRef.current?.me.slot) return;
-    await changeFloor(() => transport.current?.releaseFloor(), "Impossible de rendre la parole.");
+    await changeFloor(() => transport.current?.releaseFloor());
   }
-  async function changeFloor(action: () => Promise<number | null> | undefined, failureMessage: string) {
+  async function changeFloor(action: () => Promise<number | null> | undefined) {
     setClaiming(true);
     setMessage("");
     try {
       const slot = await action();
       if (slot !== undefined) { floorKnown.current = true; floorRef.current = slot; setFloor(slot); syncMicrophone(); }
-    } catch (error) { setMessage(error instanceof Error ? error.message : failureMessage); }
+    } catch { setMessage("errorFloor"); }
     finally { setClaiming(false); }
   }
   function toggleSound() {
@@ -573,12 +576,11 @@ export function useSharedConversation(id: string, signedIn = false) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: id, consent: VOICE_CONSENT }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw new Error(`consent ${response.status}`);
       // Agreeing again is an explicit retry, so cloning gets another chance.
       cloningBlocked.current = false; cloneRetry.current = { at: 0, delay: CLONE_RETRY_MS };
       refreshNow.current();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
+    } catch { setMessage("errorRetry"); }
   }, [id]);
   async function setUseClone(useClone: boolean) {
     setMessage("");
@@ -587,10 +589,9 @@ export function useSharedConversation(id: string, signedIn = false) {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: id, useClone }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw new Error(`prefer ${response.status}`);
       refreshNow.current();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }
+    } catch { setMessage("errorRetry"); }
   }
   async function setLanguage(slot: number, language: Language | "auto") {
     if (changingLanguageRef.current) return;
@@ -600,9 +601,8 @@ export function useSharedConversation(id: string, signedIn = false) {
       const response = await fetch(`/api/sessions/${id}/language`, {
         method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slot, language }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Choose the language again."); }
+      if (!response.ok) throw new Error(`language ${response.status}`);
+    } catch { setMessage("errorLanguage"); }
     finally {
       refreshNow.current();
       changingLanguageRef.current = false; setChangingLanguage(false);
@@ -611,7 +611,7 @@ export function useSharedConversation(id: string, signedIn = false) {
   async function playTestTone() {
     setMessage("");
     try { await voice.current?.testTone(); soundReadyRef.current = true; setSoundReady(true); }
-    catch (error) { setMessage(error instanceof Error ? error.message : "Le son est indisponible."); }
+    catch { setMessage("errorSound"); }
   }
   const readAudioState = useCallback(() => ({
     context: voice.current?.contextState ?? "absent",

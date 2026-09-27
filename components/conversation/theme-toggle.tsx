@@ -9,7 +9,8 @@ function updateBrowserColor() {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", color);
 }
 
-export function ThemeToggle() {
+// The label comes from the page, in its reader's language.
+export function ThemeToggle({ label = "Switch between light and dark theme" }: { label?: string }) {
   useEffect(() => {
     const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
     const syncStorage = (event: StorageEvent) => {
@@ -41,7 +42,7 @@ export function ThemeToggle() {
     updateBrowserColor();
   }
 
-  return <button type="button" className="theme-toggle" onClick={toggle} aria-label="Changer le thème clair ou sombre" title="Changer le thème clair ou sombre">
+  return <button type="button" className="theme-toggle" onClick={toggle} aria-label={label} title={label}>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
       <circle cx="12" cy="12" r="8" />
       <path d="M12 4a8 8 0 0 1 0 16Z" fill="currentColor" stroke="none" />

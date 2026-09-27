@@ -1,3 +1,5 @@
+import type { StringKey } from "@/lib/i18n/strings";
+
 export type SessionStatus = "idle" | "connecting" | "listening" | "translating" | "microphone_denied" | "provider_error" | "network_error";
 export type TranscriptEvent = {
   delta: string;
@@ -16,5 +18,6 @@ export interface TranslationProvider {
   commitInput?(): void;
   onOriginalTranscript(cb: (event: TranscriptEvent) => void): void;
   onTranslatedText(cb: (event: TranslationEvent) => void): void;
-  onStatus(cb: (status: SessionStatus, message?: string) => void): void;
+  // Messages are keys, shown in the reader's own language; never provider text.
+  onStatus(cb: (status: SessionStatus, message?: StringKey) => void): void;
 }

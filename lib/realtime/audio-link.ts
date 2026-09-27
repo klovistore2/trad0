@@ -43,6 +43,7 @@ export class PeerAudioLink {
   private retries = 0;
   status = "waiting";
   lastFailure = "";
+  // `failed` carries an English reason for the diagnostics; the page shows its own message.
   constructor(private id: string, private slot: number, private changed: (playing: boolean) => void, private failed: (message: string) => void, private recovered: () => void = () => {}) {
     this.audio.setAttribute("playsinline", ""); this.audio.autoplay = false;
   }
@@ -74,7 +75,7 @@ export class PeerAudioLink {
       if (this.ready) void context.resume();
     }
     try { await this.sender?.replaceTrack(track); }
-    catch { this.fail("Could not forward translated audio. Use translation with context."); }
+    catch { this.fail("Could not forward translated audio. Mode 2 is used meanwhile."); }
   }
   private async post(description?: RTCSessionDescriptionInit) {
     const response = await fetch(`/api/sessions/${this.id}/audio-link`, {
@@ -106,7 +107,7 @@ export class PeerAudioLink {
         if (this.degraded) { this.degraded = false; this.recovered(); }
       }
       if (pc.connectionState === "disconnected" && !this.disconnectedAt) this.disconnectedAt = Date.now();
-      if (pc.connectionState === "failed") this.fail("Direct audio could not connect. Translation with context is available.");
+      if (pc.connectionState === "failed") this.fail("Direct audio could not connect. Mode 2 is used meanwhile.");
     };
     return pc;
   }
@@ -153,8 +154,8 @@ export class PeerAudioLink {
         } else if (this.slot === 0 && !this.answered && remote.targetEpoch === this.epoch && remote.description?.type === "answer") {
           await this.connection?.setRemoteDescription(remote.description); this.answered = true;
         }
-        if (this.waitingAt && Date.now() - this.waitingAt > 25_000) this.fail("Direct audio is unavailable on this network. Switching to translation with context.");
-        if (this.status === "disconnected" && Date.now() - this.disconnectedAt > 15_000) this.fail("Direct audio was disconnected. Switching to translation with context.");
+        if (this.waitingAt && Date.now() - this.waitingAt > 25_000) this.fail("Direct audio is unavailable on this network. Mode 2 is used meanwhile.");
+        if (this.status === "disconnected" && Date.now() - this.disconnectedAt > 15_000) this.fail("Direct audio was disconnected. Mode 2 is used meanwhile.");
       }
     } catch { if (!this.controller.signal.aborted) this.lastFailure = "Audio signalling temporarily unavailable"; }
     finally { if (!this.controller.signal.aborted) this.timer = setTimeout(() => void this.poll(), this.status === "connected" ? 3000 : 1000); }

@@ -1,4 +1,5 @@
 import type { SessionStatus, TranscriptEvent, TranslationProvider, TranslationSessionConfig } from "@/types/translation";
+import type { StringKey } from "@/lib/i18n/strings";
 import { parseTranslationMessage } from "./events";
 
 export class OpenAITranslationProvider implements TranslationProvider {
@@ -15,12 +16,12 @@ export class OpenAITranslationProvider implements TranslationProvider {
   private pendingLanguage?: string;
   private original: (event: TranscriptEvent) => void = () => {};
   private translated: (event: TranscriptEvent) => void = () => {};
-  private status: (status: SessionStatus, message?: string) => void = () => {};
+  private status: (status: SessionStatus, message?: StringKey) => void = () => {};
   onOriginalTranscript(cb: typeof this.original) { this.original = cb; }
   onTranslatedText(cb: typeof this.translated) { this.translated = cb; }
   onStatus(cb: typeof this.status) { this.status = cb; }
 
-  private fail(status: SessionStatus, message: string) {
+  private fail(status: SessionStatus, message: StringKey) {
     if (this.controller.signal.aborted) return;
     void this.disconnect();
     this.status(status, message);
@@ -31,10 +32,10 @@ export class OpenAITranslationProvider implements TranslationProvider {
     const signal = this.controller.signal;
     this.status("connecting");
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) {
-      this.fail("microphone_denied", "Ouvrez ce site en HTTPS dans Safari ou Chrome pour utiliser le micro.");
+      this.fail("microphone_denied", "errorSecure");
       return;
     }
-    this.timer = setTimeout(() => this.fail("network_error", "La connexion prend trop de temps. Réessayez."), 30_000);
+    this.timer = setTimeout(() => this.fail("network_error", "errorTranslationStart"), 30_000);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       // Permission may resolve after cancellation or navigation.
@@ -42,15 +43,15 @@ export class OpenAITranslationProvider implements TranslationProvider {
       this.stream = stream;
       // Apply the turn state before negotiation, so waiting for the floor never leaks audio.
       this.setMicrophoneEnabled(microphoneEnabled);
-      stream.getAudioTracks().forEach(track => track.addEventListener("ended", () => this.fail("microphone_denied", "Le micro a été déconnecté. Réessayez.")));
+      stream.getAudioTracks().forEach(track => track.addEventListener("ended", () => this.fail("microphone_denied", "errorMicrophoneLost")));
       const tokenResponse = await fetch(transcriptionOnly ? "/api/openai/transcription-token" : "/api/openai/realtime-token", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetLanguage, sessionId }), signal,
       });
       const token: unknown = await tokenResponse.json();
+      // The server's own wording stays in its response: the reader gets a message in their language.
       if (!tokenResponse.ok || !token || typeof token !== "object" || !("value" in token) || typeof token.value !== "string") {
-        const message = token && typeof token === "object" && "error" in token && typeof token.error === "string" ? token.error : "La traduction est indisponible. Réessayez.";
-        this.fail("provider_error", message);
+        this.fail("provider_error", "errorTranslationStart");
         return;
       }
       if (signal.aborted) return;
@@ -86,7 +87,7 @@ export class OpenAITranslationProvider implements TranslationProvider {
             if (input.type === "error") {
               if (input.error?.code === "input_audio_buffer_commit_empty") {
                 this.inputCommitPending = false; this.inputNeedsCommit = false;
-              } else this.fail("provider_error", "Transcription interrupted. Try again.");
+              } else this.fail("provider_error", "errorTranslationStopped");
             }
           } catch { /* Ignore malformed events. */ }
           return;
@@ -94,28 +95,26 @@ export class OpenAITranslationProvider implements TranslationProvider {
         const event = parseTranslationMessage(data);
         if (event?.kind === "original") this.original({ delta: event.delta, quality: "unknown" });
         if (event?.kind === "translation") this.translated({ delta: event.delta, quality: "unknown" });
-        if (event?.kind === "error") this.fail("provider_error", "La traduction a été interrompue. Réessayez.");
-        if (event?.kind === "closed") this.fail("network_error", "La session est terminée. Reconnectez-vous.");
+        if (event?.kind === "error") this.fail("provider_error", "errorTranslationStopped");
+        if (event?.kind === "closed") this.fail("network_error", "errorTranslationStopped");
       };
-      channel.onerror = () => this.fail("network_error", "Connexion perdue. Réessayez.");
-      channel.onclose = () => this.fail("network_error", "Connexion perdue. Réessayez.");
+      channel.onerror = () => this.fail("network_error", "errorTranslationStopped");
+      channel.onclose = () => this.fail("network_error", "errorTranslationStopped");
       peer.onconnectionstatechange = () => {
-        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) this.fail("network_error", "Connexion perdue. Réessayez.");
+        if (["failed", "disconnected", "closed"].includes(peer.connectionState)) this.fail("network_error", "errorTranslationStopped");
       };
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       const response = await fetch(transcriptionOnly ? "https://api.openai.com/v1/realtime/calls" : "https://api.openai.com/v1/realtime/translations/calls", {
         method: "POST", headers: { Authorization: `Bearer ${token.value}`, "Content-Type": "application/sdp" }, body: offer.sdp, signal,
       });
-      if (!response.ok) { this.fail("provider_error", "Impossible de démarrer la traduction. Réessayez."); return; }
+      if (!response.ok) { this.fail("provider_error", "errorTranslationStart"); return; }
       const sdp = await response.text();
       if (!signal.aborted) await peer.setRemoteDescription({ type: "answer", sdp });
     } catch (error) {
       if (signal.aborted) return;
       const denied = error instanceof DOMException && ["NotAllowedError", "NotFoundError", "NotReadableError"].includes(error.name);
-      this.fail(denied ? "microphone_denied" : "network_error", denied
-        ? "Autorisez le micro dans votre navigateur, puis réessayez."
-        : "Impossible de se connecter. Vérifiez votre connexion et réessayez.");
+      this.fail(denied ? "microphone_denied" : "network_error", denied ? "errorMicrophone" : "errorTranslationStart");
     }
   }
 

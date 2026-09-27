@@ -2,7 +2,7 @@
 // never to an empty label.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { translator } from '../lib/i18n/strings.ts';
+import { translator, untranslated } from '../lib/i18n/strings.ts';
 import { createLoader } from './load-ts.mjs';
 import { LANGUAGES } from '../types/session.ts';
 
@@ -27,6 +27,20 @@ test('the guest reads their own language, not the creator’s', () => {
   assert.notEqual(translator('fr')('doneSpeaking'), translator('en')('doneSpeaking'));
   assert.match(translator('th')('speak'), /[฀-๿]/, 'Thai must render in Thai script');
   assert.match(translator('ja')('speak'), /[぀-ヿ一-鿿]/, 'Japanese must render in Japanese script');
+});
+
+// Everything a person reads during a conversation, problems and settings included, is in their
+// own language: a missing key would show English to a guest who may not read it.
+test('every offered language translates every key, none left in English', () => {
+  for (const language of LANGUAGES) assert.deepEqual(untranslated(language), [], language);
+});
+
+test('placeholders are filled in every language, whatever its word order', () => {
+  for (const language of LANGUAGES) {
+    const text = translator(language)('voiceReady', { tier: 1, final: 2, seconds: 42, target: 150 });
+    assert.doesNotMatch(text, /[{}]/, language);
+    for (const value of ['1', '2', '42', '150']) assert.ok(text.includes(value), `${language}: ${value}`);
+  }
 });
 
 test('English is the base and is always complete', () => {

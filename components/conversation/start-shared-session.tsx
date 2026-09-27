@@ -26,9 +26,9 @@ export function StartSharedSession({ signedIn, outOfCredits = false, peerLanguag
           body: JSON.stringify({ peerLanguage, language, languageAuto, peerLanguageAuto }),
         }); const data = await response.json();
         if (response.status === 402) { setNoCredits(true); return; }
-        if (!response.ok) throw new Error(data.error);
+        if (!response.ok) throw new Error(`create ${response.status}`);
         router.push(`/session/${data.id}`);
-      } catch (error) { setMessage(error instanceof Error ? error.message : t("homeCreateError")); }
+      } catch { setMessage(t("homeCreateError")); }
       finally { busy.current = false; setLoading(false); }
     }}>{loading ? t("homeCreating") : t("homeStart")}</button>
     {message && <p role="alert" className="error-message">{message}</p>}

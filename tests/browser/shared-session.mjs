@@ -87,9 +87,10 @@ try {
  // The home page opens no microphone, and without an account it offers signing in, not creating.
  await expect(anonymous.getByRole('button',{name:'Start talking'})).toHaveCount(0);
  // The other person's language is chosen before the conversation is created.
+ // Never the visitor's own language: an English browser is offered Thai, the reference case.
  const picker=anonymous.getByLabel('Translate to:');
- await expect(picker).toHaveValue('en');
- await expect(anonymous.getByRole('status')).toHaveText('Auto ↔ English');
+ await expect(picker).toHaveValue('th');
+ await expect(anonymous.getByRole('status')).toHaveText('Auto ↔ Thai');
  await expect(picker.locator('option')).toContainText(['Dutch','English','French','Thai']);
  await anonymous.getByRole('button',{name:'Sign in to start a conversation'}).waitFor();
  await expect(anonymous.getByRole('button',{name:/password|e-mail address/i})).toHaveCount(0);
@@ -100,9 +101,10 @@ try {
  await a.locator('#peer-language').selectOption('en');
  await a.getByRole('button',{name:/Parler à quelqu’un/}).click();
  await a.waitForURL('**/session/*');sessionId=new URL(a.url()).pathname.split('/').pop();
- // The voice choice is asked once, on arrival. Declining keeps a standard voice.
- await a.getByRole('button',{name:/Pas maintenant/}).click();
+ // Nothing about the voice stands between the creator and the invitation: it is offered later,
+ // inline, once the conversation is under way.
  await expect(a.getByRole('dialog')).toHaveCount(0);
+ await expect(a.locator('.voice-offer')).toHaveCount(0);
  await a.getByRole('img',{name:'QR code du lien d’invitation'}).waitFor();
  const link=await a.getByRole('textbox',{name:'Lien d’invitation'}).inputValue();assert.match(link,/\/join\//);
  const b=await client();await b.goto(link);
@@ -113,7 +115,8 @@ try {
  await a.getByRole('button',{name:'Commencer à parler'}).waitFor();
  await a.locator('#my-language').selectOption('fr');
  const c=await client();await c.goto(link);
- await expect(c.locator('.error-message')).toContainText(/terminée|inaccessible/);
+ // Refused in the third person's own language, never with the server's wording.
+ await expect(c.locator('.error-message')).toContainText('You can’t join this conversation');
  // A single tap starts the conversation and claims the free floor: no second press to speak.
  await a.getByRole('button',{name:'Commencer à parler'}).click();
  // Intent is expressed: the button must never fall back to offering "Parler" while connecting.
@@ -125,7 +128,8 @@ try {
  // listening, even when the pointer is held long enough for asynchronous arming to finish.
  const speaker=b.locator('.sound-icon');
  await expect(speaker).toHaveAttribute('aria-label','Hear the translation');
- await expect(speaker).toHaveAttribute('aria-pressed','true');
+ // The label alone says what a tap does: a toggle state beside a changing label would contradict it.
+ await expect(speaker).not.toHaveAttribute('aria-pressed');
  await expect(speaker.locator('path[d="M16 9.5l5 5"]')).toHaveCount(1);
  const speakerBounds=await speaker.boundingBox();assert.ok(speakerBounds);
  await b.mouse.move(speakerBounds.x+speakerBounds.width/2,speakerBounds.y+speakerBounds.height/2);
@@ -135,7 +139,6 @@ try {
  await expect(speaker).toHaveAttribute('aria-label','Hear the translation');
  await b.mouse.up();
  await expect(speaker).toHaveAttribute('aria-label','Mute the sound');
- await expect(speaker).toHaveAttribute('aria-pressed','false');
  await expect(speaker.locator('path[d="M16 9.5l5 5"]')).toHaveCount(0);
  // A listener who never started a microphone session hears the translated track.
  await a.waitForFunction(()=>window.testAudioPeers?.some(p=>p.connectionState==='connected'));
@@ -199,7 +202,9 @@ try {
  const dutchUpdate=b.waitForResponse(response=>response.url().endsWith('/language') && response.request().method()==='PATCH');
  await b.locator('#peer-language').selectOption('nl');
  const dutchResponse=await dutchUpdate;
- assert.equal(dutchResponse.status(),200,await dutchResponse.text());
+ // The page no longer reads this body (its wording is never shown), and Chromium only completes
+ // a response the page reads: awaiting text() here would wait forever. The status says enough.
+ assert.equal(dutchResponse.status(),200);
  await expect(a.locator('#my-language')).toHaveValue('nl',{timeout:10000});
  await expect(b.locator('.pipeline-diagnostics > summary')).toContainText('2 ·');
  assert.equal(await b.evaluate(()=>window.testUpdates?.some(e=>e.session?.audio?.output?.language==='nl')),false);
@@ -285,21 +290,22 @@ try {
  await a.waitForFunction(()=>window.testMicrophone.enabled===false);
  await a.screenshot({path:'/tmp/a-deux-conversation.png',fullPage:true});
  // The conversation screen carries none of this: settings hold voice, invite, diagnostics and closing.
- await expect(a.getByLabel(/Use my own voice when possible/)).toBeHidden();
- await expect(a.getByRole('button',{name:'End the conversation'})).toBeHidden();
+ await expect(a.getByLabel(/Utiliser ma propre voix/)).toBeHidden();
+ await expect(a.getByRole('button',{name:'Terminer la conversation'})).toBeHidden();
  // Consent is the tick itself, recorded server side; cloning then follows speech on its own.
- await a.getByRole('button',{name:'Settings'}).click();
- await a.getByRole('heading',{name:'Settings'}).waitFor();
- await expect(a.getByLabel(/Use my own voice when possible/)).not.toBeChecked();
- await a.getByLabel(/Use my own voice when possible/).check();
- await a.locator('.voice-consent').getByText(/captured/).waitFor();
+ // Settings read in the creator's own language, consent included.
+ await a.getByRole('button',{name:'Paramètres'}).click();
+ await a.getByRole('heading',{name:'Paramètres'}).waitFor();
+ await expect(a.getByLabel(/Utiliser ma propre voix/)).not.toBeChecked();
+ await a.getByLabel(/Utiliser ma propre voix/).check();
+ await a.locator('.voice-consent').getByText(/enregistrées/).waitFor();
  // Removing the voice stays a separate, explicit act, never a side effect of unticking.
- await a.getByText('Remove my voice').click();
- await a.getByRole('button',{name:/Delete my voice/}).click();
- await expect(a.getByLabel(/Use my own voice when possible/)).not.toBeChecked();
+ await a.getByText('Supprimer ma voix',{exact:true}).click();
+ await a.getByRole('button',{name:/retirer mon accord/}).click();
+ await expect(a.getByLabel(/Utiliser ma propre voix/)).not.toBeChecked();
  // Inviting belongs to the waiting screen only: settings carry no second invitation.
  await expect(a.getByRole('img',{name:'QR code du lien d’invitation'})).toHaveCount(0);
- await a.getByRole('button',{name:'Changer le thème clair ou sombre'}).click();
+ await a.getByRole('button',{name:'Passer du thème clair au thème sombre'}).click();
  await a.screenshot({path:'/tmp/a-deux-shared-dark.png',fullPage:true});
  assert.deepEqual(errors,[]);
  if (process.env.DATABASE_URL) {
@@ -313,6 +319,8 @@ try {
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${guestId},${guestEmail},'google')`;
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${guestId},'welcome',300)`;
  await b.context().addCookies(await signedInContext({id:guestId,email:guestEmail}));
+ // As the offer's sign-in button does before leaving for Google: the choice is shown on return.
+ await b.evaluate(()=>sessionStorage.setItem('trad0-voice-asked','1'));
  await b.goto(`/session/${sessionId}`);
  await b.waitForURL(`**/session/${sessionId}`);
  await b.getByRole('button',{name:'Use my voice'}).click();
@@ -324,8 +332,10 @@ try {
   return rows[0];
  }).toEqual({user_id:guestId,consented:true});
  assert.deepEqual(errors,[]);
- await a.getByRole('button',{name:'End the conversation'}).click();
- await a.waitForURL(baseURL+'/');
+ // Ending is for both people: a second tap confirms it, then the creator's own home page.
+ await a.getByRole('button',{name:'Terminer la conversation'}).click();
+ await a.getByRole('button',{name:'Oui, terminer'}).click();
+ await a.waitForURL(baseURL+'/fr');
  console.log('PASS: mobile QR, two browsers, third participant rejected, bidirectional subtitles, listener-only playback, streamed audio, one-tap start, speaker double check, floor claim and release, playback across a hidden screen, poll failure recovery, sound toggle, voice dialog, Google-only sign-in, settings panel, tone kept for accounts, per-speaker TTS options, voice consent and withdrawal, theme, session closure.');
 } finally {
  for(const context of contexts)await context.close();await browser.close();

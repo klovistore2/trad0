@@ -3,10 +3,11 @@ import { ConversationMemory } from "./memory";
 import type { ConversationMode } from "./modes";
 import type { Language, PeerEvent } from "@/types/session";
 import type { SpeechOptions, SpeechMetadata, ToneResult } from "@/lib/audio/speech-options";
+import type { StringKey } from "@/lib/i18n/strings";
 
 const TRANSLATE_ATTEMPTS = 2;
 const TRANSLATE_RETRY_MS = 400;
-export type PipelineTiming ={ waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
+export type PipelineTiming = { waitMs: number; translationMs: number; publishMs: number; contextTurns: number; model: string };
 export class ConversationPipeline {
   readonly memory = new ConversationMemory();
   mode: ConversationMode = "direct";
@@ -24,7 +25,7 @@ export class ConversationPipeline {
   constructor(private options: {
     sessionId: string; speaker: () => number; languages: () => { sourceLanguage: Language; targetLanguage: Language };
     send: (event: PeerEvent) => Promise<void>; switchMode: (mode: ConversationMode) => Promise<void>;
-    canSwitch?: () => boolean; onTranslation: (text: string) => void; onError: (message: string) => void;
+    canSwitch?: () => boolean; onTranslation: (text: string) => void; onError: (message: StringKey) => void;
     speechOptions?: () => SpeechOptions;
     currentTone?: (options: SpeechOptions) => ToneResult;
   }) {
@@ -61,7 +62,7 @@ export class ConversationPipeline {
       const context = this.memory.recent().map(turn => ({ ...turn, original: turn.original.slice(-700), translation: turn.translation?.slice(-300) }));
       const response = await this.translate(JSON.stringify({ sessionId: this.options.sessionId, text: original, context, recentTranslations: this.memory.recentTranslations() }));
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Translation failed. Try again.");
+      if (!response.ok) throw new Error(`translate ${response.status}`);
       if (this.controller.signal.aborted) return;
       const actualLanguage = { ...language, targetLanguage: data.targetLanguage as Language };
       this.memory.add(event.turnId, { speaker: this.options.speaker(), original, translation: data.text, ...actualLanguage });
@@ -74,9 +75,9 @@ export class ConversationPipeline {
       const timing = { waitMs, translationMs: data.translationMs, contextTurns: data.contextTurns, model: data.model, publishMs: 0 };
       await this.options.send({ ...event, text: data.text, original, kind: "translation", mode: "context", ...actualLanguage, timing, speech: speechMetadata });
       this.timing = { ...timing, publishMs: Math.round(performance.now() - publishStarted) };
-    }).catch(error => {
+    }).catch(() => {
       if (!this.controller.signal.aborted) this.memory.add(event.turnId, { speaker: this.options.speaker(), original, ...language });
-      if (!this.controller.signal.aborted) this.options.onError(error instanceof Error ? error.message : "Translation failed.");
+      if (!this.controller.signal.aborted) this.options.onError("errorSentence");
     }).finally(() => { this.pending--; this.scheduleBoundary(); });
   }
   // A sentence whose translation fails is never heard at all, so a dropped request or a provider
@@ -119,7 +120,7 @@ export class ConversationPipeline {
     try {
       await this.options.switchMode(next);
       if (!this.controller.signal.aborted) this.mode = next;
-    } catch (error) { this.mode = previous; this.options.onError(error instanceof Error ? error.message : "Could not change mode."); }
+    } catch { this.mode = previous; this.options.onError("errorTranslationStart"); }
     finally { this.switching = false; }
   }
   dispose() { this.controller.abort(); clearTimeout(this.boundary); this.source.dispose(); this.translated.dispose(); this.memory.clear(); }

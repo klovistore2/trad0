@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { StartSharedSession } from "./start-shared-session";
 import { ThemeToggle } from "./theme-toggle";
 import { AccountStatus } from "@/components/account/account-status";
-import { type Language } from "@/types/session";
+import { isLanguage, type Language } from "@/types/session";
 
 import { translator } from "@/lib/i18n/strings";
 import { languageLabel, languageOptions } from "@/lib/i18n/language-names";
@@ -16,6 +16,11 @@ import { browserLanguage } from "@/lib/translation/language";
 const subscribeLocale = () => () => {};
 const getLocale = () => browserLanguage(navigator.languages);
 const serverLocale = () => "en" as const;
+// The other person's language, as last chosen on this phone: someone who talks to Thai speakers
+// usually does so again. Read after hydration, like the locale.
+const peerKey = "trad0-peer-language";
+const readPeer = () => { try { const value = localStorage.getItem(peerKey); return isLanguage(value) ? value : null; } catch { return null; } };
+const noPeer = () => null;
 
 // The home page never opens a microphone: a conversation needs two devices, and a scripted
 // preview proved nothing about real speech. Choose the other person's language, then invite them.
@@ -28,7 +33,16 @@ export function Conversation({ email, pageLanguage, outOfCredits = false }: { em
   const options = languageOptions(pageLanguage);
   // Only the destination is chosen here: asking for your own language before anyone has spoken
   // was a guess the transcription makes better. It stays on Auto until the conversation starts.
-  const [peerLanguage, setPeerLanguage] = useState<Language>("en");
+  const own = pageLanguage === "en" ? locale : pageLanguage;
+  const remembered = useSyncExternalStore(subscribeLocale, readPeer, noPeer);
+  const [chosen, setChosen] = useState<Language | null>(null);
+  // Never the creator's own guessed language: English, or Thai (the reference case) for an
+  // English speaker, until a choice made on this phone says otherwise.
+  const peerLanguage = chosen ?? (remembered && remembered !== own ? remembered : own === "en" ? "th" : "en");
+  function choosePeer(language: Language) {
+    setChosen(language);
+    try { localStorage.setItem(peerKey, language); } catch { /* Only a convenience. */ }
+  }
 
   return <main className="conversation" lang={pageLanguage}>
     <header className="topbar">
@@ -39,15 +53,15 @@ export function Conversation({ email, pageLanguage, outOfCredits = false }: { em
           <Link href={pagePath("about", pageLanguage)}>{t("navAbout")}</Link>
           <Link href={pagePath("faq", pageLanguage)}>{t("navFaq")}</Link>
         </nav>
-        <ThemeToggle />
+        <ThemeToggle label={t("themeToggle")} />
       </div>
     </header>
 
-    <section className="conversation-body" aria-label="Start a conversation">
+    <section className="conversation-body" aria-label={t("homeStart")}>
       <label className="translate-to" htmlFor="peer-language">
         <span>{t("translateTo")}</span>
         <select id="peer-language" className="language-picker" value={peerLanguage}
-          onChange={event => setPeerLanguage(event.target.value as Language)}>
+          onChange={event => choosePeer(event.target.value as Language)}>
           {options.map(({ code, label }) => <option key={code} value={code}>{label}</option>)}
         </select>
       </label>
@@ -59,8 +73,8 @@ export function Conversation({ email, pageLanguage, outOfCredits = false }: { em
       </div>
       <div className="controls">
         <p className="session-status" role="status"><span className="status-dot" />{t("autoLanguage")} ↔ {languageLabel(peerLanguage, pageLanguage)}</p>
-        <StartSharedSession signedIn={!!email} outOfCredits={outOfCredits} peerLanguage={peerLanguage} language={pageLanguage === "en" ? locale : pageLanguage} languageAuto peerLanguageAuto={false} t={t} returnTo={homePath(pageLanguage)} />
-        {email && <AccountStatus email={email} />}
+        <StartSharedSession signedIn={!!email} outOfCredits={outOfCredits} peerLanguage={peerLanguage} language={own} languageAuto peerLanguageAuto={false} t={t} returnTo={homePath(pageLanguage)} />
+        {email && <AccountStatus email={email} signOutLabel={t("signOut")} />}
       </div>
     </section>
 

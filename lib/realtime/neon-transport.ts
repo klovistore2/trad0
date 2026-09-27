@@ -1,4 +1,5 @@
 import type { PeerEvent, PeerTransport, ReceivedEvent } from "@/types/session";
+import type { StringKey } from "@/lib/i18n/strings";
 
 export class NeonPeerTransport implements PeerTransport {
   private sessionId = "";
@@ -10,7 +11,8 @@ export class NeonPeerTransport implements PeerTransport {
   private sending = Promise.resolve();
   private floor: (slot: number | null) => void = () => {};
   private claimedAt = 0;
-  constructor(private onError: (message: string) => void) {}
+  // Problems are reported as keys: the page shows them in the reader's language.
+  constructor(private onError: (message: StringKey) => void) {}
   onFloor(cb: (slot: number | null) => void) { this.floor = cb; }
   async connect(sessionId: string) {
     this.sessionId = sessionId;
@@ -25,8 +27,8 @@ export class NeonPeerTransport implements PeerTransport {
       const response = await fetch(`/api/sessions/${this.sessionId}/events${query}`, { signal: this.controller.signal, cache: "no-store" });
       const data = await response.json();
       if (!response.ok) {
-        if ([401, 403, 404].includes(response.status)) { this.onError(data.error || "La conversation est terminée."); this.disconnect(); return; }
-        throw new Error(data.error || "Connexion perdue. Réessayez.");
+        if ([401, 403, 404].includes(response.status)) { this.onError("conversationEnded"); this.disconnect(); return; }
+        throw new Error(`events ${response.status}`);
       }
       for (const event of data.events as ReceivedEvent[]) {
         this.subscribers.forEach(cb => cb(event));
@@ -35,8 +37,8 @@ export class NeonPeerTransport implements PeerTransport {
       if (typeof data.cursor === "string") this.cursor = data.cursor;
       // A poll issued before our own claim landed carries a stale floor: ignore it.
       if ("floor" in data && startedAt > this.claimedAt) this.floor(data.floor);
-    } catch (error) {
-      if (!this.controller.signal.aborted) this.onError(error instanceof Error ? error.message : "Connexion perdue.");
+    } catch {
+      if (!this.controller.signal.aborted) this.onError("errorConnection");
     } finally {
       if (!this.controller.signal.aborted) this.timer = setTimeout(() => void this.poll(), 500);
     }
@@ -50,22 +52,22 @@ export class NeonPeerTransport implements PeerTransport {
           const response = await fetch(`/api/sessions/${this.sessionId}/events`, {
             method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(event), signal: this.controller.signal,
           });
-          if (!response.ok) throw new Error("Le message n’a pas pu être envoyé. Reconnectez-vous.");
+          if (!response.ok) throw new Error(`send ${response.status}`);
           return;
         } catch (error) {
           if (this.controller.signal.aborted) return;
           if (attempt === 1) throw error;
         }
       }
-    }).catch(error => { if (!this.controller.signal.aborted) this.onError(error instanceof Error ? error.message : "Envoi impossible."); });
+    }).catch(() => { if (!this.controller.signal.aborted) this.onError("errorSend"); });
     return this.sending;
   }
-  takeFloor() { return this.claimFloor("POST", "Impossible de prendre la parole."); }
-  releaseFloor() { return this.claimFloor("DELETE", "Impossible de rendre la parole."); }
-  private async claimFloor(method: string, failureMessage: string) {
+  takeFloor() { return this.claimFloor("POST"); }
+  releaseFloor() { return this.claimFloor("DELETE"); }
+  private async claimFloor(method: string) {
     const response = await fetch(`/api/sessions/${this.sessionId}/floor`, { method, signal: this.controller.signal });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || failureMessage);
+    if (!response.ok) throw new Error(`floor ${response.status}`);
     this.claimedAt = Date.now();
     this.floor(data.floor);
     return data.floor as number | null;

@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useSharedConversation } from "@/hooks/useSharedConversation";
 import { languageLabel } from "@/lib/i18n/language-names";
 import { translator } from "@/lib/i18n/strings";
+import { browserLanguage } from "@/lib/translation/language";
 import { ThemeToggle } from "./theme-toggle";
 import { ShareSession } from "./share-session";
 import { SettingsPanel } from "./settings-panel";
@@ -16,13 +17,19 @@ import { OwnWords } from "./own-words";
 import { LanguageMenus } from "./language-menus";
 import { CreditReset } from "./credit-reset";
 
+// Before the conversation answers, the browser's language is the best guess for its reader.
+const noSubscription = () => () => {};
+const readLocale = () => browserLanguage(navigator.languages);
+const serverLocale = () => "en" as const;
+
 export function SharedConversation({ id, signedIn = false }: { id: string; signedIn?: boolean }) {
   const session = useSharedConversation(id, signedIn);
+  const locale = useSyncExternalStore(noSubscription, readLocale, serverLocale);
   const [settings, setSettings] = useState(false);
   const room = session.room;
   const soundActive = session.soundReady && session.soundOn;
   // Each participant reads their own language: the guest was handed a phone and shares none.
-  const t = translator(room?.me.language ?? "en");
+  const t = translator(room?.me.language ?? locale);
   const router = useRouter();
   const home = !room || room.me.language === "en" ? "/" : `/${room.me.language}`;
   // A closed conversation leaves nothing to do here: say so briefly, then go home.
@@ -42,26 +49,25 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
   const focusLine = useRef<HTMLParagraphElement>(null);
   useEffect(() => { focusLine.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [focus]);
   return <main className="conversation">
-    {room?.me.hasAccount && <VoiceIntro consented={room.me.consented} t={t} onAccept={session.giveConsent} />}
     <header className="topbar">
       <Link className="wordmark" href="/">Trad0<span className="brand-dot">.</span></Link>
       <div className="topbar-actions">
         <span className="edition">TRAD0 · LIVE</span>
         {room?.peer && !session.ended && <button type="button" className="theme-toggle" onClick={() => setSettings(open => !open)}
-          aria-label="Settings" title="Settings" aria-pressed={settings}>
+          aria-label={t("settings")} title={t("settings")} aria-pressed={settings}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3.2" />
             <path d="M19.9 14.2a1.6 1.6 0 0 0 .32 1.76l.06.06a1.9 1.9 0 1 1-2.7 2.7l-.06-.06a1.6 1.6 0 0 0-1.76-.32 1.6 1.6 0 0 0-1 1.46v.17a1.9 1.9 0 1 1-3.8 0v-.09a1.6 1.6 0 0 0-1.05-1.46 1.6 1.6 0 0 0-1.76.32l-.06.06a1.9 1.9 0 1 1-2.7-2.7l.06-.06a1.6 1.6 0 0 0 .32-1.76 1.6 1.6 0 0 0-1.46-1H3.9a1.9 1.9 0 1 1 0-3.8h.09a1.6 1.6 0 0 0 1.46-1.05 1.6 1.6 0 0 0-.32-1.76l-.06-.06a1.9 1.9 0 1 1 2.7-2.7l.06.06a1.6 1.6 0 0 0 1.76.32h.08a1.6 1.6 0 0 0 1-1.46V3.9a1.9 1.9 0 1 1 3.8 0v.09a1.6 1.6 0 0 0 1 1.46 1.6 1.6 0 0 0 1.76-.32l.06-.06a1.9 1.9 0 1 1 2.7 2.7l-.06.06a1.6 1.6 0 0 0-.32 1.76v.08a1.6 1.6 0 0 0 1.46 1h.17a1.9 1.9 0 1 1 0 3.8h-.09a1.6 1.6 0 0 0-1.46 1Z" />
           </svg>
         </button>}
-        <ThemeToggle />
+        <ThemeToggle label={t("themeToggle")} />
       </div>
     </header>
     <section className="conversation-body">
       {session.ended ? <><h1>{t("conversationEnded")}</h1><p className="intro">{t("backHome")}</p><Link href={home}>Trad0</Link></>
-      : !room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{session.message}</p>}<Link href="/">Trad0</Link></>
-      : !room.peer ? <ShareSession id={id} />
-      : settings ? <SettingsPanel id={id} me={room.me} credits={room.credits} toneWindowSeconds={session.toneTuning.windowSeconds} speechSeconds={session.speechSeconds}
+      : !room ? <><h1>{t("connecting")}</h1>{session.message && <p className="error-message" role="alert">{t(session.message)}</p>}<Link href="/">Trad0</Link></>
+      : !room.peer ? <ShareSession id={id} t={t} />
+      : settings ? <SettingsPanel id={id} me={room.me} credits={room.credits} toneWindowSeconds={session.toneTuning.windowSeconds} speechSeconds={session.speechSeconds} home={home} t={t}
           speechOptions={session.speechOptions} onSpeechOptions={session.setSpeechOptions}
           onConsent={() => void session.giveConsent()} onRefresh={session.refresh} onUseClone={useClone => void session.setUseClone(useClone)}
           onClose={() => setSettings(false)} />
@@ -69,7 +75,8 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
         <LanguageMenus mine={room.me} theirs={room.peer} locale={room.me.language} disabled={session.changingLanguage}
           onMine={language => void session.setLanguage(room.me.slot, language)}
           onTheirs={language => void session.setLanguage(room.peer!.slot, language)} />
-        <button type="button" className={`sound-icon${session.soundReady ? "" : " needs-tap"}`} aria-pressed={!soundActive}
+        {/* The label says what a tap does; a changing label and aria-pressed would contradict each other. */}
+        <button type="button" className={`sound-icon${session.soundReady ? "" : " needs-tap"}`}
           aria-label={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
           title={!session.soundReady ? t("hearTranslation") : session.soundOn ? t("muteSound") : t("unmuteSound")}
           onClick={() => session.soundReady ? session.toggleSound() : void session.enableSound()}>
@@ -99,9 +106,10 @@ export function SharedConversation({ id, signedIn = false }: { id: string; signe
           </PipelineDiagnostics>}
         </div>
         {!room.me.hasAccount && <GuestVoiceOffer id={id} seconds={session.spokenSeconds} t={t} />}
+        {room.me.hasAccount && <VoiceIntro consented={room.me.consented} spokenSeconds={session.spokenSeconds} t={t} onAccept={session.giveConsent} />}
         <div className="controls">
           <p className="session-status" role="status"><span className={`status-dot ${room.peer.online ? "active" : ""}`} />{room.peer.online ? t("peerOnline") : t("peerOffline")}</p>
-          {session.message && <p className="error-message" role="alert">{session.message}</p>}
+          {session.message && <p className="error-message" role="alert">{t(session.message)}</p>}
           {session.connectionLost && <p className="quiet-note" role="status">{t("reconnecting")}</p>}
           {noCredits
             ? <p className="error-message" role="alert">{room.me.slot === 0 ? t("creditsOutHost") : t("creditsOutGuest")}</p>

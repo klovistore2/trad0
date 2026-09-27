@@ -28,7 +28,7 @@ async function conversation(host) {
   const page = await host.context.newPage(); await page.goto('/fr');
   const created = await page.request.post('/api/sessions', { headers: { origin: baseURL }, data: create });
   assert.equal(created.status(), 200); const { id } = await created.json(); sessions.push(id);
-  await page.goto(`/session/${id}`); await page.getByRole('button', { name: /Pas maintenant/ }).click();
+  await page.goto(`/session/${id}`);
   const guest = await (await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, permissions: ['microphone'] })).newPage();
   await guest.goto(`/join/${id}`);
   await guest.getByRole('button', { name: 'เริ่มพูด' }).or(guest.getByRole('button', { name: 'Start talking' })).waitFor();
@@ -62,10 +62,11 @@ try {
   await expect(a.getByText(hostStopped)).toHaveCount(0, { timeout: 15000 });
   await expect(a.locator('.controls .primary-button')).toHaveCount(1);
   // Settings: credits left and an estimate for this account's options (no clone consent, no tone).
-  await a.getByRole('button', { name: 'Settings' }).click();
-  await expect(a.locator('.credit-line', { hasText: 'Credits left' })).toContainText(/\d/);
-  await expect(a.locator('.credit-line', { hasText: 'Conversation time left' })).toContainText(/≈ \d+ min/);
-  await a.getByRole('button', { name: 'Add credits' }).waitFor();
+  // In the creator's own language, like the rest of the settings.
+  await a.getByRole('button', { name: 'Paramètres' }).click();
+  await expect(a.locator('.credit-line', { hasText: 'Crédits restants' })).toContainText(/\d/);
+  await expect(a.locator('.credit-line', { hasText: 'Temps de conversation restant' })).toContainText(/≈ \d+ min/);
+  await a.getByRole('button', { name: 'Ajouter des crédits' }).waitFor();
   await a.locator('.settings').screenshot({ path: '/tmp/trad0-credits-settings.png' });
 
   // An admin below zero is still billed but never stopped, and the DEV reset restores the welcome amount.

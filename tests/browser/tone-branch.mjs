@@ -100,13 +100,11 @@ try {
  const created=await a.request.post('/api/sessions',{headers:{origin:baseURL},data:{language:'fr',peerLanguage:'en',languageAuto:false,peerLanguageAuto:false}});
  assert.equal(created.status(),200);sessionId=(await created.json()).id;
  await a.goto(`/session/${sessionId}`);
- await a.getByRole('button',{name:'Pas maintenant'}).click();
  // Tone analysis is an account feature: the speaking phone signs in, as a guest would.
  speakerEmail=`tone-speaker-${Date.now()}@example.test`;const speakerId=randomUUID();
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_users(id,email,provider) VALUES(${speakerId},${speakerEmail},'google')`;
  await neon(process.env.DATABASE_URL)`INSERT INTO adu_credit_ledger(user_id,kind,amount) VALUES(${speakerId},'welcome',300)`;
  const b=await client({id:speakerId,email:speakerEmail});await b.goto(`/join/${sessionId}`);
- await b.getByRole('button',{name:'Not now'}).click();
  await b.getByRole('button',{name:'Start talking'}).waitFor();
  // No personal audio or clone: a standard voice produces an in-memory test fixture.
  const fixture=await a.request.post('/api/elevenlabs/speak',{headers:{origin:baseURL},data:{sessionId,language:'en',text:'I told you to leave it alone. Why did you do that again?',speech:{options:{emotion:true},tone:{tone:'angry',strength:'high',status:'estimated',model:'gpt-audio-mini',analysisMs:0},extraWaitMs:0}}});

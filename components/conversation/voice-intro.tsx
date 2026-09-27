@@ -38,28 +38,42 @@ export function rememberVoiceDecision(value: Decision) {
   publish(value);
 }
 
+// A guest who signs in from the voice offer has asked already: the choice is shown on their return.
+const askedKey = "trad0-voice-asked";
+export function rememberVoiceAsked() {
+  try { sessionStorage.setItem(askedKey, "1"); } catch { /* Then it simply waits for speech. */ }
+}
+function readAsked() {
+  try { return sessionStorage.getItem(askedKey) === "1"; } catch { return false; }
+}
+const noSubscription = () => () => {};
+// Offered once the person has spoken a little, as the guest's own offer is: never over the
+// invitation screen nor before the first words, and inline, so the conversation stays usable.
+const OFFER_AFTER_SECONDS = 10;
+
 // Asked once, on the first conversation, then remembered: later conversations never ask again.
-// The memory belongs to this browser, not to an account, so it only keeps the dialog closed and
+// The memory belongs to this browser, not to an account, so it only keeps the offer closed and
 // never agrees for anyone: consent comes from this click, or from the account's own agreement
 // restored by the server. Another account signed in here is never enrolled without asking.
-export function VoiceIntro({ consented, t, onAccept }: {
+export function VoiceIntro({ consented, spokenSeconds, t, onAccept }: {
   consented: boolean;
+  spokenSeconds: number;
   t: Translate;
   onAccept: () => void;
 }) {
   const decision = useSyncExternalStore(subscribe, snapshot, () => "unknown" as Snapshot);
-  if (consented || decision !== null) return null;
+  const asked = useSyncExternalStore(noSubscription, readAsked, () => false);
+  if (consented || decision !== null || (!asked && spokenSeconds < OFFER_AFTER_SECONDS)) return null;
   const choose = (value: Decision) => {
+    try { sessionStorage.removeItem(askedKey); } catch { /* Nothing was kept. */ }
     rememberVoiceDecision(value);
     if (value === "accepted") onAccept();
   };
-  return <div className="modal-backdrop">
-    <div className="modal" role="dialog" aria-modal="true" aria-labelledby="voice-intro-title">
-      <h2 id="voice-intro-title">{t("voiceTitle")}</h2>
-      <p>{t("voiceBody")}</p>
-      <p>{t("voiceNote")}</p>
-      <button className="primary-button" onClick={() => choose("accepted")}>{t("voiceAccept")}</button>
-      <button className="demo-button" onClick={() => choose("declined")}>{t("voiceDecline")}</button>
-    </div>
-  </div>;
+  return <aside className="guest-voice-offer voice-offer" aria-labelledby="voice-intro-title">
+    <h2 id="voice-intro-title">{t("voiceTitle")}</h2>
+    <p>{t("voiceBody")}</p>
+    <p>{t("voiceNote")}</p>
+    <button className="primary-button" onClick={() => choose("accepted")}>{t("voiceAccept")}</button>
+    <button className="demo-button" onClick={() => choose("declined")}>{t("voiceDecline")}</button>
+  </aside>;
 }
