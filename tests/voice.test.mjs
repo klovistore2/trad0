@@ -96,8 +96,26 @@ test('relayed speech refuses empty or oversized text before reaching the provide
   const load = createLoader({'@/lib/session/auth': {member: async () => ({slot:0})}, '@/lib/neon/db': {db: () => async () => []}});
   try {
     const route = load('app/api/elevenlabs/speak/route.ts');
-    assert.equal((await route.POST(request({text:'   '}))).status,400);
-    assert.equal((await route.POST(request({text:'a'.repeat(4001)}))).status,400);
+    assert.equal((await route.POST(request({sessionId:'session',text:'   '}))).status,400);
+    assert.equal((await route.POST(request({sessionId:'session',text:'a'.repeat(4001)}))).status,400);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if(previousUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=previousUrl;
+  }
+});
+
+test('nothing is spoken without a conversation: the relay is not free speech for any caller', async () => {
+  const previousUrl = process.env.NEXT_PUBLIC_APP_URL; process.env.NEXT_PUBLIC_APP_URL=origin;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {throw new Error('provider must not be reached');};
+  const load = createLoader({
+    '@/lib/session/auth': {member: async () => {throw new Error('no session to check');}},
+    '@/lib/neon/db': {db: () => async () => {throw new Error('database must not be reached');}},
+  });
+  try {
+    const route = load('app/api/elevenlabs/speak/route.ts');
+    assert.equal((await route.POST(request({text:'Bonjour',language:'fr'}))).status,400);
+    assert.equal((await route.POST(request({sessionId:42,text:'Bonjour'}))).status,400);
   } finally {
     globalThis.fetch = originalFetch;
     if(previousUrl===undefined)delete process.env.NEXT_PUBLIC_APP_URL;else process.env.NEXT_PUBLIC_APP_URL=previousUrl;
@@ -241,7 +259,7 @@ test('the purge leaves account voices alone and only sweeps session scoped ones'
   const queries=[];let deleted=[];
   const load=createLoader({
     '@/lib/neon/db':{db:()=>{
-      const run=async(strings)=>{const sql=strings.join('?');queries.push(sql);return sql.includes('SELECT id FROM adu_sessions')?[{id:'dead-session'}]:[];};
+      const run=async(strings)=>{const sql=strings.join('?');queries.push(sql);return sql.includes('SELECT s.id FROM adu_sessions')?[{id:'dead-session'}]:[];};
       return run;
     }},
     '@/lib/elevenlabs/server':{elevenHeaders:()=>({'xi-api-key':'k'}),deleteVoice:async id=>{deleted.push(id);}},
@@ -252,11 +270,40 @@ test('the purge leaves account voices alone and only sweeps session scoped ones'
     {voice_id:'account-voice',labels:{app:'a-deux-user',user:'user-1'}},
   ]});
   try {
-    await load('lib/session/cleanup.ts').cleanupSessions();
+    assert.deepEqual(await load('lib/session/cleanup.ts').cleanupSessions(),{swept:1,failed:0,remaining:0});
     const participantQuery=queries.find(sql=>sql.includes('SELECT voice_id FROM adu_participants'));
     assert.match(participantQuery,/user_id IS NULL/,'saved voices must be excluded from the purge');
+    const pendingQuery=queries.find(sql=>sql.includes('SELECT s.id FROM adu_sessions'));
+    assert.match(pendingQuery,/p\.user_id IS NULL/,'only sessions that can hold a session scoped clone reach the provider');
     assert.deepEqual(deleted,['orphan'],'only the session scoped orphan is removed');
   } finally { globalThis.fetch=oldFetch; }
+});
+
+test('one session failing at the provider neither stops the others nor the final delete', async () => {
+  const queries=[];const swept=[];const deleted=[];const logged=[];
+  const load=createLoader({
+    '@/lib/neon/db':{db:()=>async(strings,...values)=>{
+      const sql=strings.join('?');queries.push(sql);
+      if(sql.includes('UPDATE adu_participants'))swept.push(values[0]);
+      return sql.includes('SELECT s.id FROM adu_sessions')?[{id:'unlucky'},{id:'fine'}]:[];
+    }},
+    '@/lib/elevenlabs/server':{elevenHeaders:()=>({'xi-api-key':'k'}),deleteVoice:async id=>{deleted.push(id);}},
+  });
+  const oldFetch=globalThis.fetch;const oldError=console.error;
+  globalThis.fetch=async url=>String(url).includes('adu-unlucky-')
+    ?new Response('busy',{status:503})
+    :Response.json({voices:[{voice_id:'late-clone',labels:{app:'a-deux-session',session:'fine'}}]});
+  console.error=(...args)=>{logged.push(args.join(' '));};
+  try {
+    assert.deepEqual(await load('lib/session/cleanup.ts').cleanupSessions(),{swept:1,failed:1,remaining:0});
+    assert.deepEqual(deleted,['late-clone']);
+    // Only the swept session is marked: the failed one keeps its lease and is retried next run.
+    assert.deepEqual(swept,['fine']);
+    assert.ok(queries.some(sql=>sql.includes('DELETE FROM adu_sessions')),'the final delete still runs');
+    // Session ids are join links: the log carries a count, never an id.
+    assert.equal(logged.length,1);
+    assert.doesNotMatch(logged[0],/unlucky|fine/);
+  } finally { globalThis.fetch=oldFetch; console.error=oldError; }
 });
 
 test('a speaker who turns their clone off is spoken with the standard voice, and keeps the model', async () => {

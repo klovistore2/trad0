@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import type { Translate } from "@/lib/i18n/strings";
 
 const storageKey = "a-deux-voice-consent";
@@ -39,18 +39,15 @@ export function rememberVoiceDecision(value: Decision) {
 }
 
 // Asked once, on the first conversation, then remembered: later conversations never ask again.
+// The memory belongs to this browser, not to an account, so it only keeps the dialog closed and
+// never agrees for anyone: consent comes from this click, or from the account's own agreement
+// restored by the server. Another account signed in here is never enrolled without asking.
 export function VoiceIntro({ consented, t, onAccept }: {
   consented: boolean;
   t: Translate;
   onAccept: () => void;
 }) {
   const decision = useSyncExternalStore(subscribe, snapshot, () => "unknown" as Snapshot);
-  const applied = useRef(false);
-  useEffect(() => {
-    if (decision !== "accepted" || consented || applied.current) return;
-    applied.current = true;
-    onAccept();
-  }, [decision, consented, onAccept]);
   if (consented || decision !== null) return null;
   const choose = (value: Decision) => {
     rememberVoiceDecision(value);

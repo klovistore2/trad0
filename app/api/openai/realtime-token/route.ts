@@ -1,5 +1,3 @@
-import { isLanguage } from "@/types/session";
-
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "no-store" };
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
@@ -18,9 +16,11 @@ export async function POST(request: Request) {
   if (!request.headers.get("content-type")?.startsWith("application/json")) return json({ error: "Requête invalide." }, 415);
   let body: unknown;
   try { body = await request.json(); } catch { return json({ error: "Requête invalide." }, 400); }
-  if (!body || typeof body !== "object" || !("targetLanguage" in body) || !isLanguage(body.targetLanguage)) {
-    return json({ error: "Cette langue n’est pas disponible." }, 400);
+  // A credential is paid for by a conversation's creator: never handed out without a conversation.
+  if (!body || typeof body !== "object" || !("sessionId" in body) || typeof body.sessionId !== "string") {
+    return json({ error: "Session invalide." }, 400);
   }
+  const sessionId = body.sessionId;
   const key = process.env.OPENAI_API_KEY?.trim();
   const model = process.env.OPENAI_REALTIME_TRANSLATION_MODEL?.trim();
   // Source-language transcripts (session.input_transcript.delta) are only emitted when input
@@ -28,17 +28,13 @@ export async function POST(request: Request) {
   // was actually recognised, so this is on by default and overridable like any other model id.
   const transcriptionModel = process.env.OPENAI_INPUT_TRANSCRIPTION_MODEL?.trim() || "gpt-realtime-whisper";
   if (!key || !model) return json({ error: "La traduction n’est pas encore configurée." }, 503);
-  let targetLanguage = body.targetLanguage;
-  if ("sessionId" in body) {
-    if (typeof body.sessionId !== "string") return json({ error: "Session invalide." }, 400);
-    try {
-      const { targetLanguageForSession } = await import("@/lib/session/store");
-      targetLanguage = await targetLanguageForSession(body.sessionId);
-    } catch { return json({ error: "Rejoignez une conversation active pour continuer." }, 403); }
-    const { payerBalance } = await import("@/lib/billing/credits");
-    const balance = await payerBalance(body.sessionId);
-    if (balance !== null && balance <= 0) return json({ error: "No credits left." }, 402);
-  }
+  // The output language is the other participant's, read from the conversation, never from the body.
+  const { targetLanguageForSession } = await import("@/lib/session/store");
+  const targetLanguage = await targetLanguageForSession(sessionId).catch(() => null);
+  if (!targetLanguage) return json({ error: "Rejoignez une conversation active pour continuer." }, 403);
+  const { payerBalance } = await import("@/lib/billing/credits");
+  const balance = await payerBalance(sessionId);
+  if (balance !== null && balance <= 0) return json({ error: "No credits left." }, 402);
   try {
     const response = await fetch("https://api.openai.com/v1/realtime/translations/client_secrets", {
       method: "POST",

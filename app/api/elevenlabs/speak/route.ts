@@ -18,19 +18,16 @@ export async function POST(request: Request) {
     const text = typeof body.text === "string" ? body.text.trim() : "";
     if (!text || text.length > 4000) throw new HttpError(400, "Texte invalide.");
     const language = typeof body.language === "string" && /^[a-z]{2}$/.test(body.language) ? body.language : undefined;
-    let voiceId: string | undefined;
-    let range: "low" | "high" | undefined;
-    if (body.sessionId !== undefined) {
-      if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
-      const me = await member(body.sessionId);
-      await requireCredits(body.sessionId);
-      const rows = await db()`SELECT voice_id, voice_status, voice_range, use_clone FROM adu_participants WHERE session_id=${body.sessionId} AND slot<>${me.slot}`;
-      if (!rows[0]) throw new HttpError(409, "L’autre personne n’a pas encore rejoint.");
-      // The receiver hears the other participant's voice; a client supplied ID is never accepted.
-      if (rows[0].voice_status === "ready" && rows[0].use_clone) voiceId = rows[0].voice_id;
-      // The speaker's own range, so the receiver hears a fitting voice before any clone exists.
-      if (rows[0].voice_range === "low" || rows[0].voice_range === "high") range = rows[0].voice_range;
-    }
+    // Speech is paid for by a conversation's creator: without a live conversation, nothing is spoken.
+    if (typeof body.sessionId !== "string") throw new HttpError(400, "Session invalide.");
+    const me = await member(body.sessionId);
+    await requireCredits(body.sessionId);
+    const rows = await db()`SELECT voice_id, voice_status, voice_range, use_clone FROM adu_participants WHERE session_id=${body.sessionId} AND slot<>${me.slot}`;
+    if (!rows[0]) throw new HttpError(409, "L’autre personne n’a pas encore rejoint.");
+    // The receiver hears the other participant's voice; a client supplied ID is never accepted.
+    const voiceId: string | undefined = rows[0].voice_status === "ready" && rows[0].use_clone ? rows[0].voice_id : undefined;
+    // The speaker's own range, so the receiver hears a fitting voice before any clone exists.
+    const range: "low" | "high" | undefined = rows[0].voice_range === "low" || rows[0].voice_range === "high" ? rows[0].voice_range : undefined;
     // One model for every sentence: it is the only v3 member that covers Thai and the emotion
     // tags, so there is nothing left to resolve per language or per speaker.
     const model = TTS_MODEL;

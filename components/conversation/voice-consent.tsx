@@ -39,7 +39,7 @@ export function VoiceConsent({ sessionId, me, seconds, onConsent, onRefresh, onU
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      // Remember the refusal: forgetting it would re-apply consent, or reopen the dialog.
+      // Remember the refusal: forgetting it would reopen the dialog.
       if (!reset) rememberVoiceDecision("declined");
       onRefresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Réessayez."); }

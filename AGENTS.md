@@ -289,6 +289,12 @@ pour les participants ayant un compte ; dialogue et paramètres partagent la dé
 `localStorage`. Le consentement accordé est aussi enregistré dans le profil. Un retrait mémorise un refus,
 sans effacer la décision locale, pour éviter de rouvrir le dialogue. Ne pas confondre cette mémoire
 locale avec un refus explicitement synchronisé sur tous les appareils.
+Cette mémoire appartient au navigateur, pas au compte : elle garde le dialogue fermé et **n'accorde
+jamais le consentement**. Seuls le clic et l'accord déjà enregistré sur le compte (restauré côté
+serveur à la création ou au rattachement) comptent. Jusqu'au 27 septembre 2026, un « accepté » local
+était renvoyé au serveur pour tout compte connecté dans ce navigateur, y compris un autre compte,
+ou un compte ayant retiré son accord ailleurs. Limite restante : un second compte sur le même
+navigateur ne voit pas le dialogue ; la case des paramètres reste disponible.
 
 Après accord, l’enregistreur suit le micro et le tour de parole. Les paliers reposent sur la parole
 observée dans les fragments de transcription, pas sur le temps passé micro ouvert :
@@ -426,6 +432,15 @@ privées (`/api/`, `/session/`, `/join/`) sont retirées de l’exploration.
 - `CRON_SECRET` est requis avant d’autoriser le clonage. La tâche Vercel est prévue à **03:00 UTC**
   chaque jour ; elle ne tourne pas automatiquement en local. Le nettoyage garde temporairement des
   marqueurs de session pour récupérer les créations de voix terminées après un timeout.
+- Depuis le 27 septembre 2026, la purge traite **chaque session séparément** : un échec ElevenLabs
+  est réessayé à la passe suivante sans arrêter les autres sessions ni la suppression finale (avant,
+  une seule erreur interrompait tout). Événements et signalisation sont effacés en bloc. Seules les
+  sessions dont un participant **sans compte** détient un clone ou a laissé une création inachevée
+  (`cloning_until`) appellent ElevenLabs ; le clonage exigeant un compte depuis le 21 septembre 2026,
+  ce sont d'anciennes lignes. Vider ce bail marque la session comme balayée. La passe s'arrête après
+  40 s pour laisser la suppression finale tenir dans les 60 s. La route répond **502** avec
+  `{ swept, failed, remaining }` si une session a échoué ; les journaux ne contiennent qu'un décompte,
+  jamais d'identifiant de session (c'est le lien d'invitation).
 - L’expiration n’implique pas l’effacement instantané : attendre la purge peut ajouter environ 24 h,
   et davantage en cas d’échec. Surveiller et réessayer les nettoyages échoués.
 
@@ -495,8 +510,10 @@ circuit ni de Vercel : ne pas désigner la base, le protocole ou le timer comme 
   retirer ou masquer pour la production. Refus du dialogue mémorisé localement, pas une préférence
   de refus explicite et universelle sur le compte.
 - **Protection des coûts** : pas de quotas ni de limitation de débit distribuée. Le contrôle d’origine
-  ne suffit pas contre les abus. La route de jeton de traduction directe accepte encore le parcours
-  sans `sessionId` ; son accès n’est donc pas toujours conditionné à une session active.
+  ne suffit pas contre les abus. Depuis le 27 septembre 2026, le jeton de traduction directe et le
+  relais de synthèse exigent un `sessionId` d'une conversation active dont on est membre, et des
+  crédits : ils acceptaient auparavant un appel sans session, donc sans aucun contrôle (un simple
+  `curl` avec le bon en-tête `Origin` suffisait). La langue du jeton vient toujours de la session.
 - **Fonctions absentes** : saisie texte de secours, transport push, PWA complète, contacts, choix de
   fournisseurs LLM alternatifs. Changer un nom de modèle n’intègre pas à lui seul Grok ou Jev.
 
@@ -566,6 +583,10 @@ Des appels ElevenLabs Flash réels ont renvoyé un MP3
 non vide pour une courte phrase synthétique en néerlandais et en italien. La création d'un jeton
 OpenAI a réussi pour ces deux langues, mais ce succès ne valide pas la traduction audio directe
 en néerlandais. Le blocage italien signalé sur appareil n'a pas été reproduit avec ces appels isolés.
+
+Correctifs du 27 septembre 2026 (routes payantes sans session, consentement local, purge) :
+**82 tests unitaires**, lint, TypeScript et build isolé réussis. Parcours Chromium non relancé ;
+purge non exécutée contre Neon ni ElevenLabs réels.
 
 ## Consigne technique gérée par Next.js
 

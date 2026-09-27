@@ -6,5 +6,9 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const expected = Buffer.from(`Bearer ${secret}`); const actual = Buffer.from(request.headers.get("authorization") || "");
   if (!secret || actual.length !== expected.length || !timingSafeEqual(actual, expected)) return json({ error: "Non autorisé." }, 401);
-  try { return json({ cleaned: await cleanupSessions() }); } catch (error) { return failure(error); }
+  try {
+    // A partial failure is still reported as one, so the cron log shows sessions left to retry.
+    const result = await cleanupSessions();
+    return json(result, result.failed ? 502 : 200);
+  } catch (error) { return failure(error); }
 }

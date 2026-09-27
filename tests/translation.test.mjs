@@ -3,11 +3,19 @@ import { test } from "node:test";
 import { parseTranslationMessage } from "../lib/openai/events.ts";
 import { createLoader } from "./load-ts.mjs";
 
-// Loaded through the alias-aware loader: the route imports "@/types/session", which plain
-// Node resolution cannot follow.
-const { POST } = createLoader()("app/api/openai/realtime-token/route.ts");
+// Loaded through the alias-aware loader, with the conversation simulated: the route reads the
+// target language and the payer's balance from the session, never from the request.
+const room = { language: "en", balance: null, refused: false };
+const { POST } = createLoader({
+  "@/lib/session/store": { targetLanguageForSession: async id => {
+    assert.equal(id, "room");
+    if (room.refused) throw new Error("not a participant");
+    return room.language;
+  } },
+  "@/lib/billing/credits": { payerBalance: async () => room.balance },
+})("app/api/openai/realtime-token/route.ts");
 
-const request = (body = { targetLanguage: "en" }, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/openai/realtime-token", {
+const request = (body = { sessionId: "room", targetLanguage: "en" }, origin = "http://localhost:3000") => new Request("http://localhost:3000/api/openai/realtime-token", {
   method: "POST", headers: { origin, "Content-Type": "application/json" }, body: JSON.stringify(body),
 });
 
@@ -19,7 +27,7 @@ test("maps only documented transcript deltas; never displays audio or malformed 
   assert.deepEqual(parseTranslationMessage('{"type":"session.closed"}'), { kind: "closed" });
 });
 
-test("credential endpoint validates origin, language and configuration before contacting OpenAI", async () => {
+test("credential endpoint validates origin, conversation and configuration before contacting OpenAI", async () => {
   const old = { key: process.env.OPENAI_API_KEY, model: process.env.OPENAI_REALTIME_TRANSLATION_MODEL, url: process.env.NEXT_PUBLIC_APP_URL };
   delete process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_REALTIME_TRANSLATION_MODEL;
@@ -27,8 +35,9 @@ test("credential endpoint validates origin, language and configuration before co
   try {
     assert.equal((await POST(request({}, "https://other.example"))).status, 403);
     assert.equal((await POST(request({}, ""))).status, 403);
-    assert.equal((await POST(request({ targetLanguage: "unsupported" }))).status, 400);
-    assert.equal((await POST(request({ targetLanguage: ["th"] }))).status, 400);
+    // No conversation, no credential: a visitor cannot spend the key outside a session.
+    assert.equal((await POST(request({ targetLanguage: "en" }))).status, 400);
+    assert.equal((await POST(request({ sessionId: ["room"], targetLanguage: "en" }))).status, 400);
     const response = await POST(request());
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("cache-control"), "no-store");
@@ -93,7 +102,7 @@ test("invalid app URL returns a controlled error without requesting credentials"
   }
 });
 
-test("only documented languages reach the provider", async () => {
+test("the output language is the other participant's, never the one the request names", async () => {
   const previousFetch = globalThis.fetch;
   const old = { ...process.env };
   process.env.OPENAI_API_KEY = "test-permanent-secret";
@@ -105,16 +114,33 @@ test("only documented languages reach the provider", async () => {
       asked = JSON.parse(options.body).session.audio.output.language;
       return Response.json({ value: "ephemeral" });
     };
-    for (const code of ["ja", "es", "th"]) {
-      assert.equal((await POST(request({ targetLanguage: code }))).status, 200, code);
+    for (const code of ["ja", "es", "fr"]) {
+      room.language = code;
+      assert.equal((await POST(request({ sessionId: "room", targetLanguage: "en" }))).status, 200, code);
       assert.equal(asked, code);
     }
-    // An unknown code must be refused here rather than sent on and failing later.
-    for (const code of ["xx", "", "english", 42, null]) {
-      assert.equal((await POST(request({ targetLanguage: code }))).status, 400, String(code));
-    }
   } finally {
-    globalThis.fetch = previousFetch;
+    globalThis.fetch = previousFetch; room.language = "en";
+    for (const name of ["OPENAI_API_KEY", "OPENAI_REALTIME_TRANSLATION_MODEL", "NEXT_PUBLIC_APP_URL"]) {
+      if (old[name] === undefined) delete process.env[name]; else process.env[name] = old[name];
+    }
+  }
+});
+
+test("no credential outside a live conversation, nor once its creator is out of credits", async () => {
+  const previousFetch = globalThis.fetch;
+  const old = { ...process.env };
+  process.env.OPENAI_API_KEY = "test-permanent-secret";
+  process.env.OPENAI_REALTIME_TRANSLATION_MODEL = "test-configurable-model";
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  try {
+    globalThis.fetch = async () => { throw new Error("the provider must not be reached"); };
+    room.refused = true;
+    assert.equal((await POST(request())).status, 403);
+    room.refused = false; room.balance = 0;
+    assert.equal((await POST(request())).status, 402);
+  } finally {
+    globalThis.fetch = previousFetch; room.refused = false; room.balance = null;
     for (const name of ["OPENAI_API_KEY", "OPENAI_REALTIME_TRANSLATION_MODEL", "NEXT_PUBLIC_APP_URL"]) {
       if (old[name] === undefined) delete process.env[name]; else process.env[name] = old[name];
     }
